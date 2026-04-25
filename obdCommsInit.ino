@@ -403,6 +403,7 @@ void runDiscovery() {
 // ================= SETUP =================
 
 void setup() {
+  setupPiUart();
   Serial.begin(115200);
   delay(2000);
 
@@ -452,7 +453,7 @@ const unsigned long RESPONSE_TIMEOUT = 5000;
 
 void loop() {
   unsigned long currentTime = millis();
-
+  sendPiUartTest();
   // Check for received frames
   uint16_t rxId;
   byte rxData[8];
