@@ -1,18 +1,38 @@
 #include <SPI.h>
 
 #define CS_PIN 17
-#define LED_PIN 0  // GPIO 0 for LED
+#define LED_PIN 0
+bool hasValidatedComms = false;
+bool quietAfterLock = true;
 
-// ================= ENUM DEFINITION (MUST BE AT TOP) =================
 enum CanProfile {
-  PROFILE_1,  // 16MHz, 250kbps (most common for OBD2)
-  PROFILE_2   // 16MHz, 500kbps (some vehicles use this)
+  PROFILE_125K,
+  PROFILE_250K,
+  PROFILE_500K
 };
 
 const char* profileNames[] = {
-  "Profile 1 (16MHz, 250kbps)",
-  "Profile 2 (16MHz, 500kbps)"
+  "Profile 125kbps",
+  "Profile 250kbps",
+  "Profile 500kbps"
 };
+
+const uint32_t profileBitrates[] = {
+  125000,
+  250000,
+  500000
+};
+
+// Locked profile state
+CanProfile lockedProfile = PROFILE_125K;
+bool profileLocked = false;
+unsigned long discoveryStartTime = 0;
+const unsigned long DISCOVERY_TIMEOUT = 10000; // 10 seconds max discovery
+
+uint16_t lastRxId = 0;
+byte lastData[8];
+byte lastDlc = 0;
+unsigned long lastPrintTime = 0;
 
 // ================= LOW-LEVEL FUNCTIONS =================
 
@@ -61,299 +81,323 @@ void mcpBitModify(byte reg, byte mask, byte data) {
 
 // ================= LED FUNCTIONS =================
 
-void blinkLed(int times, int delayMs) {
-  for(int i = 0; i < times; i++) {
+void blinkSuccess() {
+  for(int i = 0; i < 3; i++) {
     digitalWrite(LED_PIN, HIGH);
-    delay(delayMs);
+    delay(80);
     digitalWrite(LED_PIN, LOW);
-    if(i < times - 1) delay(delayMs);
+    delay(80);
   }
 }
 
-void blinkSend() {
-  // Single blink when sending request
-  blinkLed(1, 200);
+void blinkSending() {
+  digitalWrite(LED_PIN, HIGH);
+  delay(50);
+  digitalWrite(LED_PIN, LOW);
 }
 
-void blinkResponse() {
-  // 5 fast blinks when response received
-  blinkLed(5, 100);
+void blinkProfileSwitch() {
+  for(int i = 0; i < 2; i++) {
+    digitalWrite(LED_PIN, HIGH);
+    delay(300);
+    digitalWrite(LED_PIN, LOW);
+    delay(300);
+  }
 }
 
-// ================= CONFIGURATION PROFILES =================
+void blinkBoot() {
+  digitalWrite(LED_PIN, HIGH);
+  delay(1000);
+  digitalWrite(LED_PIN, LOW);
+  delay(500);
+}
+
+void blinkLocked() {
+  digitalWrite(LED_PIN, HIGH);
+  delay(2000);
+  digitalWrite(LED_PIN, LOW);
+}
+
+// ================= CONFIGURATION =================
 
 bool configureProfile(CanProfile profile) {
   Serial.print("Configuring ");
   Serial.println(profileNames[profile]);
-  
+
   mcpReset();
   delay(10);
-  
-  // Enter config mode
+
   mcpBitModify(0x0F, 0xE0, 0x80);
   delay(5);
-  
-  // Set bitrate based on profile
-  if(profile == PROFILE_1) {
-    // Profile 1: 16MHz, 250kbps (most OBD2 vehicles)
-    mcpWrite(0x28, 0x86);  // CNF1
-    mcpWrite(0x29, 0xF0);  // CNF2
-    mcpWrite(0x2A, 0x00);  // CNF3
-  } 
-  else { // PROFILE_2
-    // Profile 2: 16MHz, 500kbps (some vehicles)
-    mcpWrite(0x28, 0x00);  // CNF1
-    mcpWrite(0x29, 0xF0);  // CNF2
-    mcpWrite(0x2A, 0x87);  // CNF3
+
+  if(profile == PROFILE_125K) {
+    // 16MHz, 125kbps
+    mcpWrite(0x28, 0x03);
+    mcpWrite(0x29, 0xB0);
+    mcpWrite(0x2A, 0x86);
   }
-  
-  // Configure receive masks and filters to accept ALL messages
-  mcpWrite(0x20, 0x00);  // RXB0 SIDH mask - accept all
-  mcpWrite(0x21, 0x00);  // RXB0 SIDL mask
-  mcpWrite(0x22, 0x00);  // RXB0 EID8 mask
-  mcpWrite(0x23, 0x00);  // RXB0 EID0 mask
-  
-  mcpWrite(0x00, 0x00);  // RXF0 SIDH
-  mcpWrite(0x01, 0x00);  // RXF0 SIDL
-  mcpWrite(0x04, 0x00);  // RXF1 SIDH
-  mcpWrite(0x05, 0x00);  // RXF1 SIDL
-  
-  mcpWrite(0x24, 0x00);  // RXB1 SIDH mask
-  mcpWrite(0x25, 0x00);  // RXB1 SIDL mask
-  mcpWrite(0x26, 0x00);  // RXB1 EID8 mask
-  mcpWrite(0x27, 0x00);  // RXB1 EID0 mask
-  
-  mcpWrite(0x08, 0x00);  // RXF2 SIDH
-  mcpWrite(0x09, 0x00);  // RXF2 SIDL
-  mcpWrite(0x0C, 0x00);  // RXF3 SIDH
-  mcpWrite(0x0D, 0x00);  // RXF3 SIDL
-  mcpWrite(0x10, 0x00);  // RXF4 SIDH
-  mcpWrite(0x11, 0x00);  // RXF4 SIDL
-  mcpWrite(0x14, 0x00);  // RXF5 SIDH
-  mcpWrite(0x15, 0x00);  // RXF5 SIDL
-  
-  // Enable rollover and receive interrupts
+  else if(profile == PROFILE_250K) {
+    // 16MHz, 250kbps
+    mcpWrite(0x28, 0x86);
+    mcpWrite(0x29, 0xF0);
+    mcpWrite(0x2A, 0x00);
+  }
+  else { // PROFILE_500K
+    // 16MHz, 500kbps
+    mcpWrite(0x28, 0x00);
+    mcpWrite(0x29, 0xF0);
+    mcpWrite(0x2A, 0x87);
+  }
+
+  // Simplified filter config (accept all)
+  for(byte reg = 0x00; reg <= 0x15; reg++) {
+    mcpWrite(reg, 0x00);
+  }
+  for(byte reg = 0x20; reg <= 0x27; reg++) {
+    mcpWrite(reg, 0x00);
+  }
+
   mcpBitModify(0x0B, 0x04, 0x04);
-  mcpWrite(0x2B, 0x03);  // CANINTE: RX0IE and RX1IE
-  
-  // Verify configuration
-  byte cnf1 = mcpRead(0x28);
-  byte cnf2 = mcpRead(0x29);
-  byte cnf3 = mcpRead(0x2A);
-  
-  Serial.print("  CNF1=0x"); Serial.print(cnf1, HEX);
-  Serial.print(", CNF2=0x"); Serial.print(cnf2, HEX);
-  Serial.print(", CNF3=0x"); Serial.println(cnf3, HEX);
-  
-  // Enter normal mode
+  mcpWrite(0x2B, 0x03);
+
   mcpBitModify(0x0F, 0xE0, 0x00);
   delay(10);
-  
-  // Check if configuration was successful
+
   byte canStat = mcpRead(0x0F) & 0xE0;
-  if(canStat == 0x00) {
-    Serial.println("------ Normal mode active - ready to send/receive\n");
-    return true;
-  } else {
-    Serial.print("-----Failed to enter normal mode (CANSTAT=0x");
-    Serial.print(canStat, HEX);
-    Serial.println(")\n");
-    return false;
-  }
+  return (canStat == 0x00);
 }
 
-// ================= TRANSMIT FUNCTION =================
+// ================= CAN FUNCTIONS =================
 
 bool sendCANFrame(uint16_t id, byte dlc, byte* data) {
   SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-  
+
   digitalWrite(CS_PIN, LOW);
-  SPI.transfer(0x40);  // Write TXB0 SIDH
-  
+  SPI.transfer(0x40);
+
   byte sidh = id >> 3;
   byte sidl = (id & 0x07) << 5;
-  
+
   SPI.transfer(sidh);
   SPI.transfer(sidl);
   SPI.transfer(0x00);
   SPI.transfer(0x00);
   SPI.transfer(dlc);
-  
+
   for(int i = 0; i < dlc; i++) {
     SPI.transfer(data[i]);
   }
-  
+
   digitalWrite(CS_PIN, HIGH);
-  
-  // Request to send
+
   digitalWrite(CS_PIN, LOW);
   SPI.transfer(0x81);
   digitalWrite(CS_PIN, HIGH);
-  
-  SPI.endTransaction();
-  
-  // Check transmission status
-  delay(2);
-  byte txStatus = mcpRead(0x30);
-  
-  if(txStatus & 0x08) {
-    return true;
-  } else {
-    Serial.print("    TX Error: Status=0x");
-    Serial.println(txStatus, HEX);
-    return false;
-  }
-}
 
-// ================= RECEIVE FUNCTION =================
+  SPI.endTransaction();
+
+  delay(2);
+  return (mcpRead(0x30) & 0x08);
+}
 
 bool receiveCANFrame(uint16_t* rxId, byte* rxData, byte* rxDlc) {
   byte canIntf = mcpRead(0x2C);
-  
-  if(canIntf & 0x01) {  // RXB0 interrupt
+
+  if(canIntf & 0x01) {
     SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
     digitalWrite(CS_PIN, LOW);
-    SPI.transfer(0x90);  // Read RXB0
-    byte sidh = SPI.transfer(0x00);
-    byte sidl = SPI.transfer(0x00);
-    SPI.transfer(0x00);  // Skip EID8
-    SPI.transfer(0x00);  // Skip EID0
-    byte dlc = SPI.transfer(0x00) & 0x0F;
-    
-    for(int i = 0; i < dlc && i < 8; i++) {
-      rxData[i] = SPI.transfer(0x00);
-    }
-    digitalWrite(CS_PIN, HIGH);
-    SPI.endTransaction();
-    
-    mcpWrite(0x2C, 0x01);  // Clear interrupt
-    
-    *rxId = ((uint16_t)sidh << 3) | (sidl >> 5);
-    *rxDlc = dlc;
-    return true;
-  }
-  else if(canIntf & 0x02) {  // RXB1 interrupt
-    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
-    digitalWrite(CS_PIN, LOW);
-    SPI.transfer(0x94);  // Read RXB1
+    SPI.transfer(0x90);
     byte sidh = SPI.transfer(0x00);
     byte sidl = SPI.transfer(0x00);
     SPI.transfer(0x00);
     SPI.transfer(0x00);
     byte dlc = SPI.transfer(0x00) & 0x0F;
-    
+
     for(int i = 0; i < dlc && i < 8; i++) {
       rxData[i] = SPI.transfer(0x00);
     }
     digitalWrite(CS_PIN, HIGH);
     SPI.endTransaction();
-    
-    mcpWrite(0x2C, 0x02);  // Clear interrupt
-    
+
+    mcpWrite(0x2C, 0x01);
+
     *rxId = ((uint16_t)sidh << 3) | (sidl >> 5);
     *rxDlc = dlc;
     return true;
   }
-  
+  else if(canIntf & 0x02) {
+    SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+    digitalWrite(CS_PIN, LOW);
+    SPI.transfer(0x94);
+    byte sidh = SPI.transfer(0x00);
+    byte sidl = SPI.transfer(0x00);
+    SPI.transfer(0x00);
+    SPI.transfer(0x00);
+    byte dlc = SPI.transfer(0x00) & 0x0F;
+
+    for(int i = 0; i < dlc && i < 8; i++) {
+      rxData[i] = SPI.transfer(0x00);
+    }
+    digitalWrite(CS_PIN, HIGH);
+    SPI.endTransaction();
+
+    mcpWrite(0x2C, 0x02);
+
+    *rxId = ((uint16_t)sidh << 3) | (sidl >> 5);
+    *rxDlc = dlc;
+    return true;
+  }
+
   return false;
 }
 
 // ================= OBD2 RPM REQUEST =================
 
-void sendRPMRequest(CanProfile profile) {
+void sendRPMRequest() {
   byte data[8] = {0x02, 0x01, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00};
-  
-  Serial.print(profileNames[profile]);
-  Serial.print("] Sending RPM request (ID: 0x7DF) -> ");
-  for(int i = 0; i < 8; i++) {
-    Serial.print("0x");
-    if(data[i] < 0x10) Serial.print("0");
-    Serial.print(data[i], HEX);
-    Serial.print(" ");
+
+  if(!profileLocked) {
+    Serial.print("[DISCOVERY] ");
   }
-  Serial.println();
-  
-  // Blink LED once when sending
-  blinkSend();
-  
-  if(sendCANFrame(0x7DF, 8, data)) {
-    Serial.println("-----Transmission successful (waiting up to 15 seconds for response)");
-  } else {
-    Serial.println("-----Transmission failed");
-    // Blink 3 times slowly for error
-    blinkLed(3, 300);
-  }
+  Serial.print(profileNames[lockedProfile]);
+  Serial.println("] RPM request sent");
+
+  blinkSending();
+  sendCANFrame(0x7DF, 8, data);
 }
 
-// ================= PRINT RECEIVED FRAME =================
+// ================= PRINT RESPONSE =================
 
-void printReceivedFrame(CanProfile profile, uint16_t rxId, byte* rxData, byte rxDlc) {
-  // Blink LED 5 times fast when we get ANY response
-  blinkResponse();
-  
-  Serial.print(profileNames[profile]);
-  Serial.print("] RECEIVED CAN FRAME!\n");
-  
-  Serial.print("   CAN ID: 0x");
+void printResponse(uint16_t rxId, byte* rxData, byte rxDlc) {
   Serial.print(rxId, HEX);
-  Serial.print(" (");
-  
-  switch(rxId) {
-    case 0x7E8:
-      Serial.print("Engine ECU Response");
-      break;
-    case 0x7E9:
-      Serial.print("Transmission ECU Response");
-      break;
-    case 0x7EA:
-      Serial.print("ABS ECU Response");
-      break;
-    case 0x7DF:
-      Serial.print("Echo of our broadcast");
-      break;
-    default:
-      Serial.print("Unknown ECU");
-  }
-  Serial.println(")");
-  
-  Serial.print("   DLC: ");
-  Serial.println(rxDlc);
-  
-  Serial.print("   Data: ");
+  Serial.print(" | Data: ");
+
   for(int i = 0; i < rxDlc; i++) {
     Serial.print("0x");
     if(rxData[i] < 0x10) Serial.print("0");
     Serial.print(rxData[i], HEX);
     Serial.print(" ");
   }
-  Serial.println();
-  
-  // Parse OBD2 response
-  if(rxId == 0x7E8 && rxDlc >= 3) {
-    if(rxData[0] == 0x04 && rxData[1] == 0x41 && rxData[2] == 0x0C && rxDlc >= 5) {
-      uint16_t rpm = ((rxData[3] << 8) | rxData[4]) / 4;
-      Serial.print("-----------PARSED: Engine RPM = ");
-      Serial.print(rpm);
-      Serial.println(" RPM");
-    }
-    else if(rxData[0] == 0x03 && rxData[1] == 0x7F && rxData[2] == 0x01) {
-      Serial.println("-----NEGATIVE RESPONSE: Service not supported");
-    }
-    else if(rxData[1] == 0x41) {
-      Serial.print("---- Positive response for PID 0x");
-      Serial.print(rxData[2], HEX);
-      Serial.print(": ");
-      for(int i = 3; i < rxDlc; i++) {
-        Serial.print("0x");
-        if(rxData[i] < 0x10) Serial.print("0");
-        Serial.print(rxData[i], HEX);
-        Serial.print(" ");
-      }
-      Serial.println();
-    }
+
+  // Parse RPM if present
+  if(rxId >= 0x7E8 && rxId <= 0x7EF && rxDlc >= 5 && rxData[1] == 0x41 && rxData[2] == 0x0C) {
+    uint16_t rpm = ((rxData[3] << 8) | rxData[4]) / 4;
+    Serial.print("-> RPM: ");
+    Serial.print(rpm);
+    blinkSuccess();
   }
-  
   Serial.println();
+}
+
+bool isValidECUResponse(uint16_t rxId, byte* rxData, byte rxDlc) {
+  // ECU responses are typically on IDs 0x7E8 through 0x7EF
+  if(rxId < 0x7E8 || rxId > 0x7EF) return false;
+
+  // Need at least 3 bytes to check response type
+  if(rxDlc < 3) return false;
+
+  // Check for positive response to PID 0x0C (RPM)
+  // Format: [length] 0x41 0x0C [data...]
+  if(rxData[1] == 0x41 && rxData[2] == 0x0C) {
+    return true;
+  }
+
+  // Also accept any positive response (0x41) as valid communication
+  if(rxData[1] == 0x41) {
+    return true;
+  }
+
+  return false;
+}
+
+// ================= DISCOVERY =================
+
+void runDiscovery() {
+  Serial.println("\n==========================================");
+  Serial.println("DISCOVERY MODE: Scanning for CAN bitrate");
+  Serial.println("==========================================\n");
+
+  unsigned long discoveryStart = millis();
+  int currentProfileIndex = 0;
+  bool discoveryComplete = false;
+  unsigned long lastSendTimeDiscovery = 0;
+  bool waitingForResponseDiscovery = false;
+  unsigned long responseTimeoutDiscovery = 0;
+
+  while(!discoveryComplete && (millis() - discoveryStart < DISCOVERY_TIMEOUT)) {
+    unsigned long currentTime = millis();
+
+    // Check for received frames
+    uint16_t rxId;
+    byte rxData[8];
+    byte rxDlc;
+
+    if(receiveCANFrame(&rxId, rxData, &rxDlc)) {
+      if(!quietAfterLock) {
+        printResponse(rxId, rxData, rxDlc);
+      }
+
+      if(isValidECUResponse(rxId, rxData, rxDlc)) {
+        Serial.println("\n==========================================");
+        Serial.print("VALID RESPONSE FOUND on ");
+        Serial.println(profileNames[currentProfileIndex]);
+        Serial.println("==========================================\n");
+
+        lockedProfile = (CanProfile)currentProfileIndex;
+        hasValidatedComms = true;
+        profileLocked = true;
+        discoveryComplete = true;
+        quietAfterLock = true;
+        blinkLocked();
+        return;
+      }
+    }
+
+    // Send request logic
+    if(!waitingForResponseDiscovery && (currentTime - lastSendTimeDiscovery >= 2000)) {
+      Serial.print("[DISCOVERY] Testing ");
+      Serial.println(profileNames[currentProfileIndex]);
+
+      // Configure the MCP2515 for this bitrate
+      configureProfile((CanProfile)currentProfileIndex);
+
+      // Send the request
+      byte data[8] = {0x02, 0x01, 0x0C, 0x00, 0x00, 0x00, 0x00, 0x00};
+      blinkSending();
+      sendCANFrame(0x7DF, 8, data);
+
+      lastSendTimeDiscovery = currentTime;
+      responseTimeoutDiscovery = currentTime;
+      waitingForResponseDiscovery = true;
+    }
+
+    // Check for timeout on current profile
+    if(waitingForResponseDiscovery && (currentTime - responseTimeoutDiscovery >= 3000)) {
+      Serial.println("[DISCOVERY] No response, trying next bitrate");
+      waitingForResponseDiscovery = false;
+
+      // Move to next profile
+      currentProfileIndex++;
+      if(currentProfileIndex >= 3) {
+        // Wrap around and start over
+        currentProfileIndex = 0;
+        Serial.println("[DISCOVERY] Cycle complete, restarting scan");
+      }
+    }
+
+    delay(10);
+  }
+
+  if(!discoveryComplete) {
+    Serial.println("\n==========================================");
+    Serial.println("DISCOVERY TIMEOUT - No valid response found");
+    Serial.println("Defaulting to 250kbps");
+    Serial.println("==========================================\n");
+    lockedProfile = PROFILE_250K;
+    configureProfile(PROFILE_250K);
+  }
+
+  profileLocked = true;
 }
 
 // ================= SETUP =================
@@ -361,102 +405,115 @@ void printReceivedFrame(CanProfile profile, uint16_t rxId, byte* rxData, byte rx
 void setup() {
   Serial.begin(115200);
   delay(2000);
-  
-  // Initialize LED
+
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
-  
-  // Boot-up signal: 3 slow blinks
-  blinkLed(3, 500);
-  
+
+  blinkBoot();
+
   Serial.println("\n==========================================");
-  Serial.println("CAN Bus OBD2 Scanner - Jeep Test");
-  Serial.println("Testing Profile 1 & Profile 2 alternately");
+  Serial.println("CAN Bus OBD2 Scanner - Auto Discovery");
   Serial.println("==========================================\n");
-  
-  // Initialize SPI
+
   pinMode(CS_PIN, OUTPUT);
   digitalWrite(CS_PIN, HIGH);
-  
+
   SPI.setRX(16);
   SPI.setTX(19);
   SPI.setSCK(18);
   SPI.begin();
-  
-  Serial.println("SPI initialized\n");
-  
-  // Start with Profile 1 (250kbps - most common for OBD2)
-  configureProfile(PROFILE_1);
-  
-  Serial.println("-------LED indicates:");
-  Serial.println("   - Single blink: Sending RPM request");
-  Serial.println("   - 5 fast blinks: Received response from ECU");
-  Serial.println("   - 3 slow blinks: Error or bootup");
-  Serial.println("\nReady! Plug into your Jeep and watch the LED\n");
+
+  Serial.println("LED Pattern:");
+  Serial.println("  Single short blink = Sending request");
+  Serial.println("  3 fast blinks = Valid RPM received");
+  Serial.println("  2 slow blinks = Switching frequency");
+  Serial.println("  1 long blink at boot");
+  Serial.println("  2 second solid = Profile locked\n");
+
+  // Run discovery to find correct bitrate
+  runDiscovery();
+
+  Serial.println("\n==========================================");
+  Serial.print("LOCKED ON: ");
+  Serial.println(profileNames[lockedProfile]);
+  Serial.print("Bitrate: ");
+  Serial.print(profileBitrates[lockedProfile]);
+  Serial.println(" bps");
+  Serial.println("==========================================\n");
 }
 
-// ================= LOOP WITH PROFILE SWITCHING =================
+// ================= LOOP =================
 
-unsigned long lastProfileSwitch = 0;
 unsigned long lastSendTime = 0;
 unsigned long receiveTimeout = 0;
 bool waitingForResponse = false;
-CanProfile currentProfile = PROFILE_1;
-int cycleCount = 0;
-const unsigned long PROFILE_DURATION = 30000;  // 30 seconds per profile
-const unsigned long SEND_INTERVAL = 1000;      // Send every 1 second for quick testing
-const unsigned long RESPONSE_TIMEOUT = 5000;   // Wait 5 seconds for response (faster for LED testing)
+const unsigned long SEND_INTERVAL = 5000;
+const unsigned long RESPONSE_TIMEOUT = 5000;
 
 void loop() {
   unsigned long currentTime = millis();
-  
-  // Switch profiles every 30 seconds
-  if(currentTime - lastProfileSwitch >= PROFILE_DURATION) {
-    waitingForResponse = false;  // Reset waiting state
-    currentProfile = (currentProfile == PROFILE_1) ? PROFILE_2 : PROFILE_1;
-    lastProfileSwitch = currentTime;
-    lastSendTime = 0;  // Reset send timer
-    
-    Serial.println("\n🔄 ========================================");
-    Serial.print("🔄 SWITCHING TO ");
-    Serial.println(profileNames[currentProfile]);
-    Serial.println("🔄 ========================================\n");
-    
-    // Reconfigure for new profile
-    configureProfile(currentProfile);
-    
-    // Visual indication of profile switch
-    blinkLed(2, 200);  // Two quick blinks on profile change
-  }
-  
-  // Check for received frames at any time
+
+  // Check for received frames
   uint16_t rxId;
   byte rxData[8];
   byte rxDlc;
-  
+
   if(receiveCANFrame(&rxId, rxData, &rxDlc)) {
-    printReceivedFrame(currentProfile, rxId, rxData, rxDlc);
-    
-    // If we were waiting for a response, we can note that we got one
-    if(waitingForResponse) {
-      Serial.println("Response received within timeout!");
-      waitingForResponse = false;
+    // Only care about ECU responses (0x7E8 - 0x7EF)
+    if((rxId & 0x7F8) == 0x7E8) {
+
+      // Duplicate check
+      bool isDuplicate = true;
+
+      if(rxId != lastRxId || rxDlc != lastDlc) {
+        isDuplicate = false;
+      } else {
+        for(int i = 0; i < rxDlc; i++) {
+          if(rxData[i] != lastData[i]) {
+            isDuplicate = false;
+            break;
+          }
+        }
+      }
+
+      // Only print if new or timeout
+      if((!isDuplicate || millis() - lastPrintTime > 500) && !(quietAfterLock && hasValidatedComms)) {
+        printResponse(rxId, rxData, rxDlc);
+
+        memcpy(lastData, rxData, rxDlc);
+        lastRxId = rxId;
+        lastDlc = rxDlc;
+        lastPrintTime = millis();
+
+        // Valid response clears waiting flag
+        if(waitingForResponse &&
+           rxDlc >= 5 &&
+           rxData[1] == 0x41 &&
+           rxData[2] == 0x0C) {
+          waitingForResponse = false;
+          hasValidatedComms = true;
+        }
+      }
     }
   }
-  
-  // Check if waiting for response has timed out
+
+  // Timeout check
   if(waitingForResponse && (currentTime - receiveTimeout >= RESPONSE_TIMEOUT)) {
-    Serial.println("\nResponse timeout - no response received\n");
     waitingForResponse = false;
   }
-  
-  // Send RPM request periodically
-  if(!waitingForResponse && (currentTime - lastSendTime >= SEND_INTERVAL)) {
-    sendRPMRequest(currentProfile);
-    lastSendTime = currentTime;
-    receiveTimeout = currentTime;  // Start timeout timer
-    waitingForResponse = true;
-  }
-  
-  delay(10);  // Small delay to prevent CPU hogging
+
+  // Send request periodically
+  if(!profileLocked) return;
+
+  // Only send until we confirm communication
+  if(!hasValidatedComms &&
+     !waitingForResponse &&
+     (currentTime - lastSendTime >= SEND_INTERVAL)) {
+
+      sendRPMRequest();
+      lastSendTime = currentTime;
+      receiveTimeout = currentTime;
+      waitingForResponse = true;
+     }
+  delay(10);
 }
