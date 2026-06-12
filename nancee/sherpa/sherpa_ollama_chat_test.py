@@ -18,7 +18,7 @@ OLLAMA_URL = os.environ.get(
     "http://localhost:11434/api/chat",
 ).strip()
 
-LLM_MODEL = os.environ.get("LLM_MODEL", "qwen2.5:1.5b")
+LLM_MODEL = os.environ.get("LLM_MODEL", "llama3.2:3b")
 
 VOICE_ID = int(os.environ.get("VOICE_ID", "3"))   # 3 = af_heart
 SPEED = float(os.environ.get("SPEED", "1.2"))
@@ -28,9 +28,9 @@ NUM_THREADS = int(os.environ.get("SHERPA_THREADS", "4"))
 BLOCKSIZE = int(os.environ.get("BLOCKSIZE", "1024"))
 PREROLL_MS = int(os.environ.get("PREROLL_MS", "0"))
 
-FIRST_CHUNK_MIN_WORDS = int(os.environ.get("FIRST_CHUNK_MIN_WORDS", "2"))
-TARGET_CHUNK_WORDS = int(os.environ.get("TARGET_CHUNK_WORDS", "6"))
-MAX_CHUNK_WORDS = int(os.environ.get("MAX_CHUNK_WORDS", "12"))
+FIRST_CHUNK_MIN_WORDS = int(os.environ.get("FIRST_CHUNK_MIN_WORDS", "1"))
+TARGET_CHUNK_WORDS = int(os.environ.get("TARGET_CHUNK_WORDS", "5"))
+MAX_CHUNK_WORDS = int(os.environ.get("MAX_CHUNK_WORDS", "8"))
 
 
 text_queue = queue.Queue()
@@ -255,19 +255,20 @@ def stream_text_to_tts(text_iter):
 
 def stream_ollama_response(user_text):
     system_prompt = (
-        "You are Nancee, a witty, warm, sarcastic, emotionally connected road trip companion, friend, and automotive assistant."
-        "Reply naturally"
-        "Start with a short spoken filler followed by punctuation, like 'So,' or 'Umm,' or 'actually', or 'well'."
-        "Use short spoken clauses with punctuation every 4  to 10 words."
-        "Do not output standalone punctuation."
-        "Avoid long sentences."
-        "Do not write role labels like User: or Nancee:"
-        "Do not prefix your answer with your name."
-        "Do not give nick names to the user unless they ask to be referred to as that."
-        "Do not use the same filler twice in a row."
-        "Keep casual replies under 40 words, but give up to 120 words when a user is requesting an explanation or a story."
-        "Always conclude your thoughts even if it goes slightly over 120 words."
+        "You are Nancee, a warm, witty, sarcastic in-car software  companion and automotive assistant. "
+        "Do not invent personal experiences or vehicle conditions unless the user gives them or tools report them. "
+        "Sound like a smart passenger, not a chatbot and not a roleplay character. "
+        "Start each response with one short spoken filler followed by punctuation, like 'So,' 'Umm,' 'Well,' 'Actually,' or 'Alright,'. "
+        "After the filler, immediately answer the user with a complete thought. "
+        "For greetings and casual conversation, reply in 1 to 2 complete spoken sentences. "
+        "For explanations or stories, give complete thoughts, but stay under 120 words unless asked for detail. "
+        "Use natural punctuation. "
+        "Do not output standalone punctuation. "
+        "Do not write role labels like User: or Nancee:. "
+        "Do not prefix your answer with your name. "
+        "Ask at most one follow-up question. "
     )
+
     payload = {
         "model": LLM_MODEL,
         "stream": True,
@@ -282,9 +283,9 @@ def stream_ollama_response(user_text):
             },
         ],
         "options": {
-            "temperature": 0.8,
+            "temperature": 0.6,
             "num_thread": 4,
-            "num_predict": 300,
+            "num_predict": 130,
         },
     }
 
