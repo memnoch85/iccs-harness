@@ -25,7 +25,7 @@ KEEP_ALIVE_VALUE = os.environ.get(
 ).strip()
 
 # Entire warmup process must complete within this time.
-TOTAL_TIMEOUT_SECONDS = 60
+TOTAL_TIMEOUT_SECONDS = 75
 
 
 def fail(message):

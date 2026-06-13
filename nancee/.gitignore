@@ -1,2 +1,14 @@
 # Local Sherpa/Kokoro model assets
 sherpa/kokoro-multi-lang-v1_0/
+
+# Python virtual environments
+venv/
+.venv/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+
+# Local secrets/configuration
+.env
