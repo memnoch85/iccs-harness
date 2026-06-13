@@ -1,0 +1,291 @@
+#!/usr/bin/env python3
+
+import hashlib
+import json
+import os
+import sys
+import time
+import urllib.error
+import urllib.request
+
+
+OLLAMA_CHAT_URL = os.environ.get(
+    "OLLAMA_CHAT_URL",
+    "http://127.0.0.1:11434/api/chat",
+).strip()
+
+SYSTEM_PROMPT_FILE = os.environ.get(
+    "NANCEE_SYSTEM_PROMPT_FILE",
+    "/home/memnoch/Nancee/nancee/sherpa/system-prompt.txt",
+).strip()
+
+KEEP_ALIVE_VALUE = os.environ.get(
+    "OLLAMA_KEEP_ALIVE",
+    "-1",
+).strip()
+
+# Entire warmup process must complete within this time.
+TOTAL_TIMEOUT_SECONDS = 60
+
+
+def fail(message):
+    print(f"[FAILED] {message}", flush=True)
+    raise SystemExit(1)
+
+
+def load_system_prompt():
+    try:
+        with open(
+            SYSTEM_PROMPT_FILE,
+            "r",
+            encoding="utf-8",
+        ) as prompt_file:
+            prompt = prompt_file.read().strip()
+    except OSError as error:
+        fail(
+            f"Could not read system prompt file "
+            f"{SYSTEM_PROMPT_FILE!r}: {error}"
+        )
+
+    if not prompt:
+        fail(
+            f"System prompt file is empty: "
+            f"{SYSTEM_PROMPT_FILE!r}"
+        )
+
+    return prompt
+
+
+def parse_keep_alive():
+    try:
+        return int(KEEP_ALIVE_VALUE)
+    except ValueError:
+        return KEEP_ALIVE_VALUE
+
+
+def remaining_time(deadline):
+    remaining = deadline - time.monotonic()
+
+    if remaining <= 0:
+        fail(
+            f"Warmup exceeded the "
+            f"{TOTAL_TIMEOUT_SECONDS}-second limit"
+        )
+
+    return remaining
+
+
+def run_warmup_request(
+    model,
+    system_prompt,
+    deadline,
+    pass_name,
+):
+    payload = {
+        "model": model,
+        "stream": True,
+        "keep_alive": parse_keep_alive(),
+        "messages": [
+            {
+                "role": "system",
+                "content": system_prompt,
+            },
+            {
+                "role": "user",
+                "content": (
+                    "This is the Nancee startup warmup request. "
+                    "Reply with one short sentence saying that "
+                    "Nancee is online and ready to ride."
+                ),
+            },
+        ],
+        "options": {
+            # Keep these aligned with sherpa_ollama_chat_test.py.
+            "temperature": 0.6,
+            "num_thread": 4,
+            "num_predict": 130,
+        },
+    }
+
+    request = urllib.request.Request(
+        OLLAMA_CHAT_URL,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    started = time.monotonic()
+    reply_parts = []
+    final_data = None
+
+    print(
+        f"[{pass_name}] Sending streamed Nancee prompt...",
+        flush=True,
+    )
+
+    try:
+        with urllib.request.urlopen(
+            request,
+            timeout=remaining_time(deadline),
+        ) as response:
+            for raw_line in response:
+                line = raw_line.decode(
+                    "utf-8",
+                    errors="replace",
+                ).strip()
+
+                if not line:
+                    continue
+
+                data = json.loads(line)
+
+                token = (
+                    data.get("message", {})
+                    .get("content", "")
+                )
+
+                if token:
+                    reply_parts.append(token)
+
+                if data.get("done"):
+                    final_data = data
+                    break
+
+    except urllib.error.HTTPError as error:
+        details = error.read().decode(
+            "utf-8",
+            errors="replace",
+        )
+        fail(
+            f"{pass_name} returned HTTP "
+            f"{error.code}: {details}"
+        )
+
+    except urllib.error.URLError as error:
+        fail(f"{pass_name} could not reach Ollama: {error}")
+
+    except TimeoutError:
+        fail(
+            f"{pass_name} exceeded the "
+            f"{TOTAL_TIMEOUT_SECONDS}-second limit"
+        )
+
+    except json.JSONDecodeError as error:
+        fail(f"{pass_name} returned invalid JSON: {error}")
+
+    if final_data is None:
+        fail(f"{pass_name} did not return a completed response")
+
+    reply = "".join(reply_parts).strip()
+
+    if not reply:
+        fail(f"{pass_name} returned an empty response")
+
+    elapsed = time.monotonic() - started
+
+    load_seconds = (
+        final_data.get("load_duration", 0)
+        / 1_000_000_000
+    )
+    prompt_seconds = (
+        final_data.get("prompt_eval_duration", 0)
+        / 1_000_000_000
+    )
+    generation_seconds = (
+        final_data.get("eval_duration", 0)
+        / 1_000_000_000
+    )
+
+    print(f"[{pass_name}] Response: {reply}", flush=True)
+    print(
+        f"[{pass_name}] Elapsed: {elapsed:.3f}s",
+        flush=True,
+    )
+    print(
+        f"[{pass_name}] Model load: "
+        f"{load_seconds:.3f}s",
+        flush=True,
+    )
+    print(
+        f"[{pass_name}] Prompt evaluation: "
+        f"{prompt_seconds:.3f}s",
+        flush=True,
+    )
+    print(
+        f"[{pass_name}] Generation: "
+        f"{generation_seconds:.3f}s",
+        flush=True,
+    )
+    print(
+        f"[{pass_name}] Prompt tokens: "
+        f"{final_data.get('prompt_eval_count', 0)}",
+        flush=True,
+    )
+
+    return reply, elapsed
+
+
+def main():
+    if len(sys.argv) != 2:
+        fail(
+            "Usage: nancee-ollama-warmup MODEL_NAME"
+        )
+
+    model = sys.argv[1].strip()
+
+    if not model:
+        fail("Model name cannot be empty")
+
+    system_prompt = load_system_prompt()
+
+    prompt_hash = hashlib.sha256(
+        system_prompt.encode("utf-8")
+    ).hexdigest()
+
+    print(f"[STARTING] Model: {model}", flush=True)
+    print(
+        f"[STARTING] System prompt: "
+        f"{SYSTEM_PROMPT_FILE}",
+        flush=True,
+    )
+    print(
+        f"[STARTING] Prompt SHA256: "
+        f"{prompt_hash}",
+        flush=True,
+    )
+
+    deadline = (
+        time.monotonic()
+        + TOTAL_TIMEOUT_SECONDS
+    )
+
+    # First request loads the model and evaluates the prompt.
+    run_warmup_request(
+        model=model,
+        system_prompt=system_prompt,
+        deadline=deadline,
+        pass_name="WARMUP",
+    )
+
+    # Second identical request verifies that the hot path responds quickly.
+    _, verification_elapsed = run_warmup_request(
+        model=model,
+        system_prompt=system_prompt,
+        deadline=deadline,
+        pass_name="VERIFY",
+    )
+
+    print(f"[READY] Model: {model}", flush=True)
+    print(
+        f"[READY] Verification response time: "
+        f"{verification_elapsed:.3f}s",
+        flush=True,
+    )
+    print(
+        "[READY] STATUS=MODEL_RESPONDED",
+        flush=True,
+    )
+
+
+if __name__ == "__main__":
+    main()
