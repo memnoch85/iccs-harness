@@ -84,7 +84,7 @@ OLLAMA_WARMUP_COMMAND = os.environ.get(
 
 LLM_MODEL = os.environ.get(
     "LLM_MODEL",
-    "llama3.2:3b",
+    "phi4-mini:3.8b",
 )
 
 SYSTEM_PROMPT_FILE = os.environ.get(
@@ -93,7 +93,7 @@ SYSTEM_PROMPT_FILE = os.environ.get(
 )
 
 #Ollama generation settings
-LLM_TEMPERATURE = 0.6
+LLM_TEMPERATURE = 0.75
 LLM_NUM_THREADS = 4
 LLM_NUM_PREDICT = 120
 
