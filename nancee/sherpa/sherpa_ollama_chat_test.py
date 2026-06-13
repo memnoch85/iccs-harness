@@ -9,6 +9,7 @@ from collections import deque
 import numpy as np
 import sounddevice as sd
 import sherpa_onnx
+import subprocess
 
 
 MODEL_DIR = os.environ.get("SHERPA_MODEL_DIR", "kokoro-multi-lang-v1_0")
@@ -17,6 +18,17 @@ OLLAMA_URL = os.environ.get(
     "OLLAMA_URL",
     "http://localhost:11434/api/chat",
 ).strip()
+
+OLLAMA_PS_URL = os.environ.get(
+    "OLLAMA_PS_URL",
+    "http://127.0.0.1:11434/api/ps",
+).strip()
+
+OLLAMA_WARMUP_COMMAND = os.environ.get(
+    "OLLAMA_WARMUP_COMMAND",
+    "/usr/local/bin/nancee-ollama-warmup",
+).strip()
+
 
 LLM_MODEL = os.environ.get("LLM_MODEL", "llama3.2:3b")
 
@@ -29,7 +41,7 @@ BLOCKSIZE = int(os.environ.get("BLOCKSIZE", "1024"))
 PREROLL_MS = int(os.environ.get("PREROLL_MS", "0"))
 
 FIRST_CHUNK_MIN_WORDS = int(os.environ.get("FIRST_CHUNK_MIN_WORDS", "1"))
-TARGET_CHUNK_WORDS = int(os.environ.get("TARGET_CHUNK_WORDS", "5"))
+TARGET_CHUNK_WORDS = int(os.environ.get("TARGET_CHUNK_WORDS", "4"))
 MAX_CHUNK_WORDS = int(os.environ.get("MAX_CHUNK_WORDS", "8"))
 
 
@@ -40,6 +52,98 @@ audio_lock = threading.Lock()
 audio_chunks = deque()
 
 first_audio_enqueued = False
+
+SYSTEM_PROMPT_FILE = os.environ.get(
+    "NANCEE_SYSTEM_PROMPT_FILE",
+    "/home/memnoch/Nancee/nancee/sherpa/system-prompt.txt",
+)
+
+
+def load_system_prompt():
+    with open(SYSTEM_PROMPT_FILE, "r", encoding="utf-8") as prompt_file:
+        return prompt_file.read().strip()
+
+
+def is_ollama_model_loaded(model_name):
+    request = urllib.request.Request(
+        OLLAMA_PS_URL,
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            data = json.load(response)
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+        json.JSONDecodeError,
+    ) as error:
+        print(
+            f"[LLM STATUS] Could not query Ollama: {error}",
+            flush=True,
+        )
+        return False
+
+    for model in data.get("models", []):
+        loaded_name = model.get("name") or model.get("model")
+
+        if loaded_name == model_name:
+            return True
+
+    return False
+
+def ensure_ollama_model_loaded(model_name):
+    if is_ollama_model_loaded(model_name):
+        print(
+            f"[LLM READY] {model_name!r} is already loaded.",
+            flush=True,
+        )
+        return
+
+    print(
+        f"[LLM WARMUP] {model_name!r} is not loaded. Starting warmup...",
+        flush=True,
+    )
+
+    try:
+        result = subprocess.run(
+            [OLLAMA_WARMUP_COMMAND, model_name],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise RuntimeError(
+            f"Warmup timed out for model {model_name!r}"
+        ) from error
+    except OSError as error:
+        raise RuntimeError(
+            f"Could not execute {OLLAMA_WARMUP_COMMAND!r}: {error}"
+        ) from error
+
+    if result.stdout:
+        print(result.stdout.strip(), flush=True)
+
+    if result.stderr:
+        print(result.stderr.strip(), flush=True)
+
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"Warmup failed for {model_name!r}; "
+            f"exit code={result.returncode}"
+        )
+
+    if not is_ollama_model_loaded(model_name):
+        raise RuntimeError(
+            f"Warmup completed, but {model_name!r} "
+            "is not listed as loaded by Ollama."
+        )
+
+    print(
+        f"[LLM READY] {model_name!r} responded and is loaded.",
+        flush=True,
+    )
 
 
 def build_tts():
@@ -252,22 +356,8 @@ def stream_text_to_tts(text_iter):
         print(f"[TEXT -> TTS FINAL] {final!r}", flush=True)
         text_queue.put(final)
 
-
 def stream_ollama_response(user_text):
-    system_prompt = (
-        "You are Nancee, a warm, witty, sarcastic in-car software  companion and automotive assistant. "
-        "Do not invent personal experiences or vehicle conditions unless the user gives them or tools report them. "
-        "Sound like a smart passenger, not a chatbot and not a roleplay character. "
-        "Start each response with one short spoken filler followed by punctuation, like 'So,' 'Umm,' 'Well,' 'Actually,' or 'Alright,'. "
-        "After the filler, immediately answer the user with a complete thought. "
-        "For greetings and casual conversation, reply in 1 to 2 complete spoken sentences. "
-        "For explanations or stories, give complete thoughts, but stay under 120 words unless asked for detail. "
-        "Use natural punctuation. "
-        "Do not output standalone punctuation. "
-        "Do not write role labels like User: or Nancee:. "
-        "Do not prefix your answer with your name. "
-        "Ask at most one follow-up question. "
-    )
+    system_prompt = load_system_prompt()
 
     payload = {
         "model": LLM_MODEL,
@@ -285,7 +375,7 @@ def stream_ollama_response(user_text):
         "options": {
             "temperature": 0.6,
             "num_thread": 4,
-            "num_predict": 130,
+            "num_predict": 120,
         },
     }
 
@@ -345,15 +435,22 @@ if __name__ == "__main__":
     )
     worker.start()
 
-    print("Opening persistent audio stream...", flush=True)
+    try:
+        ensure_ollama_model_loaded(LLM_MODEL)
+    except RuntimeError as error:
+        print(f"[STARTUP ERROR] {error}", flush=True)
+        stop_event.set()
+        worker.join(timeout=2.0)
+        raise SystemExit(1)
 
+    print("Opening persistent audio stream...", flush=True)
     with sd.OutputStream(
         channels=1,
         samplerate=tts.sample_rate,
         dtype="float32",
         blocksize=BLOCKSIZE,
         callback=output_callback,
-    ):
+    ): #check if llm is up and going and if not start it up, and wait until its up
         while True:
             try:
                 user_text = input("\nYou: ").strip()
