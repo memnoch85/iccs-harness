@@ -1,13 +1,14 @@
 import queue
+import subprocess
+from pathlib import Path
 import threading
 import time
+import json
 import urllib.error
 from collections import deque
-
 import numpy as np
 import sherpa_onnx
 import sounddevice as sd
-
 from config import (
     BLOCKSIZE,
     LLM_MODEL,
@@ -25,15 +26,160 @@ from ollama_runtime import (
     stream_ollama_response,
 )
 
-
 text_queue = queue.Queue()
 stop_event = threading.Event()
-
 audio_lock = threading.Lock()
 audio_chunks = deque()
-
 first_audio_enqueued = False
 
+NANCEE_ROOT = Path(__file__).resolve().parent.parent
+ASR_DIRECTORY = NANCEE_ROOT / "asr"
+ASR_PYTHON = ASR_DIRECTORY / "venv" / "bin" / "python"
+ASR_WORKER_SCRIPT = ASR_DIRECTORY / "asr_worker.py"
+asr_process = None
+
+
+def read_asr_message():
+    if (
+        asr_process is None
+        or asr_process.stdout is None
+    ):
+        raise RuntimeError(
+            "ASR worker is not running."
+        )
+
+    line = asr_process.stdout.readline()
+
+    if not line:
+        raise RuntimeError(
+            "ASR worker closed unexpectedly."
+        )
+
+    return json.loads(line)
+
+
+def start_asr_worker():
+    global asr_process
+
+    if (
+        asr_process is not None
+        and asr_process.poll() is None
+    ):
+        return
+
+    asr_process = subprocess.Popen(
+        [
+            str(ASR_PYTHON),
+            str(ASR_WORKER_SCRIPT),
+        ],
+        cwd=str(ASR_DIRECTORY),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        # Let worker diagnostics appear directly in this terminal.
+        stderr=None,
+        text=True,
+        bufsize=1,
+    )
+
+    message = read_asr_message()
+
+    if message.get("type") != "ready":
+        raise RuntimeError(
+            f"ASR worker failed to start: {message}"
+        )
+
+
+def send_asr_command(command):
+    if (
+        asr_process is None
+        or asr_process.stdin is None
+    ):
+        raise RuntimeError(
+            "ASR worker is not running."
+        )
+
+    asr_process.stdin.write(
+        command + "\n"
+    )
+
+    asr_process.stdin.flush()
+
+
+def get_spoken_user_input():
+    start_asr_worker()
+
+    input(
+        "\nPress Enter to begin speaking..."
+    )
+
+    send_asr_command("START")
+
+    message = read_asr_message()
+
+    if message.get("type") != "started":
+        print(
+            f"[ASR ERROR] {message}",
+            flush=True,
+        )
+        return ""
+
+    input(
+        "Recording... Press Enter to stop.\n"
+    )
+
+    send_asr_command("STOP")
+
+    message = read_asr_message()
+
+    if message.get("type") == "error":
+        print(
+            f"[ASR ERROR] "
+            f"{message.get('message')}",
+            flush=True,
+        )
+        return ""
+
+    if message.get("type") != "result":
+        print(
+            f"[ASR ERROR] Unexpected response: "
+            f"{message}",
+            flush=True,
+        )
+        return ""
+
+    print(
+        f"[ASR] captured="
+        f"{message.get('duration', 0.0):.2f}s "
+        f"transcription="
+        f"{message.get('transcription_seconds', 0.0):.2f}s "
+        f"peak="
+        f"{message.get('peak', 0.0):.4f}",
+        flush=True,
+    )
+
+    return str(
+        message.get("text", "")
+    ).strip()
+
+
+def stop_asr_worker():
+    global asr_process
+
+    if asr_process is None:
+        return
+
+    if asr_process.poll() is None:
+        try:
+            send_asr_command("QUIT")
+            asr_process.wait(timeout=3.0)
+
+        except (
+            BrokenPipeError,
+            subprocess.TimeoutExpired,
+        ):
+            asr_process.terminate()
+
+    asr_process = None
 
 def build_tts():
     config = sherpa_onnx.OfflineTtsConfig(
@@ -413,9 +559,7 @@ def main():
     ):
         while True:
             try:
-                user_text = input(
-                    "\nYou: "
-                ).strip()
+                user_text = get_spoken_user_input()
 
             except KeyboardInterrupt:
                 print(
@@ -426,6 +570,14 @@ def main():
 
             if not user_text:
                 continue
+
+           # if not user_text:
+           #      continue
+
+           # print(
+            #    f"\nYou: {user_text}",
+            #    flush=True,
+            #)
 
             if user_text.lower() in {
                 "q",
@@ -466,6 +618,7 @@ def main():
                 flush=True,
             )
 
+    stop_asr_worker()
     stop_event.set()
     worker.join(timeout=2.0)
 
