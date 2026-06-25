@@ -1,88 +1,161 @@
 #!/bin/bash
 
-# -----------------------------
-# CONFIG
-# -----------------------------
 BASE_DIR="/home/memnoch/Nancee/nancee/test"
 FLAT_FILE="$BASE_DIR/flatFileCommsTest.log"
 RESULT_LOG="$BASE_DIR/commsResult.log"
-
 WRITER_SCRIPT="$BASE_DIR/testpico2PiWriteComms.sh"
 SQL_SCRIPT="$BASE_DIR/testflatFile2SQL.sh"
+can0_listener_out="/tmp/can0-listener$$"
+can1_listener_out="/tmp/can1-listener$$"
+can0_candump_pid=""
+can1_candump_pid=""
 
-WRITER_PID=""
-
-# -----------------------------
-# CLEANUP FUNCTION (CRITICAL)
-# -----------------------------
-cleanup() {
-  echo "=== CLEANUP ==="
-
-  if [[ -n "$WRITER_PID" ]]; then
-    echo "Killing writer PID: $WRITER_PID"
-    kill "$WRITER_PID" 2>/dev/null || true
-    wait "$WRITER_PID" 2>/dev/null || true
-  fi
-
-  # Kill anything still holding serial (paranoid but safe)
-  fuser -k /dev/serial0 2>/dev/null || true
-
-  echo "Cleanup complete"
-}
-
-# Trap ALL exits (normal + Ctrl+C)
-trap cleanup EXIT INT TERM
-
-# -----------------------------
-# PRE-CLEANUP
-# -----------------------------
-echo "=== PRE-CLEANUP ==="
-rm -f "$FLAT_FILE"
-rm -f "$RESULT_LOG"
-
-# -----------------------------
-# START WRITER (BACKGROUND)
-# -----------------------------
-echo "Starting UART writer..."
-bash "$WRITER_SCRIPT" >> "$RESULT_LOG" 2>&1 &
-WRITER_PID=$!
-
-echo "Writer PID: $WRITER_PID"
-
-# -----------------------------
-# WAIT FOR DATA (NOT JUST FILE)
-# -----------------------------
-echo "Waiting for flat file data..."
-TIMEOUT=10
-COUNT=0
-
-while [[ $COUNT -lt $TIMEOUT ]]; do
-  if [[ -s "$FLAT_FILE" ]]; then
-    break
-  fi
-  sleep 1
-  ((COUNT++))
-done
-
-if [[ ! -s "$FLAT_FILE" ]]; then
-  echo "Flat file empty or not created" | tee -a "$RESULT_LOG"
-  exit 1
+if [[ "$EUID" -ne 0 ]]; then
+    echo "Run with sudo: sudo $0"
+    exit 1
 fi
 
-# Give it a moment to stabilize
+get_can_gruent() {
+    ip -d link show | grep "can state" | sed -e 's/.*state //g' -e 's/ restart.*//g' | sort -u | wc -l
+}
+
+stop_candump() {
+    if [[ -n "$can0_candump_pid" ]]; then
+        kill -INT "$can0_candump_pid" 2>/dev/null || true
+        wait "$can0_candump_pid" 2>/dev/null || true
+        can0_candump_pid=""
+    fi
+
+    if [[ -n "$can1_candump_pid" ]]; then
+        kill -INT "$can1_candump_pid" 2>/dev/null || true
+        wait "$can1_candump_pid" 2>/dev/null || true
+        can1_candump_pid=""
+    fi
+}
+
+can_deadly() {
+    stop_candump
+    pkill -INT -x candump 2>/dev/null || true
+    sleep 1
+    ip link set can0 down 2>/dev/null || true
+    ip link set can1 down 2>/dev/null || true
+    sleep 2
+}
+
+can_opener() {
+    count=0
+
+    rm -f "$can0_listener_out" "$can1_listener_out"
+    ip link set can0 type can bitrate 500000 restart-ms 100
+    ip link set can1 type can bitrate 500000 restart-ms 100
+    ip link set can0 up
+    ip link set can1 up
+
+    can_gruent="$(get_can_gruent)"
+
+    while [[ "$count" -lt 3 && "$can_gruent" -gt 1 ]]; do
+        echo "WARN: CAN devices are not in the same state, restarting CAN bus."
+        ip link set can0 down
+        ip link set can1 down
+        sleep 1
+
+        ip link set can0 up
+        ip link set can1 up
+        sleep 2
+
+        count=$((count + 1))
+        can_gruent="$(get_can_gruent)"
+    done
+
+    candump -f "$can0_listener_out" can0 &
+    can0_candump_pid=$!
+
+    candump -f "$can1_listener_out" can1 &
+    can1_candump_pid=$!
+
+    sleep 2
+}
+
+rpm_check() {
+    echo "Sending RPM request from can1..."
+    cansend can1 7DF#02010C0000000000
+
+    sleep 1
+
+    echo "Sending simulated ECU RPM response from can0..."
+    cansend can0 7E8#04410C0FA0000000
+}
+
+rpm_test() {
+    echo
+    echo "----- can0 listener output -----"
+    cat "$can0_listener_out"
+
+    echo
+    echo "----- can1 listener output -----"
+    cat "$can1_listener_out"
+
+    echo
+    echo "----- Test results -----"
+
+    if grep -Eq 'can0[[:space:]]+7DF#02010C0000000000' "$can0_listener_out"; then
+        echo "PASS: can0 received the RPM request sent from can1."
+    else
+        echo "FAIL: can0 did not receive the RPM request from can1."
+        exit 2
+    fi
+
+    if grep -Eq 'can1[[:space:]]+7E8#04410C0FA0000000' "$can1_listener_out"; then
+        echo "PASS: can1 received the ECU response sent from can0."
+    else
+        echo "FAIL: can1 did not receive the ECU response from can0."
+        exit 3
+    fi
+
+    echo "PASS: CAN communication worked in both directions."
+}
+
+
+write_test_result() {
+    rpm_response="$(grep -m 1 '7E8#04410C' "$can0_listener_out")"
+
+    if [[ -z "$rpm_response" ]]; then
+        echo "ERROR: Cannot write test result because RPM response is missing."
+        exit 4
+    fi
+
+    echo "CAN_COMMS_TEST|$rpm_response" > "$FLAT_FILE"
+
+    echo "Wrote CAN test result:"
+    cat "$FLAT_FILE"
+}
+
+
+
+
+#exec
+can_deadly
+can_opener
+rpm_check
 sleep 2
+stop_candump
+rpm_test
+write_test_result
+"$SQL_SCRIPT"
+can_deadly
 
-echo "Flat file contents:"
-cat "$FLAT_FILE"
 
-# -----------------------------
-# RUN SQL INGEST
-# -----------------------------
-echo "Running SQL ingest..."
-bash "$SQL_SCRIPT" >> "$RESULT_LOG" 2>&1
-rm -f "$FLAT_FILE"
-# -----------------------------
-# DONE 
-# -----------------------------
-echo "=== RUN COMPLETE ==="
-cat "$RESULT_LOG"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
