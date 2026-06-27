@@ -8,6 +8,11 @@ import time
 import urllib.error
 import urllib.request
 
+from config import (
+    LLM_NUM_PREDICT,
+    LLM_NUM_THREADS,
+    LLM_TEMPERATURE,
+)
 
 OLLAMA_CHAT_URL = os.environ.get(
     "OLLAMA_CHAT_URL",
@@ -25,7 +30,7 @@ KEEP_ALIVE_VALUE = os.environ.get(
 ).strip()
 
 # Entire warmup process must complete within this time.
-TOTAL_TIMEOUT_SECONDS = 75
+TOTAL_TIMEOUT_SECONDS = 90
 
 
 def fail(message):
@@ -42,16 +47,10 @@ def load_system_prompt():
         ) as prompt_file:
             prompt = prompt_file.read().strip()
     except OSError as error:
-        fail(
-            f"Could not read system prompt file "
-            f"{SYSTEM_PROMPT_FILE!r}: {error}"
-        )
+        fail(f"Could not read system prompt file {SYSTEM_PROMPT_FILE!r}: {error}")
 
     if not prompt:
-        fail(
-            f"System prompt file is empty: "
-            f"{SYSTEM_PROMPT_FILE!r}"
-        )
+        fail(f"System prompt file is empty: {SYSTEM_PROMPT_FILE!r}")
 
     return prompt
 
@@ -67,10 +66,7 @@ def remaining_time(deadline):
     remaining = deadline - time.monotonic()
 
     if remaining <= 0:
-        fail(
-            f"Warmup exceeded the "
-            f"{TOTAL_TIMEOUT_SECONDS}-second limit"
-        )
+        fail(f"Warmup exceeded the {TOTAL_TIMEOUT_SECONDS}-second limit")
 
     return remaining
 
@@ -100,10 +96,9 @@ def run_warmup_request(
             },
         ],
         "options": {
-            # Keep these aligned with sherpa_ollama_chat_test.py.
-            "temperature": 0.6,
-            "num_thread": 4,
-            "num_predict": 130,
+            "temperature": LLM_TEMPERATURE,
+            "num_thread": LLM_NUM_THREADS,
+            "num_predict": LLM_NUM_PREDICT,
         },
     }
 
@@ -139,10 +134,7 @@ def run_warmup_request(
 
                 data = json.loads(line)
 
-                token = (
-                    data.get("message", {})
-                    .get("content", "")
-                )
+                token = data.get("message", {}).get("content", "")
 
                 if token:
                     reply_parts.append(token)
@@ -156,19 +148,13 @@ def run_warmup_request(
             "utf-8",
             errors="replace",
         )
-        fail(
-            f"{pass_name} returned HTTP "
-            f"{error.code}: {details}"
-        )
+        fail(f"{pass_name} returned HTTP {error.code}: {details}")
 
     except urllib.error.URLError as error:
         fail(f"{pass_name} could not reach Ollama: {error}")
 
     except TimeoutError:
-        fail(
-            f"{pass_name} exceeded the "
-            f"{TOTAL_TIMEOUT_SECONDS}-second limit"
-        )
+        fail(f"{pass_name} exceeded the {TOTAL_TIMEOUT_SECONDS}-second limit")
 
     except json.JSONDecodeError as error:
         fail(f"{pass_name} returned invalid JSON: {error}")
@@ -183,18 +169,9 @@ def run_warmup_request(
 
     elapsed = time.monotonic() - started
 
-    load_seconds = (
-        final_data.get("load_duration", 0)
-        / 1_000_000_000
-    )
-    prompt_seconds = (
-        final_data.get("prompt_eval_duration", 0)
-        / 1_000_000_000
-    )
-    generation_seconds = (
-        final_data.get("eval_duration", 0)
-        / 1_000_000_000
-    )
+    load_seconds = final_data.get("load_duration", 0) / 1_000_000_000
+    prompt_seconds = final_data.get("prompt_eval_duration", 0) / 1_000_000_000
+    generation_seconds = final_data.get("eval_duration", 0) / 1_000_000_000
 
     print(f"[{pass_name}] Response: {reply}", flush=True)
     print(
@@ -202,23 +179,19 @@ def run_warmup_request(
         flush=True,
     )
     print(
-        f"[{pass_name}] Model load: "
-        f"{load_seconds:.3f}s",
+        f"[{pass_name}] Model load: {load_seconds:.3f}s",
         flush=True,
     )
     print(
-        f"[{pass_name}] Prompt evaluation: "
-        f"{prompt_seconds:.3f}s",
+        f"[{pass_name}] Prompt evaluation: {prompt_seconds:.3f}s",
         flush=True,
     )
     print(
-        f"[{pass_name}] Generation: "
-        f"{generation_seconds:.3f}s",
+        f"[{pass_name}] Generation: {generation_seconds:.3f}s",
         flush=True,
     )
     print(
-        f"[{pass_name}] Prompt tokens: "
-        f"{final_data.get('prompt_eval_count', 0)}",
+        f"[{pass_name}] Prompt tokens: {final_data.get('prompt_eval_count', 0)}",
         flush=True,
     )
 
@@ -227,9 +200,7 @@ def run_warmup_request(
 
 def main():
     if len(sys.argv) != 2:
-        fail(
-            "Usage: nancee-ollama-warmup MODEL_NAME"
-        )
+        fail("Usage: nancee-ollama-warmup MODEL_NAME")
 
     model = sys.argv[1].strip()
 
@@ -238,26 +209,27 @@ def main():
 
     system_prompt = load_system_prompt()
 
-    prompt_hash = hashlib.sha256(
-        system_prompt.encode("utf-8")
-    ).hexdigest()
+    prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
 
     print(f"[STARTING] Model: {model}", flush=True)
     print(
-        f"[STARTING] System prompt: "
-        f"{SYSTEM_PROMPT_FILE}",
+        f"[STARTING] System prompt: {SYSTEM_PROMPT_FILE}",
         flush=True,
     )
     print(
-        f"[STARTING] Prompt SHA256: "
-        f"{prompt_hash}",
+        f"[STARTING] Prompt SHA256: {prompt_hash}",
         flush=True,
     )
 
-    deadline = (
-        time.monotonic()
-        + TOTAL_TIMEOUT_SECONDS
+    print(
+        f"[STARTING] LLM options: "
+        f"temperature={LLM_TEMPERATURE} "
+        f"threads={LLM_NUM_THREADS} "
+        f"num_predict={LLM_NUM_PREDICT}",
+        flush=True,
     )
+
+    deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
 
     # First request loads the model and evaluates the prompt.
     run_warmup_request(
@@ -277,8 +249,7 @@ def main():
 
     print(f"[READY] Model: {model}", flush=True)
     print(
-        f"[READY] Verification response time: "
-        f"{verification_elapsed:.3f}s",
+        f"[READY] Verification response time: {verification_elapsed:.3f}s",
         flush=True,
     )
     print(

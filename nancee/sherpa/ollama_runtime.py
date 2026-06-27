@@ -44,7 +44,10 @@ def is_ollama_model_loaded(model_name):
         return False
 
     for model in data.get("models", []):
-        loaded_name = model.get("name") or model.get("model")
+        loaded_name = (
+            model.get("name")
+            or model.get("model")
+        )
 
         if loaded_name == model_name:
             return True
@@ -55,14 +58,15 @@ def is_ollama_model_loaded(model_name):
 def ensure_ollama_model_loaded(model_name):
     if is_ollama_model_loaded(model_name):
         print(
-            f"[LLM READY] {model_name!r} is already loaded.",
+            f"[LLM READY] {model_name!r} "
+            "is already loaded.",
             flush=True,
         )
         return
 
     print(
-        f"[LLM WARMUP] {model_name!r} is not loaded. "
-        "Starting warmup...",
+        f"[LLM WARMUP] {model_name!r} "
+        "is not loaded. Starting warmup...",
         flush=True,
     )
 
@@ -80,13 +84,15 @@ def ensure_ollama_model_loaded(model_name):
 
     except subprocess.TimeoutExpired as error:
         raise RuntimeError(
-            f"Warmup timed out for model {model_name!r}"
+            f"Warmup timed out for model "
+            f"{model_name!r}"
         ) from error
 
     except OSError as error:
         raise RuntimeError(
             f"Could not execute "
-            f"{OLLAMA_WARMUP_COMMAND!r}: {error}"
+            f"{OLLAMA_WARMUP_COMMAND!r}: "
+            f"{error}"
         ) from error
 
     if result.stdout:
@@ -103,38 +109,52 @@ def ensure_ollama_model_loaded(model_name):
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"Warmup failed for {model_name!r}; "
+            f"Warmup failed for "
+            f"{model_name!r}; "
             f"exit code={result.returncode}"
         )
 
-    if not is_ollama_model_loaded(model_name):
+    if not is_ollama_model_loaded(
+        model_name
+    ):
         raise RuntimeError(
-            f"Warmup completed, but {model_name!r} "
-            "is not listed as loaded by Ollama."
+            f"Warmup completed, but "
+            f"{model_name!r} is not listed "
+            "as loaded by Ollama."
         )
 
     print(
-        f"[LLM READY] {model_name!r} responded and is loaded.",
+        f"[LLM READY] {model_name!r} "
+        "responded and is loaded.",
         flush=True,
     )
 
 
-def stream_ollama_response(user_text):
+def stream_ollama_response(
+    user_text,
+    history=None,
+):
     system_prompt = load_system_prompt()
+
+    if history is None:
+        history = []
+
+    messages = [
+        {
+            "role": "system",
+            "content": system_prompt,
+        },
+        *history,
+        {
+            "role": "user",
+            "content": user_text,
+        },
+    ]
 
     payload = {
         "model": LLM_MODEL,
         "stream": True,
-        "messages": [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {
-                "role": "user",
-                "content": user_text,
-            },
-        ],
+        "messages": messages,
         "options": {
             "temperature": LLM_TEMPERATURE,
             "num_thread": LLM_NUM_THREADS,
@@ -142,7 +162,11 @@ def stream_ollama_response(user_text):
         },
     }
 
-    body = json.dumps(payload).encode("utf-8")
+    body = json.dumps(
+        payload
+    ).encode(
+        "utf-8"
+    )
 
     request = urllib.request.Request(
         OLLAMA_URL,
@@ -158,20 +182,41 @@ def stream_ollama_response(user_text):
         timeout=OLLAMA_RESPONSE_TIMEOUT,
     ) as response:
         for raw_line in response:
-            line = raw_line.decode("utf-8").strip()
+            line = (
+                raw_line
+                .decode("utf-8")
+                .strip()
+            )
 
             if not line:
                 continue
 
             data = json.loads(line)
 
-            if data.get("done"):
-                break
+            if data.get("error"):
+                raise RuntimeError(
+                    "Ollama returned an error: "
+                    f"{data['error']}"
+                )
 
             token = (
-                data.get("message", {})
+                data
+                .get("message", {})
                 .get("content", "")
             )
 
             if token:
                 yield token
+
+            if data.get("done"):
+                print(
+                    f"\n[OLLAMA DONE] "
+                    f"reason="
+                    f"{data.get('done_reason', 'unknown')} "
+                    f"prompt_tokens="
+                    f"{data.get('prompt_eval_count', 0)} "
+                    f"response_tokens="
+                    f"{data.get('eval_count', 0)}",
+                    flush=True,
+                )
+                break

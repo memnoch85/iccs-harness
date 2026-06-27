@@ -1,11 +1,12 @@
+import json
 import queue
 import subprocess
-from pathlib import Path
 import threading
 import time
-import json
 import urllib.error
 from collections import deque
+from pathlib import Path
+
 import numpy as np
 import sherpa_onnx
 import sounddevice as sd
@@ -25,6 +26,7 @@ from ollama_runtime import (
     ensure_ollama_model_loaded,
     stream_ollama_response,
 )
+from short_term_memory import ShortTermMemory
 
 text_queue = queue.Queue()
 stop_event = threading.Event()
@@ -40,20 +42,13 @@ asr_process = None
 
 
 def read_asr_message():
-    if (
-        asr_process is None
-        or asr_process.stdout is None
-    ):
-        raise RuntimeError(
-            "ASR worker is not running."
-        )
+    if asr_process is None or asr_process.stdout is None:
+        raise RuntimeError("ASR worker is not running.")
 
     line = asr_process.stdout.readline()
 
     if not line:
-        raise RuntimeError(
-            "ASR worker closed unexpectedly."
-        )
+        raise RuntimeError("ASR worker closed unexpectedly.")
 
     return json.loads(line)
 
@@ -61,10 +56,7 @@ def read_asr_message():
 def start_asr_worker():
     global asr_process
 
-    if (
-        asr_process is not None
-        and asr_process.poll() is None
-    ):
+    if asr_process is not None and asr_process.poll() is None:
         return
 
     asr_process = subprocess.Popen(
@@ -84,23 +76,14 @@ def start_asr_worker():
     message = read_asr_message()
 
     if message.get("type") != "ready":
-        raise RuntimeError(
-            f"ASR worker failed to start: {message}"
-        )
+        raise RuntimeError(f"ASR worker failed to start: {message}")
 
 
 def send_asr_command(command):
-    if (
-        asr_process is None
-        or asr_process.stdin is None
-    ):
-        raise RuntimeError(
-            "ASR worker is not running."
-        )
+    if asr_process is None or asr_process.stdin is None:
+        raise RuntimeError("ASR worker is not running.")
 
-    asr_process.stdin.write(
-        command + "\n"
-    )
+    asr_process.stdin.write(command + "\n")
 
     asr_process.stdin.flush()
 
@@ -108,9 +91,7 @@ def send_asr_command(command):
 def get_spoken_user_input():
     start_asr_worker()
 
-    input(
-        "\nPress Enter to begin speaking..."
-    )
+    input("\nPress Enter to begin speaking...")
 
     send_asr_command("START")
 
@@ -123,9 +104,7 @@ def get_spoken_user_input():
         )
         return ""
 
-    input(
-        "Recording... Press Enter to stop.\n"
-    )
+    input("Recording... Press Enter to stop.\n")
 
     send_asr_command("STOP")
 
@@ -133,16 +112,14 @@ def get_spoken_user_input():
 
     if message.get("type") == "error":
         print(
-            f"[ASR ERROR] "
-            f"{message.get('message')}",
+            f"[ASR ERROR] {message.get('message')}",
             flush=True,
         )
         return ""
 
     if message.get("type") != "result":
         print(
-            f"[ASR ERROR] Unexpected response: "
-            f"{message}",
+            f"[ASR ERROR] Unexpected response: {message}",
             flush=True,
         )
         return ""
@@ -157,9 +134,7 @@ def get_spoken_user_input():
         flush=True,
     )
 
-    return str(
-        message.get("text", "")
-    ).strip()
+    return str(message.get("text", "")).strip()
 
 
 def stop_asr_worker():
@@ -181,6 +156,7 @@ def stop_asr_worker():
 
     asr_process = None
 
+
 def build_tts():
     config = sherpa_onnx.OfflineTtsConfig(
         model=sherpa_onnx.OfflineTtsModelConfig(
@@ -189,10 +165,7 @@ def build_tts():
                 voices=f"{MODEL_DIR}/voices.bin",
                 tokens=f"{MODEL_DIR}/tokens.txt",
                 data_dir=f"{MODEL_DIR}/espeak-ng-data",
-                lexicon=(
-                    f"{MODEL_DIR}/lexicon-us-en.txt,"
-                    f"{MODEL_DIR}/lexicon-zh.txt"
-                ),
+                lexicon=(f"{MODEL_DIR}/lexicon-us-en.txt,{MODEL_DIR}/lexicon-zh.txt"),
             ),
             provider="cpu",
             debug=False,
@@ -202,9 +175,7 @@ def build_tts():
     )
 
     if not config.validate():
-        raise RuntimeError(
-            "Invalid Sherpa ONNX TTS config"
-        )
+        raise RuntimeError("Invalid Sherpa ONNX TTS config")
 
     return sherpa_onnx.OfflineTts(config)
 
@@ -220,10 +191,7 @@ def enqueue_audio(samples, sample_rate):
     with audio_lock:
         if not first_audio_enqueued and PREROLL_MS > 0:
             silence = np.zeros(
-                int(
-                    sample_rate
-                    * (PREROLL_MS / 1000.0)
-                ),
+                int(sample_rate * (PREROLL_MS / 1000.0)),
                 dtype=np.float32,
             )
 
@@ -255,7 +223,7 @@ def output_callback(
 
             if len(chunk) <= remaining:
                 outdata[
-                    written:written + len(chunk),
+                    written : written + len(chunk),
                     0,
                 ] = chunk
 
@@ -274,10 +242,7 @@ def tts_worker(tts):
     gen_config.speed = SPEED
     gen_config.silence_scale = TTS_SILENCE_SCALE
 
-    while (
-        not stop_event.is_set()
-        or not text_queue.empty()
-    ):
+    while not stop_event.is_set() or not text_queue.empty():
         try:
             text = text_queue.get(
                 timeout=0.05,
@@ -341,21 +306,12 @@ def tts_worker(tts):
             )
 
         elapsed = time.time() - start
-        duration = (
-            len(audio.samples)
-            / audio.sample_rate
-        )
+        duration = len(audio.samples) / audio.sample_rate
 
-        rtf = (
-            elapsed / duration
-            if duration
-            else 999
-        )
+        rtf = elapsed / duration if duration else 999
 
         print(
-            f"[TTS DONE] elapsed={elapsed:.3f}s "
-            f"duration={duration:.3f}s "
-            f"RTF={rtf:.3f}",
+            f"[TTS DONE] elapsed={elapsed:.3f}s duration={duration:.3f}s RTF={rtf:.3f}",
             flush=True,
         )
 
@@ -365,13 +321,7 @@ def tts_worker(tts):
 def is_punctuation_only(text):
     stripped = text.strip()
 
-    return (
-        bool(stripped)
-        and not any(
-            character.isalnum()
-            for character in stripped
-        )
-    )
+    return bool(stripped) and not any(character.isalnum() for character in stripped)
 
 
 def has_sentence_break(text):
@@ -389,9 +339,7 @@ def has_sentence_break(text):
 
 
 def word_count(text):
-    return len(
-        text.strip().split()
-    )
+    return len(text.strip().split())
 
 
 def should_emit(buffer, is_first):
@@ -430,17 +378,18 @@ def should_emit(buffer, is_first):
 
 def stream_text_to_tts(text_iter):
     buffer = ""
+    full_response = []
     is_first = True
     first_token_time = None
     start = time.time()
 
     for token in text_iter:
+        full_response.append(token)
         if first_token_time is None:
             first_token_time = time.time()
 
             print(
-                f"\n[LLM FIRST TOKEN] "
-                f"{first_token_time - start:.3f}s\n",
+                f"\n[LLM FIRST TOKEN] {first_token_time - start:.3f}s\n",
                 flush=True,
             )
 
@@ -478,10 +427,7 @@ def stream_text_to_tts(text_iter):
 
     final = buffer.strip()
 
-    if (
-        final
-        and not is_punctuation_only(final)
-    ):
+    if final and not is_punctuation_only(final):
         print()
 
         print(
@@ -490,6 +436,7 @@ def stream_text_to_tts(text_iter):
         )
 
         text_queue.put(final)
+    return "".join(full_response).strip()
 
 
 def wait_for_audio_to_drain():
@@ -545,6 +492,10 @@ def main():
 
         raise SystemExit(1)
 
+    short_term_memory = ShortTermMemory(
+        max_turns=3,
+    )
+
     print(
         "Opening persistent audio stream...",
         flush=True,
@@ -569,10 +520,24 @@ def main():
                 break
 
             if not user_text:
-                 continue
+                continue
+
+            if is_punctuation_only(user_text):
+                print(
+                    "[ASR] Ignoring punctuation-only transcription.",
+                    flush=True,
+                )
+                continue
+
+            if len(user_text) > 1000:
+                print(
+                    "[ASR] Ignoring implausibly long transcription.",
+                    flush=True,
+                )
+                continue
 
             print(
-               f"\nYou: {user_text}",
+                f"\nYou: {user_text}",
                 flush=True,
             )
 
@@ -593,10 +558,21 @@ def main():
 
             try:
                 response = stream_ollama_response(
-                    user_text
+                    user_text=user_text,
+                    history=short_term_memory.get_messages(),
                 )
 
-                stream_text_to_tts(response)
+                assistant_text = stream_text_to_tts(response)
+                if assistant_text:
+                    short_term_memory.add_turn(
+                        user_text=user_text,
+                        assistant_text=assistant_text,
+                    )
+                else:
+                    print(
+                        "\n[LLM ERROR] Ollama returned no response text.",
+                        flush=True,
+                    )
 
             except urllib.error.URLError as error:
                 print(
@@ -614,15 +590,6 @@ def main():
                 f"\n[TURN DONE] total={total:.3f}s",
                 flush=True,
             )
-
-    stop_asr_worker()
-    stop_event.set()
-    worker.join(timeout=2.0)
-
-    print(
-        "Done.",
-        flush=True,
-    )
 
 
 if __name__ == "__main__":
