@@ -94,7 +94,7 @@ SYSTEM_PROMPT_FILE = os.environ.get(
 
 #Ollama generation settings
 LLM_TEMPERATURE = 0.75
-LLM_NUM_THREADS = 4
+LLM_NUM_THREADS = 3
 LLM_NUM_PREDICT = 120
 
 #timeout values

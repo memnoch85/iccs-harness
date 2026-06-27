@@ -8,12 +8,6 @@ CREATE TABLE user_profile (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE raw_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-    raw TEXT NOT NULL
-);
-
 CREATE TABLE vehicle_state (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -35,4 +29,3 @@ CREATE TABLE vehicle_issues (
 CREATE INDEX idx_vehicle_state_pid ON vehicle_state(pid);
 CREATE INDEX idx_vehicle_state_timestamp ON vehicle_state(timestamp);
 CREATE INDEX idx_vehicle_state_pid_time ON vehicle_state(pid, timestamp DESC);
-CREATE INDEX idx_raw_log_timestamp ON raw_log(timestamp);

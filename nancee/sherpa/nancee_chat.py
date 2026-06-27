@@ -569,15 +569,12 @@ def main():
                 break
 
             if not user_text:
-                continue
+                 continue
 
-           # if not user_text:
-           #      continue
-
-           # print(
-            #    f"\nYou: {user_text}",
-            #    flush=True,
-            #)
+            print(
+               f"\nYou: {user_text}",
+                flush=True,
+            )
 
             if user_text.lower() in {
                 "q",
