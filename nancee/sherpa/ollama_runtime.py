@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import urllib.error
 import urllib.request
@@ -44,10 +45,7 @@ def is_ollama_model_loaded(model_name):
         return False
 
     for model in data.get("models", []):
-        loaded_name = (
-            model.get("name")
-            or model.get("model")
-        )
+        loaded_name = model.get("name") or model.get("model")
 
         if loaded_name == model_name:
             return True
@@ -58,15 +56,13 @@ def is_ollama_model_loaded(model_name):
 def ensure_ollama_model_loaded(model_name):
     if is_ollama_model_loaded(model_name):
         print(
-            f"[LLM READY] {model_name!r} "
-            "is already loaded.",
+            f"[LLM READY] {model_name!r} is already loaded.",
             flush=True,
         )
         return
 
     print(
-        f"[LLM WARMUP] {model_name!r} "
-        "is not loaded. Starting warmup...",
+        f"[LLM WARMUP] {model_name!r} is not loaded. Starting warmup...",
         flush=True,
     )
 
@@ -83,16 +79,11 @@ def ensure_ollama_model_loaded(model_name):
         )
 
     except subprocess.TimeoutExpired as error:
-        raise RuntimeError(
-            f"Warmup timed out for model "
-            f"{model_name!r}"
-        ) from error
+        raise RuntimeError(f"Warmup timed out for model {model_name!r}") from error
 
     except OSError as error:
         raise RuntimeError(
-            f"Could not execute "
-            f"{OLLAMA_WARMUP_COMMAND!r}: "
-            f"{error}"
+            f"Could not execute {OLLAMA_WARMUP_COMMAND!r}: {error}"
         ) from error
 
     if result.stdout:
@@ -109,23 +100,16 @@ def ensure_ollama_model_loaded(model_name):
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"Warmup failed for "
-            f"{model_name!r}; "
-            f"exit code={result.returncode}"
+            f"Warmup failed for {model_name!r}; exit code={result.returncode}"
         )
 
-    if not is_ollama_model_loaded(
-        model_name
-    ):
+    if not is_ollama_model_loaded(model_name):
         raise RuntimeError(
-            f"Warmup completed, but "
-            f"{model_name!r} is not listed "
-            "as loaded by Ollama."
+            f"Warmup completed, but {model_name!r} is not listed as loaded by Ollama."
         )
 
     print(
-        f"[LLM READY] {model_name!r} "
-        "responded and is loaded.",
+        f"[LLM READY] {model_name!r} responded and is loaded.",
         flush=True,
     )
 
@@ -133,9 +117,9 @@ def ensure_ollama_model_loaded(model_name):
 def stream_ollama_response(
     user_text,
     history=None,
+    memory_context="",
 ):
     system_prompt = load_system_prompt()
-
     if history is None:
         history = []
 
@@ -143,13 +127,30 @@ def stream_ollama_response(
         {
             "role": "system",
             "content": system_prompt,
-        },
-        *history,
+        }
+    ]
+
+    if memory_context:
+        messages.append(
+            {
+                "role": "system",
+                "content": memory_context,
+            }
+        )
+
+    if history:
+        messages.extend(history)
+
+    messages.append(
         {
             "role": "user",
             "content": user_text,
-        },
-    ]
+        }
+    )
+
+    if os.getenv("NANCEE_MEMORY_DEBUG", "false").lower() == "true":
+        print("[MEMORY DEBUG] Ollama messages:")
+        print(json.dumps(messages, indent=2, default=str))
 
     payload = {
         "model": LLM_MODEL,
@@ -162,11 +163,7 @@ def stream_ollama_response(
         },
     }
 
-    body = json.dumps(
-        payload
-    ).encode(
-        "utf-8"
-    )
+    body = json.dumps(payload).encode("utf-8")
 
     request = urllib.request.Request(
         OLLAMA_URL,
@@ -182,11 +179,7 @@ def stream_ollama_response(
         timeout=OLLAMA_RESPONSE_TIMEOUT,
     ) as response:
         for raw_line in response:
-            line = (
-                raw_line
-                .decode("utf-8")
-                .strip()
-            )
+            line = raw_line.decode("utf-8").strip()
 
             if not line:
                 continue
@@ -194,16 +187,9 @@ def stream_ollama_response(
             data = json.loads(line)
 
             if data.get("error"):
-                raise RuntimeError(
-                    "Ollama returned an error: "
-                    f"{data['error']}"
-                )
+                raise RuntimeError(f"Ollama returned an error: {data['error']}")
 
-            token = (
-                data
-                .get("message", {})
-                .get("content", "")
-            )
+            token = data.get("message", {}).get("content", "")
 
             if token:
                 yield token

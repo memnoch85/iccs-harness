@@ -1,4 +1,5 @@
 import json
+import os
 import queue
 import subprocess
 import threading
@@ -493,7 +494,7 @@ def main():
         raise SystemExit(1)
 
     short_term_memory = ShortTermMemory(
-        max_turns=3,
+        max_turns=None,
     )
 
     print(
@@ -560,6 +561,7 @@ def main():
                 response = stream_ollama_response(
                     user_text=user_text,
                     history=short_term_memory.get_messages(),
+                    memory_context=short_term_memory.build_memory_context(),
                 )
 
                 assistant_text = stream_text_to_tts(response)
@@ -573,6 +575,9 @@ def main():
                         "\n[LLM ERROR] Ollama returned no response text.",
                         flush=True,
                     )
+
+                if os.getenv("NANCEE_MEMORY_DEBUG", "false").lower() == "true":
+                    print(f"[MEMORY DEBUG] {short_term_memory.get_stats()}")
 
             except urllib.error.URLError as error:
                 print(
