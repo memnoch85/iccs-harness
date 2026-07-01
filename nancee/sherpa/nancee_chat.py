@@ -15,6 +15,9 @@ from config import (
     BLOCKSIZE,
     LLM_MODEL,
     MAX_CHUNK_WORDS,
+    MEMORY_CONSOLIDATE_CHARACTERS,
+    MEMORY_CONSOLIDATE_TURNS,
+    MEMORY_KEEP_RECENT_TURNS,
     MODEL_DIR,
     NUM_THREADS,
     PREROLL_MS,
@@ -23,6 +26,7 @@ from config import (
     TTS_SILENCE_SCALE,
     VOICE_ID,
 )
+from memory_consolidator import consolidate_memory
 from ollama_runtime import (
     ensure_ollama_model_loaded,
     stream_ollama_response,
@@ -40,6 +44,80 @@ ASR_DIRECTORY = NANCEE_ROOT / "asr"
 ASR_PYTHON = ASR_DIRECTORY / "venv" / "bin" / "python"
 ASR_WORKER_SCRIPT = ASR_DIRECTORY / "asr_worker.py"
 asr_process = None
+
+
+def evaluate_memory_consolidation(memory):
+    should_consolidate = memory.should_consolidate(
+        max_active_turns=MEMORY_CONSOLIDATE_TURNS,
+        max_history_characters=MEMORY_CONSOLIDATE_CHARACTERS,
+    )
+
+    if not should_consolidate:
+        return False
+
+    batch = memory.get_consolidation_batch(
+        keep_recent_turns=MEMORY_KEEP_RECENT_TURNS,
+    )
+
+    if not batch:
+        return False
+
+    before_stats = memory.get_stats()
+
+    print(
+        "\n[MEMORY CONSOLIDATION] "
+        f"active_turns={before_stats['turn_count']} "
+        f"history_chars={before_stats['history_characters']} "
+        f"consolidating={len(batch)} "
+        f"keeping={MEMORY_KEEP_RECENT_TURNS}",
+        flush=True,
+    )
+
+    started = time.time()
+
+    try:
+        new_summary = consolidate_memory(
+            existing_summary=memory.get_session_summary(),
+            turns=batch,
+        )
+
+    except RuntimeError as error:
+        print(
+            f"[MEMORY CONSOLIDATION ERROR] {error}. Original turns were preserved.",
+            flush=True,
+        )
+        return False
+
+    memory.apply_consolidation(
+        new_summary=new_summary,
+        consolidated_turn_count=len(batch),
+    )
+
+    elapsed = time.time() - started
+    after_stats = memory.get_stats()
+
+    print(
+        "[MEMORY CONSOLIDATION DONE] "
+        f"elapsed={elapsed:.3f}s "
+        f"active_turns={after_stats['turn_count']} "
+        f"summary_chars={after_stats['summary_characters']} "
+        f"consolidations={after_stats['consolidation_count']}",
+        flush=True,
+    )
+
+    if (
+        os.getenv(
+            "NANCEE_MEMORY_DEBUG",
+            "false",
+        ).lower()
+        == "true"
+    ):
+        print(
+            f"[MEMORY SUMMARY] {memory.get_session_summary()}",
+            flush=True,
+        )
+
+    return True
 
 
 def read_asr_message():
@@ -494,7 +572,7 @@ def main():
         raise SystemExit(1)
 
     short_term_memory = ShortTermMemory(
-        max_turns=40,
+        max_turns=None,
     )
 
     print(
@@ -594,6 +672,10 @@ def main():
             print(
                 f"\n[TURN DONE] total={total:.3f}s",
                 flush=True,
+            )
+
+            evaluate_memory_consolidation(
+                short_term_memory,
             )
 
 

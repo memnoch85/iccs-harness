@@ -1,5 +1,38 @@
 import os
 
+MEMORY_CONSOLIDATE_TURNS = int(
+    os.getenv(
+        "NANCEE_MEMORY_CONSOLIDATE_TURNS",
+        "9",
+    )
+)
+
+MEMORY_CONSOLIDATE_CHARACTERS = int(
+    os.getenv(
+        "NANCEE_MEMORY_CONSOLIDATE_CHARACTERS",
+        "1600",
+    )
+)
+
+MEMORY_KEEP_RECENT_TURNS = int(
+    os.getenv(
+        "NANCEE_MEMORY_KEEP_RECENT_TURNS",
+        "2",
+    )
+)
+
+if MEMORY_CONSOLIDATE_TURNS <= 1:
+    raise ValueError("MEMORY_CONSOLIDATE_TURNS must be greater than 1.")
+
+if MEMORY_CONSOLIDATE_CHARACTERS <= 0:
+    raise ValueError("MEMORY_CONSOLIDATE_CHARACTERS must be positive.")
+
+if not 0 <= MEMORY_KEEP_RECENT_TURNS < MEMORY_CONSOLIDATE_TURNS:
+    raise ValueError(
+        "MEMORY_KEEP_RECENT_TURNS must be zero or greater and "
+        "smaller than MEMORY_CONSOLIDATE_TURNS."
+    )
+
 # Sherpa/Kokoro configuration
 MODEL_DIR = os.environ.get(
     "SHERPA_MODEL_DIR",
@@ -66,7 +99,7 @@ MAX_CHUNK_WORDS = int(
     )
 )
 
-#Ollama configuration
+# Ollama configuration
 OLLAMA_URL = os.environ.get(
     "OLLAMA_URL",
     "http://localhost:11434/api/chat",
@@ -92,12 +125,12 @@ SYSTEM_PROMPT_FILE = os.environ.get(
     "/home/memnoch/Nancee/nancee/sherpa/system-prompt.txt",
 )
 
-#Ollama generation settings
+# Ollama generation settings
 LLM_TEMPERATURE = 0.75
 LLM_NUM_THREADS = 3
 LLM_NUM_PREDICT = 120
 
-#timeout values
+# timeout values
 OLLAMA_STATUS_TIMEOUT = 5
 OLLAMA_WARMUP_TIMEOUT = 90
 OLLAMA_RESPONSE_TIMEOUT = 125
