@@ -28,7 +28,7 @@ from config import (
     TTS_SILENCE_SCALE,
     VOICE_ID,
 )
-from memory_consolidator import consolidate_memory
+
 from ollama_runtime import (
     ensure_ollama_model_loaded,
     stream_ollama_response,

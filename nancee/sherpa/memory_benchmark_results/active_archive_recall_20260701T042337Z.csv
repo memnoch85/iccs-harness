@@ -1,7 +1,0 @@
-scenario,fact_name,expected,passed,retrieved_turns,retrieved_archive_ids,first_token_seconds,total_seconds,prompt_tokens,response,error
-archive,user_name,Anders,True,2,"3,1",27.33529728199983,28.723998138999832,753,Your name is Anders.,
-archive,daughter_name,Copeland,True,2,"3,1",1.4512915420000354,3.3987576220001756,754,Copeland. Nice to remember.,
-archive,road_trip_snack,mango,True,1,6,9.031906204999814,11.7703378289998,721,Mango slices are my favorite road-trip snack.,
-archive,test_code,ORBIT-731,True,2,"10,3",19.833242534999954,22.639827817999958,769,I asked you to remember ORBIT-731.,
-archive,destination,ice skating rink,True,0,,1.7399563750000198,4.616847734000203,634,Today's destination is the ice skating rink. Let's enjoy!,
-archive,truck_name,Blue Mule,True,0,,2.5383462470003906,4.372448270999939,639,His truck is called Blue Mule.,
