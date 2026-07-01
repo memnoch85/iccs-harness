@@ -1,0 +1,21 @@
+scenario,turn_number,active_turns,archived_turns,retrieved_turns,retrieved_archive_ids,archived_this_turn,archive_operation_seconds,context_prime_seconds,context_prime_prompt_tokens,post_archive_cache_transition,first_token_seconds,total_seconds,prompt_tokens,response_tokens,response
+archive,1,1,0,0,,0,2.0741000298585277e-05,,,False,3.045372733000022,4.914932937000231,425,9,"Hello Anders, nice to meet you."
+archive,2,2,0,0,,0,2.9647999781445833e-05,,,False,4.596129142999871,6.721103690999826,458,10,Is there anything you need while we drive?
+archive,3,3,0,0,,0,1.7259000287594972e-05,,,False,3.7841336730002695,5.21146724800019,487,7,Nice to remember Copeland.
+archive,4,4,0,0,,0,1.8685000213736203e-05,,,False,4.704394982999929,6.396813629999997,518,8,How are you enjoying the drive?
+archive,5,5,0,0,,0,2.0203000076435274e-05,,,False,4.8540991280001435,7.085877338000046,550,10,Would you like some music or a podcast?
+archive,6,6,0,0,,0,2.1537000066018663e-05,,,False,4.470798702000138,5.989251863999925,581,7,Mango slices sound delicious!
+archive,7,7,0,0,,0,2.0943999970768346e-05,,,False,5.1918887890001315,8.330650197000068,612,13,Anything else you'd like to hear or know during the drive?
+archive,8,8,0,0,,0,2.1352000203478383e-05,,,False,5.365858852000201,8.267812461000176,649,12,What would you like to talk about or learn today?
+archive,9,2,7,0,,7,0.0001052220000019588,14.60090418200025,492,False,5.536365359000229,8.497022087000005,685,12,Feel free to share more about your interests or thoughts!
+archive,10,3,7,0,,0,1.8277999970450765e-05,,,True,4.1487611850002395,7.0230990919999385,503,13,Test ORBIT-731 complete. Ready for next instructions.
+archive,11,4,7,0,,0,1.8352000097365817e-05,,,False,4.762101732000247,6.791576262000035,540,9,"Ask away, I'm here to help!"
+archive,12,5,7,0,,0,2.0184999812045135e-05,,,False,4.995186664999892,8.01519540199979,573,13,What else can I assist you with on this pleasant drive?
+archive,13,6,7,0,,0,2.042599999185768e-05,,,False,5.190860438999607,8.287073532999784,610,13,Is there something specific you'd like to discuss or learn about?
+archive,14,7,7,0,,0,2.157400012947619e-05,,,False,5.376770812000359,7.747917842000334,647,10,Feel free to share a topic of interest!
+archive,15,8,7,0,,0,2.244400002382463e-05,,,False,4.682031092000216,7.092104748000111,677,10,Destination: Ice skating rink. Let's enjoy!
+archive,16,2,14,0,,7,9.299999965151073e-05,13.888600105000023,488,False,5.638963328000045,9.197584599000038,711,14,What activities would you like to do at the ice skating rink?
+archive,17,3,14,0,,0,1.8351999642618466e-05,,,True,4.32312396899988,7.193041771000026,500,13,Sounds good. Let's head there after we finish our errands.
+archive,18,4,14,0,,0,1.8555999758973485e-05,,,False,4.758616141999937,7.465862025999741,537,12,"Sure, I'll keep driving. When should we stop?"
+archive,19,5,14,0,,0,1.9610999970609555e-05,,,False,4.982168050999917,8.302432422000038,573,14,We can stop at the ice skating rink after picking up groceries.
+archive,20,6,14,0,,0,2.0370000129332766e-05,,,False,4.803320710999742,8.988055409000026,609,17,"Got it, Blue Mule is ready for our trip to the ice skating rink."

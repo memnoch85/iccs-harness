@@ -332,3 +332,29 @@ class ShortTermMemory:
         self._session_summary = ""
         self._consolidation_count = 0
         self._working_state = self._new_working_state()
+
+    def extract_oldest_turns(
+        self,
+        *,
+        keep_recent_turns=2,
+    ):
+        if isinstance(keep_recent_turns, bool) or not isinstance(
+            keep_recent_turns,
+            int,
+        ):
+            raise TypeError("keep_recent_turns must be a non-negative integer.")
+
+        if keep_recent_turns < 0:
+            raise ValueError("keep_recent_turns cannot be negative.")
+
+        extract_count = max(
+            0,
+            len(self._turns) - keep_recent_turns,
+        )
+
+        extracted_turns = []
+
+        for _ in range(extract_count):
+            extracted_turns.append(deepcopy(self._turns.popleft()))
+
+        return extracted_turns

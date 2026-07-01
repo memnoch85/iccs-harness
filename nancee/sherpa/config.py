@@ -1,5 +1,45 @@
 import os
 
+MEMORY_ACTIVE_TURN_LIMIT = int(
+    os.getenv(
+        "NANCEE_MEMORY_ACTIVE_TURN_LIMIT",
+        "8",
+    )
+)
+
+MEMORY_ACTIVE_CHARACTER_LIMIT = int(
+    os.getenv(
+        "NANCEE_MEMORY_ACTIVE_CHARACTER_LIMIT",
+        "1600",
+    )
+)
+
+MEMORY_RETRIEVAL_LIMIT = int(
+    os.getenv(
+        "NANCEE_MEMORY_RETRIEVAL_LIMIT",
+        "2",
+    )
+)
+
+MEMORY_RETRIEVAL_MIN_SCORE = float(
+    os.getenv(
+        "NANCEE_MEMORY_RETRIEVAL_MIN_SCORE",
+        "2.0",
+    )
+)
+
+if MEMORY_ACTIVE_TURN_LIMIT <= 2:
+    raise ValueError("MEMORY_ACTIVE_TURN_LIMIT must be greater than 2.")
+
+if MEMORY_ACTIVE_CHARACTER_LIMIT <= 0:
+    raise ValueError("MEMORY_ACTIVE_CHARACTER_LIMIT must be positive.")
+
+if MEMORY_RETRIEVAL_LIMIT <= 0:
+    raise ValueError("MEMORY_RETRIEVAL_LIMIT must be positive.")
+
+if MEMORY_RETRIEVAL_MIN_SCORE < 0:
+    raise ValueError("MEMORY_RETRIEVAL_MIN_SCORE cannot be negative.")
+
 MEMORY_CONSOLIDATE_TURNS = int(
     os.getenv(
         "NANCEE_MEMORY_CONSOLIDATE_TURNS",

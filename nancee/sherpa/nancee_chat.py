@@ -15,9 +15,11 @@ from config import (
     BLOCKSIZE,
     LLM_MODEL,
     MAX_CHUNK_WORDS,
-    MEMORY_CONSOLIDATE_CHARACTERS,
-    MEMORY_CONSOLIDATE_TURNS,
+    MEMORY_ACTIVE_CHARACTER_LIMIT,
+    MEMORY_ACTIVE_TURN_LIMIT,
     MEMORY_KEEP_RECENT_TURNS,
+    MEMORY_RETRIEVAL_LIMIT,
+    MEMORY_RETRIEVAL_MIN_SCORE,
     MODEL_DIR,
     NUM_THREADS,
     PREROLL_MS,
@@ -30,6 +32,10 @@ from memory_consolidator import consolidate_memory
 from ollama_runtime import (
     ensure_ollama_model_loaded,
     stream_ollama_response,
+)
+from session_archive import (
+    SessionArchive,
+    archive_active_memory_if_needed,
 )
 from short_term_memory import ShortTermMemory
 
@@ -46,76 +52,68 @@ ASR_WORKER_SCRIPT = ASR_DIRECTORY / "asr_worker.py"
 asr_process = None
 
 
-def evaluate_memory_consolidation(memory):
-    should_consolidate = memory.should_consolidate(
-        max_active_turns=MEMORY_CONSOLIDATE_TURNS,
-        max_history_characters=MEMORY_CONSOLIDATE_CHARACTERS,
+def retrieve_session_context(
+    session_archive,
+    user_text,
+):
+    retrieved_turns = session_archive.retrieve(
+        user_text,
+        limit=MEMORY_RETRIEVAL_LIMIT,
+        min_score=MEMORY_RETRIEVAL_MIN_SCORE,
     )
 
-    if not should_consolidate:
-        return False
-
-    batch = memory.get_consolidation_batch(
-        keep_recent_turns=MEMORY_KEEP_RECENT_TURNS,
-    )
-
-    if not batch:
-        return False
-
-    before_stats = memory.get_stats()
-
-    print(
-        "\n[MEMORY CONSOLIDATION] "
-        f"active_turns={before_stats['turn_count']} "
-        f"history_chars={before_stats['history_characters']} "
-        f"consolidating={len(batch)} "
-        f"keeping={MEMORY_KEEP_RECENT_TURNS}",
-        flush=True,
-    )
-
-    started = time.time()
-
-    try:
-        new_summary = consolidate_memory(
-            existing_summary=memory.get_session_summary(),
-            turns=batch,
-        )
-
-    except RuntimeError as error:
-        print(
-            f"[MEMORY CONSOLIDATION ERROR] {error}. Original turns were preserved.",
-            flush=True,
-        )
-        return False
-
-    memory.apply_consolidation(
-        new_summary=new_summary,
-        consolidated_turn_count=len(batch),
-    )
-
-    elapsed = time.time() - started
-    after_stats = memory.get_stats()
-
-    print(
-        "[MEMORY CONSOLIDATION DONE] "
-        f"elapsed={elapsed:.3f}s "
-        f"active_turns={after_stats['turn_count']} "
-        f"summary_chars={after_stats['summary_characters']} "
-        f"consolidations={after_stats['consolidation_count']}",
-        flush=True,
-    )
+    retrieved_context = session_archive.format_retrieved_context(retrieved_turns)
 
     if (
-        os.getenv(
+        retrieved_turns
+        and os.getenv(
             "NANCEE_MEMORY_DEBUG",
             "false",
         ).lower()
         == "true"
     ):
         print(
-            f"[MEMORY SUMMARY] {memory.get_session_summary()}",
+            "[MEMORY RETRIEVAL] "
+            f"hits={len(retrieved_turns)} "
+            f"ids="
+            f"{[turn['archive_id'] for turn in retrieved_turns]} "
+            f"scores="
+            f"{[turn['score'] for turn in retrieved_turns]}",
             flush=True,
         )
+
+    return retrieved_context
+
+
+def archive_session_memory_if_needed(
+    short_term_memory,
+    session_archive,
+):
+    started = time.perf_counter()
+
+    archived_turns = archive_active_memory_if_needed(
+        memory=short_term_memory,
+        archive=session_archive,
+        max_active_turns=MEMORY_ACTIVE_TURN_LIMIT,
+        max_active_characters=(MEMORY_ACTIVE_CHARACTER_LIMIT),
+        keep_recent_turns=MEMORY_KEEP_RECENT_TURNS,
+    )
+
+    if not archived_turns:
+        return False
+
+    elapsed = time.perf_counter() - started
+    active_stats = short_term_memory.get_stats()
+    archive_stats = session_archive.get_stats()
+
+    print(
+        "[MEMORY ARCHIVE] "
+        f"moved={len(archived_turns)} "
+        f"active_turns={active_stats['turn_count']} "
+        f"archived_turns={archive_stats['turn_count']} "
+        f"elapsed={elapsed:.6f}s",
+        flush=True,
+    )
 
     return True
 
@@ -574,6 +572,7 @@ def main():
     short_term_memory = ShortTermMemory(
         max_turns=None,
     )
+    session_archive = SessionArchive()
 
     print(
         "Opening persistent audio stream...",
@@ -635,6 +634,18 @@ def main():
                 flush=True,
             )
 
+            retrieved_context = retrieve_session_context(
+                session_archive,
+                user_text,
+            )
+
+            response = stream_ollama_response(
+                user_text=user_text,
+                history=short_term_memory.get_messages(),
+                memory_context=(short_term_memory.build_memory_context()),
+                retrieved_context=retrieved_context,
+            )
+
             try:
                 response = stream_ollama_response(
                     user_text=user_text,
@@ -654,8 +665,21 @@ def main():
                         flush=True,
                     )
 
-                if os.getenv("NANCEE_MEMORY_DEBUG", "false").lower() == "true":
-                    print(f"[MEMORY DEBUG] {short_term_memory.get_stats()}")
+                    if (
+                        os.getenv(
+                            "NANCEE_MEMORY_DEBUG",
+                            "false",
+                        ).lower()
+                        == "true"
+                    ):
+                        print(
+                            "[MEMORY DEBUG] "
+                            f"active="
+                            f"{short_term_memory.get_stats()} "
+                            f"archive="
+                            f"{session_archive.get_stats()}",
+                            flush=True,
+                        )
 
             except urllib.error.URLError as error:
                 print(
@@ -672,10 +696,6 @@ def main():
             print(
                 f"\n[TURN DONE] total={total:.3f}s",
                 flush=True,
-            )
-
-            evaluate_memory_consolidation(
-                short_term_memory,
             )
 
 
