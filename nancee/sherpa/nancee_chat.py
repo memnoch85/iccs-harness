@@ -494,7 +494,7 @@ def main():
         raise SystemExit(1)
 
     short_term_memory = ShortTermMemory(
-        max_turns=None,
+        max_turns=40,
     )
 
     print(
