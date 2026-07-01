@@ -4,134 +4,89 @@ from short_term_memory import ShortTermMemory
 
 
 class TestShortTermMemory(unittest.TestCase):
-    def test_should_consolidate_at_turn_threshold(self):
-        memory = ShortTermMemory(max_turns=None)
-
-        for number in range(1, 10):
-            memory.add_turn(
-                f"user {number}",
-                f"assistant {number}",
-            )
-
-        self.assertTrue(
-            memory.should_consolidate(
-                max_active_turns=9,
-                max_history_characters=999999,
-            )
-        )
-
-    def test_should_consolidate_at_character_threshold(self):
-        memory = ShortTermMemory(max_turns=None)
-        memory.add_turn(
-            "u" * 100,
-            "a" * 100,
-        )
-
-        self.assertTrue(
-            memory.should_consolidate(
-                max_active_turns=99,
-                max_history_characters=200,
-            )
-        )
-
-    def test_consolidation_batch_keeps_newest_turns(self):
-        memory = ShortTermMemory(max_turns=None)
-
-        for number in range(1, 10):
-            memory.add_turn(
-                f"user {number}",
-                f"assistant {number}",
-            )
-
-        batch = memory.get_consolidation_batch(
-            keep_recent_turns=2,
-        )
-
-        self.assertEqual(len(batch), 7)
-        self.assertEqual(batch[0]["user"], "user 1")
-        self.assertEqual(batch[-1]["user"], "user 7")
-        self.assertEqual(memory.get_stats()["turn_count"], 9)
-
-    def test_apply_consolidation_removes_one_old_block(self):
-        memory = ShortTermMemory(max_turns=None)
-
-        for number in range(1, 10):
-            memory.add_turn(
-                f"user {number}",
-                f"assistant {number}",
-            )
-
-        batch = memory.get_consolidation_batch(
-            keep_recent_turns=2,
-        )
-
-        memory.apply_consolidation(
-            new_summary="Turns one through seven were summarized.",
-            consolidated_turn_count=len(batch),
-        )
-
-        self.assertEqual(memory.get_stats()["turn_count"], 2)
-        self.assertEqual(memory.get_stats()["consolidation_count"], 1)
-        self.assertEqual(
-            memory.get_turns_snapshot()[0]["user"],
-            "user 8",
-        )
-        self.assertIn(
-            "Turns one through seven were summarized.",
-            memory.build_memory_context(),
-        )
-
-    def test_batch_read_does_not_mutate_memory(self):
-        memory = ShortTermMemory(max_turns=None)
-
-        for number in range(1, 10):
-            memory.add_turn(
-                f"user {number}",
-                f"assistant {number}",
-            )
-
-        before = memory.snapshot()
-        memory.get_consolidation_batch(
-            keep_recent_turns=2,
-        )
-        after = memory.snapshot()
-
-        self.assertEqual(before, after)
-
-    def test_session_fact_survives_consolidation(self):
-        memory = ShortTermMemory(max_turns=None)
-        memory.set_session_fact("user_name", "Anders")
-
-        for number in range(1, 10):
-            memory.add_turn(
-                f"user {number}",
-                f"assistant {number}",
-            )
-
-        batch = memory.get_consolidation_batch(
-            keep_recent_turns=2,
-        )
-        memory.apply_consolidation(
-            new_summary="Older conversation was summarized.",
-            consolidated_turn_count=len(batch),
-        )
-
-        self.assertIn(
-            '"user_name": "Anders"',
-            memory.build_memory_context(),
-        )
-
-    def test_clear_session_removes_summary_and_facts(self):
-        memory = ShortTermMemory(max_turns=None)
-        memory.set_session_summary("Old summary")
-        memory.set_session_fact("user_name", "Anders")
+    def test_stats_and_snapshot_exclude_removed_consolidation_state(self):
+        memory = ShortTermMemory()
         memory.add_turn("hello", "hi")
+
+        stats = memory.get_stats()
+        snapshot = memory.snapshot()
+
+        self.assertNotIn("summary_characters", stats)
+        self.assertNotIn("consolidation_count", stats)
+        self.assertNotIn("session_summary", snapshot)
+        self.assertNotIn("consolidation_count", snapshot)
+
+    def test_extract_oldest_turns_removes_only_archived_turns(self):
+        memory = ShortTermMemory()
+        memory.add_turn("user 1", "assistant 1")
+        memory.add_turn("user 2", "assistant 2")
+        memory.add_turn("user 3", "assistant 3")
+        memory.add_turn("user 4", "assistant 4")
+        extracted = memory.extract_oldest_turns(
+            keep_recent_turns=2,
+        )
+
+        self.assertEqual(
+            extracted,
+            [
+                {
+                    "user": "user 1",
+                    "assistant": "assistant 1",
+                },
+                {
+                    "user": "user 2",
+                    "assistant": "assistant 2",
+                },
+            ],
+        )
+
+        self.assertEqual(
+            memory.get_turns_snapshot(),
+            [
+                {
+                    "user": "user 3",
+                    "assistant": "assistant 3",
+                },
+                {
+                    "user": "user 4",
+                    "assistant": "assistant 4",
+                },
+            ],
+        )
+
+    def test_clear_session_removes_turns_and_working_state(self):
+        memory = ShortTermMemory(max_turns=3)
+
+        memory.add_turn(
+            "What code does the Jeep have?",
+            "The stored code is P0420.",
+        )
+        memory.set_session_fact(
+            "vehicle",
+            "2016 Jeep Patriot",
+        )
+        memory.set_last_dtc_codes(["P0420"])
 
         memory.clear_session()
 
-        self.assertEqual(memory.get_stats()["turn_count"], 0)
-        self.assertEqual(memory.get_session_summary(), "")
-        self.assertEqual(memory.build_memory_context(), "")
+        snapshot = memory.snapshot()
+
+        self.assertEqual(
+            memory.get_turns_snapshot(),
+            [],
+        )
+        self.assertEqual(
+            snapshot["working_memory"]["session_facts"],
+            {},
+        )
+        self.assertEqual(
+            snapshot["working_memory"]["last_dtc_codes"],
+            [],
+        )
+        self.assertEqual(
+            snapshot["max_turns"],
+            3,
+        )
 
     def test_default_history_is_unbounded(self):
         memory = ShortTermMemory()
@@ -176,6 +131,9 @@ class TestShortTermMemory(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             ShortTermMemory(max_turns=0)
+
+        with self.assertRaises(ValueError):
+            ShortTermMemory(max_turns=-1)
 
     def test_messages_preserve_roles_and_order(self):
         memory = ShortTermMemory()

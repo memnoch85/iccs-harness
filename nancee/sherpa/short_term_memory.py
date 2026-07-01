@@ -17,8 +17,6 @@ class ShortTermMemory:
 
         self._max_turns = max_turns
         self._turns = deque(maxlen=max_turns)
-        self._session_summary = ""
-        self._consolidation_count = 0
         self._working_state = self._new_working_state()
 
     @staticmethod
@@ -90,12 +88,6 @@ class ShortTermMemory:
     def get_turns_snapshot(self):
         return deepcopy(list(self._turns))
 
-    def get_session_summary(self):
-        return self._session_summary
-
-    def set_session_summary(self, summary):
-        self._session_summary = self._clean_text(summary)
-
     def set_current_topic(self, topic):
         clean_topic = self._clean_text(topic)
         self._working_state["current_topic"] = clean_topic or None
@@ -161,10 +153,6 @@ class ShortTermMemory:
     def build_memory_context(self):
         lines = []
 
-        if self._session_summary:
-            lines.append("Older session summary:")
-            lines.append(self._session_summary)
-
         current_topic = self._working_state["current_topic"]
         if current_topic:
             lines.append(f"Current topic: {current_topic}")
@@ -229,70 +217,6 @@ class ShortTermMemory:
             ]
         )
 
-    def should_consolidate(
-        self,
-        *,
-        max_active_turns,
-        max_history_characters,
-    ):
-        if max_active_turns <= 0:
-            raise ValueError("max_active_turns must be positive.")
-
-        if max_history_characters <= 0:
-            raise ValueError("max_history_characters must be positive.")
-
-        stats = self.get_stats()
-
-        return (
-            stats["turn_count"] >= max_active_turns
-            or stats["history_characters"] >= max_history_characters
-        )
-
-    def get_consolidation_batch(self, keep_recent_turns=2):
-        if not isinstance(keep_recent_turns, int):
-            raise ValueError("keep_recent_turns must be an integer.")
-
-        if keep_recent_turns < 0:
-            raise ValueError("keep_recent_turns cannot be negative.")
-
-        turns = list(self._turns)
-
-        if len(turns) <= keep_recent_turns:
-            return []
-
-        if keep_recent_turns == 0:
-            batch = turns
-        else:
-            batch = turns[:-keep_recent_turns]
-
-        return deepcopy(batch)
-
-    def apply_consolidation(
-        self,
-        *,
-        new_summary,
-        consolidated_turn_count,
-    ):
-        clean_summary = self._clean_text(new_summary)
-
-        if not clean_summary:
-            raise ValueError("new_summary cannot be empty.")
-
-        if not isinstance(consolidated_turn_count, int):
-            raise ValueError("consolidated_turn_count must be an integer.")
-
-        if consolidated_turn_count <= 0:
-            raise ValueError("consolidated_turn_count must be positive.")
-
-        if consolidated_turn_count > len(self._turns):
-            raise ValueError("Cannot consolidate more turns than are stored.")
-
-        for _ in range(consolidated_turn_count):
-            self._turns.popleft()
-
-        self._session_summary = clean_summary
-        self._consolidation_count += 1
-
     def get_stats(self):
         history_characters = sum(
             len(turn["user"]) + len(turn["assistant"]) for turn in self._turns
@@ -305,9 +229,7 @@ class ShortTermMemory:
             "turn_count": len(self._turns),
             "message_count": len(self._turns) * 2,
             "history_characters": history_characters,
-            "summary_characters": len(self._session_summary),
             "memory_context_characters": len(memory_context),
-            "consolidation_count": self._consolidation_count,
         }
 
     def snapshot(self):
@@ -316,12 +238,10 @@ class ShortTermMemory:
         return {
             "max_turns": self._max_turns,
             "turns": self.get_turns_snapshot(),
-            "session_summary": self._session_summary,
             # Current internal terminology.
             "working_state": deepcopy(working_state),
             # Backward-compatible name used by the earlier tests.
             "working_memory": deepcopy(working_state),
-            "consolidation_count": self._consolidation_count,
         }
 
     def clear(self):
@@ -329,8 +249,6 @@ class ShortTermMemory:
 
     def clear_session(self):
         self._turns.clear()
-        self._session_summary = ""
-        self._consolidation_count = 0
         self._working_state = self._new_working_state()
 
     def extract_oldest_turns(

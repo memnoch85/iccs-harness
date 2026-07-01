@@ -1,5 +1,6 @@
 import os
 
+# Memory configuration
 MEMORY_ACTIVE_TURN_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_ACTIVE_TURN_LIMIT",
@@ -11,6 +12,13 @@ MEMORY_ACTIVE_CHARACTER_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_ACTIVE_CHARACTER_LIMIT",
         "1600",
+    )
+)
+
+MEMORY_KEEP_RECENT_TURNS = int(
+    os.getenv(
+        "NANCEE_MEMORY_KEEP_RECENT_TURNS",
+        "2",
     )
 )
 
@@ -34,44 +42,18 @@ if MEMORY_ACTIVE_TURN_LIMIT <= 2:
 if MEMORY_ACTIVE_CHARACTER_LIMIT <= 0:
     raise ValueError("MEMORY_ACTIVE_CHARACTER_LIMIT must be positive.")
 
+if MEMORY_KEEP_RECENT_TURNS < 0 or MEMORY_KEEP_RECENT_TURNS >= MEMORY_ACTIVE_TURN_LIMIT:
+    raise ValueError(
+        "MEMORY_KEEP_RECENT_TURNS must be zero or greater and "
+        "smaller than MEMORY_ACTIVE_TURN_LIMIT."
+    )
+
 if MEMORY_RETRIEVAL_LIMIT <= 0:
     raise ValueError("MEMORY_RETRIEVAL_LIMIT must be positive.")
 
 if MEMORY_RETRIEVAL_MIN_SCORE < 0:
     raise ValueError("MEMORY_RETRIEVAL_MIN_SCORE cannot be negative.")
 
-MEMORY_CONSOLIDATE_TURNS = int(
-    os.getenv(
-        "NANCEE_MEMORY_CONSOLIDATE_TURNS",
-        "9",
-    )
-)
-
-MEMORY_CONSOLIDATE_CHARACTERS = int(
-    os.getenv(
-        "NANCEE_MEMORY_CONSOLIDATE_CHARACTERS",
-        "1600",
-    )
-)
-
-MEMORY_KEEP_RECENT_TURNS = int(
-    os.getenv(
-        "NANCEE_MEMORY_KEEP_RECENT_TURNS",
-        "2",
-    )
-)
-
-if MEMORY_CONSOLIDATE_TURNS <= 1:
-    raise ValueError("MEMORY_CONSOLIDATE_TURNS must be greater than 1.")
-
-if MEMORY_CONSOLIDATE_CHARACTERS <= 0:
-    raise ValueError("MEMORY_CONSOLIDATE_CHARACTERS must be positive.")
-
-if not 0 <= MEMORY_KEEP_RECENT_TURNS < MEMORY_CONSOLIDATE_TURNS:
-    raise ValueError(
-        "MEMORY_KEEP_RECENT_TURNS must be zero or greater and "
-        "smaller than MEMORY_CONSOLIDATE_TURNS."
-    )
 
 # Sherpa/Kokoro configuration
 MODEL_DIR = os.environ.get(
@@ -117,6 +99,7 @@ PREROLL_MS = int(
 TTS_SILENCE_SCALE = 0.2
 TTS_MAX_NUM_SENTENCES = 1
 
+
 # Text chunking configuration
 FIRST_CHUNK_MIN_WORDS = int(
     os.environ.get(
@@ -138,6 +121,7 @@ MAX_CHUNK_WORDS = int(
         "8",
     )
 )
+
 
 # Ollama configuration
 OLLAMA_URL = os.environ.get(
@@ -165,12 +149,14 @@ SYSTEM_PROMPT_FILE = os.environ.get(
     "/home/memnoch/Nancee/nancee/sherpa/system-prompt.txt",
 )
 
+
 # Ollama generation settings
 LLM_TEMPERATURE = 0.75
 LLM_NUM_THREADS = 3
 LLM_NUM_PREDICT = 120
 
-# timeout values
+
+# Timeout values
 OLLAMA_STATUS_TIMEOUT = 5
 OLLAMA_WARMUP_TIMEOUT = 90
 OLLAMA_RESPONSE_TIMEOUT = 125
