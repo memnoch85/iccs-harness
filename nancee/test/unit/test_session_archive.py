@@ -8,6 +8,43 @@ from short_term_memory import ShortTermMemory
 
 
 class TestSessionArchive(unittest.TestCase):
+    def test_turn_limit_three_archives_on_fourth_turn(self):
+        memory = ShortTermMemory(max_turns=None)
+        archive = SessionArchive()
+
+        for turn_number in range(1, 4):
+            memory.add_turn(
+                user_text=f"user {turn_number}",
+                assistant_text=f"assistant {turn_number}",
+            )
+
+            moved = archive_active_memory_if_needed(
+                memory=memory,
+                archive=archive,
+                max_active_turns=3,
+                max_active_characters=999999,
+                keep_recent_turns=1,
+            )
+
+            self.assertEqual(moved, [])
+
+        memory.add_turn(
+            user_text="user 4",
+            assistant_text="assistant 4",
+        )
+
+        moved = archive_active_memory_if_needed(
+            memory=memory,
+            archive=archive,
+            max_active_turns=3,
+            max_active_characters=999999,
+            keep_recent_turns=1,
+        )
+
+        self.assertEqual(len(moved), 3)
+        self.assertEqual(memory.get_stats()["turn_count"], 1)
+        self.assertEqual(archive.get_stats()["turn_count"], 3)
+
     def test_add_turns_and_snapshot_are_deep_copies(self):
         archive = SessionArchive()
         original = [

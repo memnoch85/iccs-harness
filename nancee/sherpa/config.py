@@ -22,7 +22,7 @@ if not MEMORY_PRIME_BRIDGE_TEXT:
 MEMORY_ACTIVE_TURN_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_ACTIVE_TURN_LIMIT",
-        "7",
+        "8",
     )
 )
 
@@ -117,14 +117,14 @@ FIRST_CHUNK_MIN_WORDS = int(
 TARGET_CHUNK_WORDS = int(
     os.environ.get(
         "TARGET_CHUNK_WORDS",
-        "4",
+        "3",
     )
 )
 
 MAX_CHUNK_WORDS = int(
     os.environ.get(
         "MAX_CHUNK_WORDS",
-        "8",
+        "7",
     )
 )
 
