@@ -40,6 +40,7 @@ from session_archive import (
     SessionArchive,
     archive_active_memory_if_needed,
 )
+from session_fact_extractor import promote_archived_facts
 from short_term_memory import ShortTermMemory
 from tts_chunking import (
     extract_tts_chunk,
@@ -138,6 +139,16 @@ def archive_session_memory_if_needed(
 
     if not archived_turns:
         return 0
+
+    promoted_facts = promote_archived_facts(
+        short_term_memory,
+        archived_turns,
+    )
+
+    print(
+        f"[MEMORY FACTS] promoted={json.dumps(promoted_facts, sort_keys=True)}",
+        flush=True,
+    )
 
     elapsed = time.perf_counter() - started
     active_stats = short_term_memory.get_stats()
