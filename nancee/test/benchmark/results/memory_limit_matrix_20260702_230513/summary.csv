@@ -1,0 +1,5 @@
+character_limit,keep_recent_turns,turns,warmup_seconds,first_token_median_all,first_token_median_steady,first_token_p95_steady,first_token_max,prompt_eval_median_steady,archive_events,archived_turns_total,prime_total_seconds,amortized_prime_seconds_per_turn,memory_checks_passed,memory_checks_total,selection_score
+2400,2,12,43.893944,3.265893,2.994815,4.764016,7.032351,2.692166,0,0,0.0,0.0,7,7,4.764016
+2000,2,12,43.566817,3.265503,2.997477,4.778719,7.037922,2.688693,0,0,0.0,0.0,7,7,4.778719
+1600,2,12,42.454815,3.275246,3.004837,4.780023,7.033791,2.707053,0,0,0.0,0.0,7,7,4.780023
+1400,2,12,44.174249,3.282706,3.002544,4.772173,7.049839,2.703543,1,10,24.647247,2.053937,7,7,6.82611

@@ -29,14 +29,14 @@ MEMORY_ACTIVE_TURN_LIMIT = int(
 MEMORY_ACTIVE_CHARACTER_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_ACTIVE_CHARACTER_LIMIT",
-        "1600",
+        "2400",
     )
 )
 
 MEMORY_KEEP_RECENT_TURNS = int(
     os.getenv(
         "NANCEE_MEMORY_KEEP_RECENT_TURNS",
-        "2",
+        "1",
     )
 )
 
@@ -187,8 +187,8 @@ LLM_NUM_PREDICT = 120
 
 # Timeout values
 OLLAMA_STATUS_TIMEOUT = 5
-OLLAMA_WARMUP_TIMEOUT = 105
-OLLAMA_RESPONSE_TIMEOUT = 135
+OLLAMA_WARMUP_TIMEOUT = 125
+OLLAMA_RESPONSE_TIMEOUT = 115
 
 
 def load_system_prompt():

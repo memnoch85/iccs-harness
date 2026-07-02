@@ -81,44 +81,6 @@ class TestSessionFactExtractor(unittest.TestCase):
             ["P0420"],
         )
 
-    def test_vehicle_stops_before_following_clause(self):
-        memory = ShortTermMemory(max_turns=None)
-
-        changes = promote_archived_facts(
-            memory,
-            [
-                {
-                    "user": (
-                        "I drive a 2016 Jeep Patriot and it "
-                        "has the error code P0420."
-                    ),
-                    "assistant": "Okay.",
-                }
-            ],
-        )
-
-        self.assertEqual(
-            changes["vehicle"],
-            "2016 Jeep Patriot",
-        )
-
-        self.assertEqual(
-            changes["last_dtc_codes"],
-            ["P0420"],
-        )
-
-        context = memory.build_memory_context()
-
-        self.assertIn(
-            '"vehicle": "2016 Jeep Patriot"',
-            context,
-        )
-
-        self.assertNotIn(
-            "Jeep Patriot and it",
-            context,
-        )
-
     def test_assistant_hallucination_is_not_promoted(self):
         memory = ShortTermMemory(max_turns=None)
 
