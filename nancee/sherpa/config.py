@@ -117,14 +117,14 @@ FIRST_CHUNK_MIN_WORDS = int(
 TARGET_CHUNK_WORDS = int(
     os.environ.get(
         "TARGET_CHUNK_WORDS",
-        "3",
+        "4",
     )
 )
 
 MAX_CHUNK_WORDS = int(
     os.environ.get(
         "MAX_CHUNK_WORDS",
-        "7",
+        "8",
     )
 )
 
@@ -187,8 +187,8 @@ LLM_NUM_PREDICT = 120
 
 # Timeout values
 OLLAMA_STATUS_TIMEOUT = 5
-OLLAMA_WARMUP_TIMEOUT = 99
-OLLAMA_RESPONSE_TIMEOUT = 130
+OLLAMA_WARMUP_TIMEOUT = 105
+OLLAMA_RESPONSE_TIMEOUT = 135
 
 
 def load_system_prompt():

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
+from __future__ import annotations
 
-import hashlib
 import json
 import os
 import sys
@@ -12,6 +12,18 @@ from config import (
     LLM_NUM_PREDICT,
     LLM_NUM_THREADS,
     LLM_TEMPERATURE,
+    OLLAMA_WARMUP_TIMEOUT,
+    SYSTEM_PROMPT_FILE,
+    load_system_prompt,
+)
+from prompt_identity import (
+    log_prompt_identity,
+    text_sha256,
+)
+from warmup_contract import (
+    WARMUP_STATE_FILE,
+    build_startup_warmup_messages,
+    build_warmup_fingerprint,
 )
 
 OLLAMA_CHAT_URL = os.environ.get(
@@ -19,50 +31,37 @@ OLLAMA_CHAT_URL = os.environ.get(
     "http://127.0.0.1:11434/api/chat",
 ).strip()
 
-SYSTEM_PROMPT_FILE = os.environ.get(
-    "NANCEE_SYSTEM_PROMPT_FILE",
-    "/home/memnoch/Nancee/nancee/sherpa/system-prompt.txt",
-).strip()
-
 KEEP_ALIVE_VALUE = os.environ.get(
     "OLLAMA_KEEP_ALIVE",
     "-1",
 ).strip()
 
-# Entire warmup process must complete within this time.
-TOTAL_TIMEOUT_SECONDS = 90
+# nancee_chat.py permits the helper to run for
+# OLLAMA_WARMUP_TIMEOUT seconds. Stop slightly earlier
+# so this helper can report its own useful error.
+TOTAL_TIMEOUT_SECONDS = max(
+    30,
+    OLLAMA_WARMUP_TIMEOUT - 10,
+)
 
 
-def fail(message):
-    print(f"[FAILED] {message}", flush=True)
+def fail(message: str) -> None:
+    print(
+        f"[FAILED] {message}",
+        flush=True,
+    )
     raise SystemExit(1)
-
-
-def load_system_prompt():
-    try:
-        with open(
-            SYSTEM_PROMPT_FILE,
-            "r",
-            encoding="utf-8",
-        ) as prompt_file:
-            prompt = prompt_file.read().strip()
-    except OSError as error:
-        fail(f"Could not read system prompt file {SYSTEM_PROMPT_FILE!r}: {error}")
-
-    if not prompt:
-        fail(f"System prompt file is empty: {SYSTEM_PROMPT_FILE!r}")
-
-    return prompt
 
 
 def parse_keep_alive():
     try:
         return int(KEEP_ALIVE_VALUE)
+
     except ValueError:
         return KEEP_ALIVE_VALUE
 
 
-def remaining_time(deadline):
+def remaining_time(deadline: float) -> float:
     remaining = deadline - time.monotonic()
 
     if remaining <= 0:
@@ -71,30 +70,70 @@ def remaining_time(deadline):
     return remaining
 
 
+def duration_seconds(
+    data: dict,
+    field: str,
+) -> float:
+    return data.get(field, 0) / 1_000_000_000
+
+
+def write_warmup_state(
+    fingerprint: dict[str, object],
+) -> None:
+    state = {
+        **fingerprint,
+        "verified_at_epoch": time.time(),
+    }
+
+    WARMUP_STATE_FILE.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    temporary_file = WARMUP_STATE_FILE.with_name(WARMUP_STATE_FILE.name + ".tmp")
+
+    temporary_file.write_text(
+        json.dumps(
+            state,
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    os.replace(
+        temporary_file,
+        WARMUP_STATE_FILE,
+    )
+
+    print(
+        f"[WARMUP STATE] written={WARMUP_STATE_FILE}",
+        flush=True,
+    )
+
+
 def run_warmup_request(
-    model,
-    system_prompt,
-    deadline,
-    pass_name,
-):
+    model: str,
+    system_prompt: str,
+    deadline: float,
+    pass_name: str,
+) -> tuple[str, float]:
+    messages = build_startup_warmup_messages(
+        system_prompt,
+    )
+
+    log_prompt_identity(
+        f"warmup-{pass_name.lower()}",
+        prefix_messages=messages[:-1],
+        full_messages=messages,
+    )
+
     payload = {
         "model": model,
         "stream": True,
         "keep_alive": parse_keep_alive(),
-        "messages": [
-            {
-                "role": "system",
-                "content": system_prompt,
-            },
-            {
-                "role": "user",
-                "content": (
-                    "This is the Nancee startup warmup request. "
-                    "Reply with one short sentence saying that "
-                    "Nancee is online and ready to ride."
-                ),
-            },
-        ],
+        "messages": messages,
         "options": {
             "temperature": LLM_TEMPERATURE,
             "num_thread": LLM_NUM_THREADS,
@@ -105,12 +144,14 @@ def run_warmup_request(
     request = urllib.request.Request(
         OLLAMA_CHAT_URL,
         data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+        },
         method="POST",
     )
 
     started = time.monotonic()
-    reply_parts = []
+    reply_parts: list[str] = []
     final_data = None
 
     print(
@@ -134,6 +175,9 @@ def run_warmup_request(
 
                 data = json.loads(line)
 
+                if data.get("error"):
+                    fail(f"{pass_name} returned an error: {data['error']}")
+
                 token = data.get("message", {}).get("content", "")
 
                 if token:
@@ -148,6 +192,7 @@ def run_warmup_request(
             "utf-8",
             errors="replace",
         )
+
         fail(f"{pass_name} returned HTTP {error.code}: {details}")
 
     except urllib.error.URLError as error:
@@ -169,25 +214,27 @@ def run_warmup_request(
 
     elapsed = time.monotonic() - started
 
-    load_seconds = final_data.get("load_duration", 0) / 1_000_000_000
-    prompt_seconds = final_data.get("prompt_eval_duration", 0) / 1_000_000_000
-    generation_seconds = final_data.get("eval_duration", 0) / 1_000_000_000
-
-    print(f"[{pass_name}] Response: {reply}", flush=True)
+    print(
+        f"[{pass_name}] Response: {reply}",
+        flush=True,
+    )
     print(
         f"[{pass_name}] Elapsed: {elapsed:.3f}s",
         flush=True,
     )
     print(
-        f"[{pass_name}] Model load: {load_seconds:.3f}s",
+        f"[{pass_name}] Model load: "
+        f"{duration_seconds(final_data, 'load_duration'):.3f}s",
         flush=True,
     )
     print(
-        f"[{pass_name}] Prompt evaluation: {prompt_seconds:.3f}s",
+        f"[{pass_name}] Prompt evaluation: "
+        f"{duration_seconds(final_data, 'prompt_eval_duration'):.3f}s",
         flush=True,
     )
     print(
-        f"[{pass_name}] Generation: {generation_seconds:.3f}s",
+        f"[{pass_name}] Generation: "
+        f"{duration_seconds(final_data, 'eval_duration'):.3f}s",
         flush=True,
     )
     print(
@@ -198,7 +245,7 @@ def run_warmup_request(
     return reply, elapsed
 
 
-def main():
+def main() -> None:
     if len(sys.argv) != 2:
         fail("Usage: nancee-ollama-warmup MODEL_NAME")
 
@@ -208,10 +255,14 @@ def main():
         fail("Model name cannot be empty")
 
     system_prompt = load_system_prompt()
+    prompt_hash = text_sha256(
+        system_prompt,
+    )
 
-    prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
-
-    print(f"[STARTING] Model: {model}", flush=True)
+    print(
+        f"[STARTING] Model: {model}",
+        flush=True,
+    )
     print(
         f"[STARTING] System prompt: {SYSTEM_PROMPT_FILE}",
         flush=True,
@@ -220,18 +271,23 @@ def main():
         f"[STARTING] Prompt SHA256: {prompt_hash}",
         flush=True,
     )
-
     print(
-        f"[STARTING] LLM options: "
+        "[STARTING] LLM options: "
         f"temperature={LLM_TEMPERATURE} "
         f"threads={LLM_NUM_THREADS} "
         f"num_predict={LLM_NUM_PREDICT}",
         flush=True,
     )
+    print(
+        "[STARTING] Timeouts: "
+        f"helper={TOTAL_TIMEOUT_SECONDS}s "
+        f"caller={OLLAMA_WARMUP_TIMEOUT}s",
+        flush=True,
+    )
 
     deadline = time.monotonic() + TOTAL_TIMEOUT_SECONDS
 
-    # First request loads the model and evaluates the prompt.
+    # First pass loads the model and evaluates the prompt.
     run_warmup_request(
         model=model,
         system_prompt=system_prompt,
@@ -239,7 +295,7 @@ def main():
         pass_name="WARMUP",
     )
 
-    # Second identical request verifies that the hot path responds quickly.
+    # Second identical pass verifies the hot path.
     _, verification_elapsed = run_warmup_request(
         model=model,
         system_prompt=system_prompt,
@@ -247,7 +303,20 @@ def main():
         pass_name="VERIFY",
     )
 
-    print(f"[READY] Model: {model}", flush=True)
+    # Write state only after both passes succeed.
+    fingerprint = build_warmup_fingerprint(
+        model,
+        system_prompt,
+    )
+
+    write_warmup_state(
+        fingerprint,
+    )
+
+    print(
+        f"[READY] Model: {model}",
+        flush=True,
+    )
     print(
         f"[READY] Verification response time: {verification_elapsed:.3f}s",
         flush=True,

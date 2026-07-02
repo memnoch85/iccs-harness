@@ -1,16 +1,18 @@
 [Unit]
-Description=Warm NANCEE Ollama model %I
+Description=Warm NANCEE Ollama model %i
 Requires=ollama.service
 After=ollama.service
 ConditionPathExists=/usr/local/bin/nancee-ollama-warmup
 
 [Service]
 Type=oneshot
+User=memnoch
 
 Environment="OLLAMA_CHAT_URL=http://127.0.0.1:11434/api/chat"
 Environment="OLLAMA_KEEP_ALIVE=-1"
 
-ExecStart=/usr/local/bin/nancee-ollama-warmup %I
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do /usr/bin/curl -fsS http://127.0.0.1:11434/api/tags >/dev/null && exit 0; sleep 1; done; exit 1'
+ExecStart=/usr/local/bin/nancee-ollama-warmup %i
 
 TimeoutStartSec=6min
 RemainAfterExit=yes
