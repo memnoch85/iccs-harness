@@ -22,7 +22,7 @@ if not MEMORY_PRIME_BRIDGE_TEXT:
 MEMORY_ACTIVE_TURN_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_ACTIVE_TURN_LIMIT",
-        "8",
+        "7",
     )
 )
 
@@ -70,14 +70,14 @@ VOICE_ID = int(
 SPEED = float(
     os.environ.get(
         "SPEED",
-        "1.2",
+        "1.3",
     )
 )
 
 TTS_EMPHASIS_SPEED = float(
     os.getenv(
         "TTS_EMPHASIS_SPEED",
-        "1.0",
+        "0.85",
     )
 )
 
@@ -187,8 +187,8 @@ LLM_NUM_PREDICT = 120
 
 # Timeout values
 OLLAMA_STATUS_TIMEOUT = 5
-OLLAMA_WARMUP_TIMEOUT = 90
-OLLAMA_RESPONSE_TIMEOUT = 125
+OLLAMA_WARMUP_TIMEOUT = 99
+OLLAMA_RESPONSE_TIMEOUT = 130
 
 
 def load_system_prompt():

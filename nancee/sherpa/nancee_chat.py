@@ -510,26 +510,13 @@ def stream_text_to_tts(text_iter):
         if is_punctuation_only(cleaned_chunk):
             return
 
+        # Speak the first generated phrase immediately.
         if opening_chunk:
-            opening_word_count = len(cleaned_chunk.rstrip(".,!?;:").split())
-
-            acceptable_opening = (
-                is_filler_preface(cleaned_chunk) or opening_word_count <= 2
-            )
-
-            if acceptable_opening:
-                enqueue_tts_text(cleaned_chunk)
-            else:
-                print(
-                    f"[TTS FILLER INJECT] model_opening={cleaned_chunk!r}",
-                    flush=True,
-                )
-
-                enqueue_tts_text("Well,")
-                enqueue_tts_text(cleaned_chunk)
-
+            enqueue_tts_text(cleaned_chunk)
             return
 
+        # Hold filler-only fragments that appear later so the
+        # response cannot end awkwardly on a filler.
         if is_filler_preface(cleaned_chunk):
             pending_fillers.append(cleaned_chunk)
             return
@@ -538,6 +525,7 @@ def stream_text_to_tts(text_iter):
             enqueue_tts_text(" ".join(pending_fillers))
             pending_fillers = []
 
+        # Every normal chunk is queued exactly once.
         enqueue_tts_text(cleaned_chunk)
 
     for token in text_iter:
