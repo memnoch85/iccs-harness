@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-
 from __future__ import annotations
 
+import time
 from concurrent.futures import (
     Future,
     ThreadPoolExecutor,
@@ -52,7 +52,7 @@ class ContextPrimeCoordinator:
         memory_context_snapshot = str(memory_context)
 
         self._future = self._executor.submit(
-            self._prime_function,
+            self._run_prime,
             history=history_snapshot,
             memory_context=memory_context_snapshot,
         )
@@ -102,3 +102,39 @@ class ContextPrimeCoordinator:
             wait=True,
             cancel_futures=False,
         )
+
+    def _run_prime(
+        self,
+        *,
+        history,
+        memory_context,
+    ):
+        started = time.perf_counter()
+
+        try:
+            result = self._prime_function(
+                history=history,
+                memory_context=memory_context,
+            )
+
+        except Exception as error:
+            elapsed = time.perf_counter() - started
+
+            print(
+                "[MEMORY PRIME] "
+                f"Background prime failed "
+                f"elapsed={elapsed:.3f}s "
+                f"error={error!r}",
+                flush=True,
+            )
+
+            raise
+
+        elapsed = time.perf_counter() - started
+
+        print(
+            f"[MEMORY PRIME] Background prime completed elapsed={elapsed:.3f}s",
+            flush=True,
+        )
+
+        return result

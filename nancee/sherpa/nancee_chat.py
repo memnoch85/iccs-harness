@@ -25,6 +25,7 @@ from config import (
     NUM_THREADS,
     PREROLL_MS,
     SPEED,
+    TTS_EMPHASIS_SPEED,
     TTS_MAX_NUM_SENTENCES,
     TTS_SILENCE_SCALE,
     VOICE_ID,
@@ -42,8 +43,10 @@ from session_archive import (
 from short_term_memory import ShortTermMemory
 from tts_chunking import (
     extract_tts_chunk,
+    is_filler_preface,
     is_punctuation_only,
 )
+from tts_request import build_tts_request
 
 text_queue = queue.Queue()
 stop_event = threading.Event()
@@ -109,7 +112,7 @@ def archive_session_memory_if_needed(
     )
 
     if not archived_turns:
-        return False
+        return 0
 
     elapsed = time.perf_counter() - started
     active_stats = short_term_memory.get_stats()
@@ -141,7 +144,36 @@ def archive_session_memory_if_needed(
             flush=True,
         )
 
-    return True
+    return len(archived_turns)
+
+
+def print_memory_status(
+    short_term_memory,
+    session_archive,
+    phase,
+    archived_now=0,
+):
+    active_stats = short_term_memory.get_stats()
+    archive_stats = session_archive.get_stats()
+
+    active_turns = active_stats["turn_count"]
+    active_characters = active_stats["history_characters"]
+    archived_total = archive_stats["turn_count"]
+
+    prime_state = "running" if context_prime_coordinator.is_running() else "idle"
+
+    print(
+        "[MEMORY STATUS] "
+        f"phase={phase} "
+        f"active_turns={active_turns} "
+        f"(trigger > {MEMORY_ACTIVE_TURN_LIMIT}) "
+        f"active_characters={active_characters} "
+        f"(trigger > {MEMORY_ACTIVE_CHARACTER_LIMIT}) "
+        f"archived_total={archived_total} "
+        f"archived_now={archived_now} "
+        f"prime={prime_state}",
+        flush=True,
+    )
 
 
 def read_asr_message():
@@ -339,86 +371,121 @@ def output_callback(
                 written = frames
 
 
+def enqueue_tts_text(text):
+    request = build_tts_request(
+        text=text,
+        normal_speed=SPEED,
+        emphasis_speed=TTS_EMPHASIS_SPEED,
+    )
+
+    if request is not None:
+        text_queue.put(request)
+
+
 def tts_worker(tts):
     gen_config = sherpa_onnx.GenerationConfig()
     gen_config.sid = VOICE_ID
-    gen_config.speed = SPEED
     gen_config.silence_scale = TTS_SILENCE_SCALE
 
     while not stop_event.is_set() or not text_queue.empty():
         try:
-            text = text_queue.get(
+            request = text_queue.get(
                 timeout=0.05,
             )
         except queue.Empty:
             continue
 
-        text = text.strip()
+        try:
+            if request is None:
+                continue
 
-        if not text:
-            text_queue.task_done()
-            continue
+            text = request.text.strip()
 
-        start = time.time()
-        first_callback = None
-        callback_count = 0
+            if not text:
+                continue
 
-        print(
-            f"\n[TTS START] {text!r}",
-            flush=True,
-        )
+            # Normal chunks use SPEED.
+            # Chunks containing paired *emphasis* markers use
+            # TTS_EMPHASIS_SPEED, with the asterisks already removed
+            # by build_tts_request().
+            gen_config.speed = request.speed
 
-        def callback(
-            samples: np.ndarray,
-            progress: float,
-        ):
-            nonlocal first_callback
-            nonlocal callback_count
+            start = time.time()
+            first_callback = None
+            callback_count = 0
 
-            callback_count += 1
-            now = time.time()
+            print(
+                f"\n[TTS START] {text!r} "
+                f"speed={request.speed:.2f} "
+                f"emphasis={request.emphasized}",
+                flush=True,
+            )
 
-            if first_callback is None:
-                first_callback = now
+            def callback(
+                samples: np.ndarray,
+                progress: float,
+            ):
+                nonlocal first_callback
+                nonlocal callback_count
 
-                print(
-                    f"[TTS FIRST AUDIO] "
-                    f"{first_callback - start:.3f}s | "
-                    f"progress={progress:.3f} | "
-                    f"{text!r}",
-                    flush=True,
+                callback_count += 1
+                now = time.time()
+
+                if first_callback is None:
+                    first_callback = now
+
+                    print(
+                        f"[TTS FIRST AUDIO] "
+                        f"{first_callback - start:.3f}s | "
+                        f"progress={progress:.3f} | "
+                        f"speed={request.speed:.2f} | "
+                        f"{text!r}",
+                        flush=True,
+                    )
+
+                enqueue_audio(
+                    samples,
+                    tts.sample_rate,
                 )
 
-            enqueue_audio(
-                samples,
-                tts.sample_rate,
+                return 1
+
+            audio = tts.generate(
+                text,
+                gen_config,
+                callback=callback,
             )
 
-            return 1
+            # Some Sherpa configurations may return complete audio
+            # without invoking the streaming callback.
+            if callback_count == 0:
+                enqueue_audio(
+                    audio.samples,
+                    audio.sample_rate,
+                )
 
-        audio = tts.generate(
-            text,
-            gen_config,
-            callback=callback,
-        )
+            elapsed = time.time() - start
+            duration = len(audio.samples) / audio.sample_rate
 
-        if callback_count == 0:
-            enqueue_audio(
-                audio.samples,
-                audio.sample_rate,
+            rtf = elapsed / duration if duration else 999
+
+            print(
+                f"[TTS DONE] "
+                f"elapsed={elapsed:.3f}s "
+                f"duration={duration:.3f}s "
+                f"RTF={rtf:.3f} "
+                f"speed={request.speed:.2f}",
+                flush=True,
             )
 
-        elapsed = time.time() - start
-        duration = len(audio.samples) / audio.sample_rate
+        except Exception as error:
+            print(
+                f"[TTS ERROR] {error!r}",
+                flush=True,
+            )
 
-        rtf = elapsed / duration if duration else 999
-
-        print(
-            f"[TTS DONE] elapsed={elapsed:.3f}s duration={duration:.3f}s RTF={rtf:.3f}",
-            flush=True,
-        )
-
-        text_queue.task_done()
+        finally:
+            text_queue.task_done()
 
 
 def stream_text_to_tts(text_iter):
@@ -426,7 +493,52 @@ def stream_text_to_tts(text_iter):
     full_response = []
     is_first = True
     first_token_time = None
+    pending_fillers = []
     start = time.time()
+
+    def queue_meaningful_chunk(
+        chunk,
+        opening_chunk,
+    ):
+        nonlocal pending_fillers
+
+        cleaned_chunk = chunk.strip()
+
+        if not cleaned_chunk:
+            return
+
+        if is_punctuation_only(cleaned_chunk):
+            return
+
+        if opening_chunk:
+            opening_word_count = len(cleaned_chunk.rstrip(".,!?;:").split())
+
+            acceptable_opening = (
+                is_filler_preface(cleaned_chunk) or opening_word_count <= 2
+            )
+
+            if acceptable_opening:
+                enqueue_tts_text(cleaned_chunk)
+            else:
+                print(
+                    f"[TTS FILLER INJECT] model_opening={cleaned_chunk!r}",
+                    flush=True,
+                )
+
+                enqueue_tts_text("Well,")
+                enqueue_tts_text(cleaned_chunk)
+
+            return
+
+        if is_filler_preface(cleaned_chunk):
+            pending_fillers.append(cleaned_chunk)
+            return
+
+        if pending_fillers:
+            enqueue_tts_text(" ".join(pending_fillers))
+            pending_fillers = []
+
+        enqueue_tts_text(cleaned_chunk)
 
     for token in text_iter:
         full_response.append(token)
@@ -463,7 +575,11 @@ def stream_text_to_tts(text_iter):
                 flush=True,
             )
 
-            text_queue.put(chunk)
+            queue_meaningful_chunk(
+                chunk,
+                opening_chunk=is_first,
+            )
+
             is_first = False
 
     final = buffer.strip()
@@ -476,9 +592,25 @@ def stream_text_to_tts(text_iter):
             flush=True,
         )
 
-        text_queue.put(final)
+        queue_meaningful_chunk(
+            final,
+            opening_chunk=is_first,
+        )
 
-    return "".join(full_response).strip()
+    full_text = "".join(full_response).strip()
+
+    if pending_fillers:
+        print(
+            "[TTS SKIP] "
+            "Dropped trailing filler-only text: "
+            f"{' '.join(pending_fillers)!r}",
+            flush=True,
+        )
+
+    if is_filler_preface(full_text):
+        return ""
+
+    return full_text
 
 
 def wait_for_audio_to_drain():
@@ -500,7 +632,7 @@ def play_memory_prime_bridge():
         flush=True,
     )
 
-    text_queue.put(MEMORY_PRIME_BRIDGE_TEXT)
+    enqueue_tts_text(MEMORY_PRIME_BRIDGE_TEXT)
 
     # Wait for Kokoro to generate the phrase.
     text_queue.join()
@@ -647,6 +779,12 @@ def main():
                 user_text,
             )
 
+            print_memory_status(
+                short_term_memory,
+                session_archive,
+                "before_request",
+            )
+
             # The user may speak and Whisper may transcribe while the
             # background prime runs. The real Ollama request must wait
             # until that prime finishes.
@@ -704,9 +842,16 @@ def main():
 
             # This preserves the existing archive decision and starts
             # the same post-archive prime in the background.
-            archive_session_memory_if_needed(
+            archived_now = archive_session_memory_if_needed(
                 short_term_memory,
                 session_archive,
+            )
+
+            print_memory_status(
+                short_term_memory,
+                session_archive,
+                "after_turn",
+                archived_now,
             )
 
             if (
@@ -729,17 +874,24 @@ def main():
                 f"\n[TURN DONE] total={total:.3f}s",
                 flush=True,
             )
-            continue
+        stop_asr_worker()
 
-            text_queue.join()
-            wait_for_audio_to_drain()
+        try:
+            context_prime_coordinator.shutdown()
 
-            total = time.time() - global_start
-
+        except Exception as error:
             print(
-                f"\n[TURN DONE] total={total:.3f}s",
+                f"[MEMORY PRIME] Shutdown error: {error!r}",
                 flush=True,
             )
+
+        stop_event.set()
+        worker.join(timeout=2.0)
+
+        print(
+            "Done.",
+            flush=True,
+        )
 
 
 if __name__ == "__main__":

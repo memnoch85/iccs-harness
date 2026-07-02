@@ -54,25 +54,6 @@ MEMORY_RETRIEVAL_MIN_SCORE = float(
     )
 )
 
-if MEMORY_ACTIVE_TURN_LIMIT <= 2:
-    raise ValueError("MEMORY_ACTIVE_TURN_LIMIT must be greater than 2.")
-
-if MEMORY_ACTIVE_CHARACTER_LIMIT <= 0:
-    raise ValueError("MEMORY_ACTIVE_CHARACTER_LIMIT must be positive.")
-
-if MEMORY_KEEP_RECENT_TURNS < 0 or MEMORY_KEEP_RECENT_TURNS >= MEMORY_ACTIVE_TURN_LIMIT:
-    raise ValueError(
-        "MEMORY_KEEP_RECENT_TURNS must be zero or greater and "
-        "smaller than MEMORY_ACTIVE_TURN_LIMIT."
-    )
-
-if MEMORY_RETRIEVAL_LIMIT <= 0:
-    raise ValueError("MEMORY_RETRIEVAL_LIMIT must be positive.")
-
-if MEMORY_RETRIEVAL_MIN_SCORE < 0:
-    raise ValueError("MEMORY_RETRIEVAL_MIN_SCORE cannot be negative.")
-
-
 # Sherpa/Kokoro configuration
 MODEL_DIR = os.environ.get(
     "SHERPA_MODEL_DIR",
@@ -90,6 +71,13 @@ SPEED = float(
     os.environ.get(
         "SPEED",
         "1.2",
+    )
+)
+
+TTS_EMPHASIS_SPEED = float(
+    os.getenv(
+        "TTS_EMPHASIS_SPEED",
+        "1.0",
     )
 )
 
@@ -139,6 +127,29 @@ MAX_CHUNK_WORDS = int(
         "8",
     )
 )
+
+
+if MEMORY_ACTIVE_TURN_LIMIT <= 2:
+    raise ValueError("MEMORY_ACTIVE_TURN_LIMIT must be greater than 2.")
+
+if MEMORY_ACTIVE_CHARACTER_LIMIT <= 0:
+    raise ValueError("MEMORY_ACTIVE_CHARACTER_LIMIT must be positive.")
+
+
+if MEMORY_KEEP_RECENT_TURNS < 0 or MEMORY_KEEP_RECENT_TURNS >= MEMORY_ACTIVE_TURN_LIMIT:
+    raise ValueError(
+        "MEMORY_KEEP_RECENT_TURNS must be zero or greater and "
+        "smaller than MEMORY_ACTIVE_TURN_LIMIT."
+    )
+
+if MEMORY_RETRIEVAL_LIMIT <= 0:
+    raise ValueError("MEMORY_RETRIEVAL_LIMIT must be positive.")
+
+if MEMORY_RETRIEVAL_MIN_SCORE < 0:
+    raise ValueError("MEMORY_RETRIEVAL_MIN_SCORE cannot be negative.")
+
+if TTS_EMPHASIS_SPEED <= 0:
+    raise ValueError("TTS_EMPHASIS_SPEED must be greater than zero.")
 
 
 # Ollama configuration
