@@ -1,5 +1,23 @@
 import os
 
+MEMORY_PRIME_GRACE_SECONDS = float(
+    os.getenv(
+        "NANCEE_MEMORY_PRIME_GRACE_SECONDS",
+        "0.5",
+    )
+)
+
+MEMORY_PRIME_BRIDGE_TEXT = os.getenv(
+    "NANCEE_MEMORY_PRIME_BRIDGE_TEXT",
+    "One moment. I'm updating my memory.",
+).strip()
+
+if MEMORY_PRIME_GRACE_SECONDS < 0:
+    raise ValueError("MEMORY_PRIME_GRACE_SECONDS cannot be negative.")
+
+if not MEMORY_PRIME_BRIDGE_TEXT:
+    raise ValueError("MEMORY_PRIME_BRIDGE_TEXT cannot be empty.")
+
 # Memory configuration
 MEMORY_ACTIVE_TURN_LIMIT = int(
     os.getenv(

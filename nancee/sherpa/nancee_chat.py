@@ -14,10 +14,11 @@ import sounddevice as sd
 from config import (
     BLOCKSIZE,
     LLM_MODEL,
-    MAX_CHUNK_WORDS,
     MEMORY_ACTIVE_CHARACTER_LIMIT,
     MEMORY_ACTIVE_TURN_LIMIT,
     MEMORY_KEEP_RECENT_TURNS,
+    MEMORY_PRIME_BRIDGE_TEXT,
+    MEMORY_PRIME_GRACE_SECONDS,
     MEMORY_RETRIEVAL_LIMIT,
     MEMORY_RETRIEVAL_MIN_SCORE,
     MODEL_DIR,
@@ -28,9 +29,10 @@ from config import (
     TTS_SILENCE_SCALE,
     VOICE_ID,
 )
-
+from context_prime import ContextPrimeCoordinator
 from ollama_runtime import (
     ensure_ollama_model_loaded,
+    prime_ollama_context,
     stream_ollama_response,
 )
 from session_archive import (
@@ -38,12 +40,19 @@ from session_archive import (
     archive_active_memory_if_needed,
 )
 from short_term_memory import ShortTermMemory
+from tts_chunking import (
+    extract_tts_chunk,
+    is_punctuation_only,
+)
 
 text_queue = queue.Queue()
 stop_event = threading.Event()
 audio_lock = threading.Lock()
 audio_chunks = deque()
 first_audio_enqueued = False
+
+context_prime_coordinator = ContextPrimeCoordinator(prime_ollama_context)
+
 
 NANCEE_ROOT = Path(__file__).resolve().parent.parent
 ASR_DIRECTORY = NANCEE_ROOT / "asr"
@@ -95,7 +104,7 @@ def archive_session_memory_if_needed(
         memory=short_term_memory,
         archive=session_archive,
         max_active_turns=MEMORY_ACTIVE_TURN_LIMIT,
-        max_active_characters=(MEMORY_ACTIVE_CHARACTER_LIMIT),
+        max_active_characters=MEMORY_ACTIVE_CHARACTER_LIMIT,
         keep_recent_turns=MEMORY_KEEP_RECENT_TURNS,
     )
 
@@ -114,6 +123,23 @@ def archive_session_memory_if_needed(
         f"elapsed={elapsed:.6f}s",
         flush=True,
     )
+
+    try:
+        context_prime_coordinator.start(
+            history=short_term_memory.get_messages(),
+            memory_context=short_term_memory.build_memory_context(),
+        )
+
+        print(
+            "[MEMORY PRIME] Background prime started.",
+            flush=True,
+        )
+
+    except RuntimeError as error:
+        print(
+            f"[MEMORY PRIME] Could not start prime: {error}",
+            flush=True,
+        )
 
     return True
 
@@ -395,64 +421,6 @@ def tts_worker(tts):
         text_queue.task_done()
 
 
-def is_punctuation_only(text):
-    stripped = text.strip()
-
-    return bool(stripped) and not any(character.isalnum() for character in stripped)
-
-
-def has_sentence_break(text):
-    return text.strip().endswith(
-        (
-            ".",
-            "!",
-            "?",
-            ",",
-            ";",
-            ":",
-            "\n",
-        )
-    )
-
-
-def word_count(text):
-    return len(text.strip().split())
-
-
-def should_emit(buffer, is_first):
-    stripped = buffer.strip()
-
-    if not stripped:
-        return False
-
-    if is_punctuation_only(stripped):
-        return False
-
-    words = word_count(stripped)
-
-    # Best case: emit at natural punctuation.
-    if has_sentence_break(stripped):
-        if is_first:
-            return words >= 1
-
-        return words >= 3
-
-    # If the raw buffer does not end with whitespace,
-    # the current streamed token may end in the middle
-    # of a word.
-    if buffer and not buffer[-1].isspace():
-        return False
-
-    # First chunks can only be forced at a clean
-    # word boundary.
-    if is_first:
-        return words >= MAX_CHUNK_WORDS
-
-    # Later chunks can also be forced, but only at a
-    # clean word boundary.
-    return words >= MAX_CHUNK_WORDS
-
-
 def stream_text_to_tts(text_iter):
     buffer = ""
     full_response = []
@@ -462,6 +430,7 @@ def stream_text_to_tts(text_iter):
 
     for token in text_iter:
         full_response.append(token)
+
         if first_token_time is None:
             first_token_time = time.time()
 
@@ -477,20 +446,17 @@ def stream_text_to_tts(text_iter):
         )
 
         buffer += token
-        stripped = buffer.strip()
 
-        if not stripped:
-            continue
+        while True:
+            extracted = extract_tts_chunk(
+                buffer,
+                is_first,
+            )
 
-        # Never send punctuation alone.
-        if is_punctuation_only(stripped):
-            continue
+            if extracted is None:
+                break
 
-        if should_emit(
-            buffer,
-            is_first,
-        ):
-            chunk = stripped
+            chunk, buffer = extracted
 
             print(
                 f"\n[TEXT -> TTS] {chunk!r}",
@@ -498,8 +464,6 @@ def stream_text_to_tts(text_iter):
             )
 
             text_queue.put(chunk)
-
-            buffer = ""
             is_first = False
 
     final = buffer.strip()
@@ -513,6 +477,7 @@ def stream_text_to_tts(text_iter):
         )
 
         text_queue.put(final)
+
     return "".join(full_response).strip()
 
 
@@ -527,6 +492,55 @@ def wait_for_audio_to_drain():
         time.sleep(0.05)
 
     time.sleep(0.25)
+
+
+def play_memory_prime_bridge():
+    print(
+        f"\nNancee: {MEMORY_PRIME_BRIDGE_TEXT}",
+        flush=True,
+    )
+
+    text_queue.put(MEMORY_PRIME_BRIDGE_TEXT)
+
+    # Wait for Kokoro to generate the phrase.
+    text_queue.join()
+
+    # Wait for the phrase to finish playing.
+    wait_for_audio_to_drain()
+
+
+def wait_for_context_prime_before_llm_request():
+    if not context_prime_coordinator.is_running():
+        return
+
+    print(
+        "[MEMORY PRIME] User input arrived while prime is running.",
+        flush=True,
+    )
+
+    try:
+        bridge_used = context_prime_coordinator.wait_if_needed(
+            grace_seconds=MEMORY_PRIME_GRACE_SECONDS,
+            bridge_callback=play_memory_prime_bridge,
+        )
+
+    except Exception as error:
+        print(
+            f"[MEMORY PRIME] Prime failed: {error!r}",
+            flush=True,
+        )
+        return
+
+    if bridge_used:
+        print(
+            "[MEMORY PRIME] Bridge played and prime completed.",
+            flush=True,
+        )
+    else:
+        print(
+            "[MEMORY PRIME] Prime completed during grace period.",
+            flush=True,
+        )
 
 
 def main():
@@ -628,65 +642,94 @@ def main():
 
             global_start = time.time()
 
+            retrieved_context = retrieve_session_context(
+                session_archive,
+                user_text,
+            )
+
+            # The user may speak and Whisper may transcribe while the
+            # background prime runs. The real Ollama request must wait
+            # until that prime finishes.
+            wait_for_context_prime_before_llm_request()
+
             print(
                 "\nNancee: ",
                 end="",
                 flush=True,
             )
 
-            retrieved_context = retrieve_session_context(
-                session_archive,
-                user_text,
-            )
-
-            response = stream_ollama_response(
-                user_text=user_text,
-                history=short_term_memory.get_messages(),
-                memory_context=(short_term_memory.build_memory_context()),
-                retrieved_context=retrieved_context,
-            )
-
             try:
                 response = stream_ollama_response(
                     user_text=user_text,
                     history=short_term_memory.get_messages(),
-                    memory_context=short_term_memory.build_memory_context(),
+                    memory_context=(short_term_memory.build_memory_context()),
+                    retrieved_context=retrieved_context,
                 )
 
                 assistant_text = stream_text_to_tts(response)
-                if assistant_text:
-                    short_term_memory.add_turn(
-                        user_text=user_text,
-                        assistant_text=assistant_text,
-                    )
-                else:
-                    print(
-                        "\n[LLM ERROR] Ollama returned no response text.",
-                        flush=True,
-                    )
 
-                    if (
-                        os.getenv(
-                            "NANCEE_MEMORY_DEBUG",
-                            "false",
-                        ).lower()
-                        == "true"
-                    ):
-                        print(
-                            "[MEMORY DEBUG] "
-                            f"active="
-                            f"{short_term_memory.get_stats()} "
-                            f"archive="
-                            f"{session_archive.get_stats()}",
-                            flush=True,
-                        )
-
-            except urllib.error.URLError as error:
+            except (
+                TimeoutError,
+                urllib.error.URLError,
+                urllib.error.HTTPError,
+                RuntimeError,
+            ) as error:
                 print(
                     f"\n[OLLAMA ERROR] {error}",
                     flush=True,
                 )
+
+                # Finish any speech that was already queued before
+                # the streamed request failed.
+                text_queue.join()
+                wait_for_audio_to_drain()
                 continue
+
+            if not assistant_text:
+                print(
+                    "\n[LLM ERROR] Ollama returned no response text.",
+                    flush=True,
+                )
+                continue
+
+            short_term_memory.add_turn(
+                user_text=user_text,
+                assistant_text=assistant_text,
+            )
+
+            # Finish normal TTS before starting the CPU-heavy Ollama
+            # prime. This protects the benchmarked TTS responsiveness.
+            text_queue.join()
+            wait_for_audio_to_drain()
+
+            # This preserves the existing archive decision and starts
+            # the same post-archive prime in the background.
+            archive_session_memory_if_needed(
+                short_term_memory,
+                session_archive,
+            )
+
+            if (
+                os.getenv(
+                    "NANCEE_MEMORY_DEBUG",
+                    "false",
+                ).lower()
+                == "true"
+            ):
+                print(
+                    "[MEMORY DEBUG] "
+                    f"active={short_term_memory.get_stats()} "
+                    f"archive={session_archive.get_stats()}",
+                    flush=True,
+                )
+
+            total = time.time() - global_start
+
+            print(
+                f"\n[TURN DONE] total={total:.3f}s",
+                flush=True,
+            )
+            continue
 
             text_queue.join()
             wait_for_audio_to_drain()
