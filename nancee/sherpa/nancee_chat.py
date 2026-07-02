@@ -68,6 +68,18 @@ def retrieve_session_context(
     session_archive,
     user_text,
 ):
+    if (
+        os.getenv(
+            "NANCEE_DISABLE_RETRIEVAL",
+            "false",
+        ).lower()
+        == "true"
+    ):
+        print(
+            f"[MEMORY RETRIEVAL] disabled=true query={user_text!r}",
+            flush=True,
+        )
+        return ""
     retrieved_turns = session_archive.retrieve(
         user_text,
         limit=MEMORY_RETRIEVAL_LIMIT,
@@ -76,16 +88,18 @@ def retrieve_session_context(
 
     retrieved_context = session_archive.format_retrieved_context(retrieved_turns)
 
-    if (
-        retrieved_turns
-        and os.getenv(
+    debug_enabled = (
+        os.getenv(
             "NANCEE_MEMORY_DEBUG",
             "false",
         ).lower()
         == "true"
-    ):
+    )
+
+    if debug_enabled:
         print(
             "[MEMORY RETRIEVAL] "
+            f"query={user_text!r} "
             f"hits={len(retrieved_turns)} "
             f"ids="
             f"{[turn['archive_id'] for turn in retrieved_turns]} "
@@ -93,6 +107,17 @@ def retrieve_session_context(
             f"{[turn['score'] for turn in retrieved_turns]}",
             flush=True,
         )
+
+        if retrieved_context:
+            print(
+                f"[MEMORY RETRIEVAL CONTEXT]\n{retrieved_context}",
+                flush=True,
+            )
+        else:
+            print(
+                "[MEMORY RETRIEVAL CONTEXT] <none>",
+                flush=True,
+            )
 
     return retrieved_context
 
