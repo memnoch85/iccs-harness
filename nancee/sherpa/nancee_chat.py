@@ -19,6 +19,7 @@ from config import (
     MEMORY_KEEP_RECENT_TURNS,
     MEMORY_PRIME_BRIDGE_TEXT,
     MEMORY_PRIME_GRACE_SECONDS,
+    MEMORY_RETRIEVAL_ENABLED,
     MEMORY_RETRIEVAL_LIMIT,
     MEMORY_RETRIEVAL_MIN_SCORE,
     MODEL_DIR,
@@ -69,13 +70,7 @@ def retrieve_session_context(
     session_archive,
     user_text,
 ):
-    if (
-        os.getenv(
-            "NANCEE_DISABLE_RETRIEVAL",
-            "false",
-        ).lower()
-        == "true"
-    ):
+    if not MEMORY_RETRIEVAL_ENABLED:
         print(
             f"[MEMORY RETRIEVAL] disabled=true query={user_text!r}",
             flush=True,

@@ -22,7 +22,7 @@ if not MEMORY_PRIME_BRIDGE_TEXT:
 MEMORY_ACTIVE_TURN_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_ACTIVE_TURN_LIMIT",
-        "8",
+        "10",
     )
 )
 
@@ -52,6 +52,14 @@ MEMORY_RETRIEVAL_MIN_SCORE = float(
         "NANCEE_MEMORY_RETRIEVAL_MIN_SCORE",
         "2.0",
     )
+)
+
+MEMORY_RETRIEVAL_ENABLED = (
+    os.getenv(
+        "NANCEE_MEMORY_RETRIEVAL_ENABLED",
+        "false",
+    ).lower()
+    == "true"
 )
 
 # Sherpa/Kokoro configuration
