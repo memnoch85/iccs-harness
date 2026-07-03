@@ -85,7 +85,7 @@ SPEED = float(
 TTS_EMPHASIS_SPEED = float(
     os.getenv(
         "TTS_EMPHASIS_SPEED",
-        "0.85",
+        "0.80",
     )
 )
 
@@ -188,9 +188,9 @@ SYSTEM_PROMPT_FILE = os.environ.get(
 
 
 # Ollama generation settings
-LLM_TEMPERATURE = 0.75
+LLM_TEMPERATURE = 0.70
 LLM_NUM_THREADS = 3
-LLM_NUM_PREDICT = 120
+LLM_NUM_PREDICT = 75
 
 
 # Timeout values
