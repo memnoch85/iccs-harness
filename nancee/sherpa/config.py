@@ -1,5 +1,49 @@
 import os
 
+# Short-term indexed recall configuration adding thes to the top because I don't konw what are the old ones rn
+MEMORY_ARCHIVE_TURN_LIMIT = int(
+    os.getenv(
+        "NANCEE_MEMORY_ARCHIVE_TURN_LIMIT",
+        "24",
+    )
+)
+
+MEMORY_RECALL_ENABLED = (
+    os.getenv(
+        "NANCEE_MEMORY_RECALL_ENABLED",
+        "true",
+    ).lower()
+    == "true"
+)
+
+MEMORY_RECALL_LIMIT = int(
+    os.getenv(
+        "NANCEE_MEMORY_RECALL_LIMIT",
+        "3",
+    )
+)
+
+MEMORY_RECALL_MIN_SCORE = float(
+    os.getenv(
+        "NANCEE_MEMORY_RECALL_MIN_SCORE",
+        "2.0",
+    )
+)
+
+MEMORY_RECALL_CONTEXT_MAX_CHARACTERS = int(
+    os.getenv(
+        "NANCEE_MEMORY_RECALL_CONTEXT_MAX_CHARACTERS",
+        "650",
+    )
+)
+
+MEMORY_RECALL_SNIPPET_WORDS = int(
+    os.getenv(
+        "NANCEE_MEMORY_RECALL_SNIPPET_WORDS",
+        "18",
+    )
+)
+
 MEMORY_PRIME_GRACE_SECONDS = float(
     os.getenv(
         "NANCEE_MEMORY_PRIME_GRACE_SECONDS",
@@ -62,6 +106,42 @@ MEMORY_RETRIEVAL_ENABLED = (
     == "true"
 )
 
+MEMORY_GENERIC_FACT_LIMIT = int(
+    os.getenv(
+        "NANCEE_MEMORY_GENERIC_FACT_LIMIT",
+        "24",
+    )
+)
+
+MEMORY_RELATED_FACT_LIMIT = int(
+    os.getenv(
+        "NANCEE_MEMORY_RELATED_FACT_LIMIT",
+        "3",
+    )
+)
+
+MEMORY_RELATED_CONTEXT_MAX_CHARACTERS = int(
+    os.getenv(
+        "NANCEE_MEMORY_RELATED_CONTEXT_MAX_CHARACTERS",
+        "420",
+    )
+)
+
+MEMORY_RELATED_MIN_SCORE = float(
+    os.getenv(
+        "NANCEE_MEMORY_RELATED_MIN_SCORE",
+        "1.0",
+    )
+)
+
+MEMORY_RELATED_CONTEXT_ENABLED = (
+    os.getenv(
+        "NANCEE_MEMORY_RELATED_CONTEXT_ENABLED",
+        "true",
+    ).lower()
+    == "true"
+)
+
 # Sherpa/Kokoro configuration
 MODEL_DIR = os.environ.get(
     "SHERPA_MODEL_DIR",
@@ -95,6 +175,7 @@ NUM_THREADS = int(
         "4",
     )
 )
+
 
 BLOCKSIZE = int(
     os.environ.get(
@@ -159,6 +240,18 @@ if MEMORY_RETRIEVAL_MIN_SCORE < 0:
 if TTS_EMPHASIS_SPEED <= 0:
     raise ValueError("TTS_EMPHASIS_SPEED must be greater than zero.")
 
+if MEMORY_GENERIC_FACT_LIMIT <= 0:
+    raise ValueError("MEMORY_GENERIC_FACT_LIMIT must be positive.")
+
+if MEMORY_RELATED_FACT_LIMIT <= 0:
+    raise ValueError("MEMORY_RELATED_FACT_LIMIT must be positive.")
+
+if MEMORY_RELATED_CONTEXT_MAX_CHARACTERS <= 0:
+    raise ValueError("MEMORY_RELATED_CONTEXT_MAX_CHARACTERS must be positive.")
+
+if MEMORY_RELATED_MIN_SCORE < 0:
+    raise ValueError("MEMORY_RELATED_MIN_SCORE cannot be negative.")
+
 
 # Ollama configuration
 OLLAMA_URL = os.environ.get(
@@ -190,7 +283,7 @@ SYSTEM_PROMPT_FILE = os.environ.get(
 # Ollama generation settings
 LLM_TEMPERATURE = 0.70
 LLM_NUM_THREADS = 3
-LLM_NUM_PREDICT = 75
+LLM_NUM_PREDICT = 65
 
 
 # Timeout values

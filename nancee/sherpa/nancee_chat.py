@@ -16,12 +16,15 @@ from config import (
     LLM_MODEL,
     MEMORY_ACTIVE_CHARACTER_LIMIT,
     MEMORY_ACTIVE_TURN_LIMIT,
+    MEMORY_ARCHIVE_TURN_LIMIT,
     MEMORY_KEEP_RECENT_TURNS,
     MEMORY_PRIME_BRIDGE_TEXT,
     MEMORY_PRIME_GRACE_SECONDS,
-    MEMORY_RETRIEVAL_ENABLED,
-    MEMORY_RETRIEVAL_LIMIT,
-    MEMORY_RETRIEVAL_MIN_SCORE,
+    MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
+    MEMORY_RECALL_ENABLED,
+    MEMORY_RECALL_LIMIT,
+    MEMORY_RECALL_MIN_SCORE,
+    MEMORY_RECALL_SNIPPET_WORDS,
     MODEL_DIR,
     NUM_THREADS,
     PREROLL_MS,
@@ -41,7 +44,6 @@ from session_archive import (
     SessionArchive,
     archive_active_memory_if_needed,
 )
-from session_fact_extractor import promote_archived_facts
 from short_term_memory import ShortTermMemory
 from tts_chunking import (
     extract_tts_chunk,
@@ -66,25 +68,8 @@ ASR_WORKER_SCRIPT = ASR_DIRECTORY / "asr_worker.py"
 asr_process = None
 
 
-def retrieve_session_context(
-    session_archive,
-    user_text,
-):
-    if not MEMORY_RETRIEVAL_ENABLED:
-        print(
-            f"[MEMORY RETRIEVAL] disabled=true query={user_text!r}",
-            flush=True,
-        )
-        return ""
-    retrieved_turns = session_archive.retrieve(
-        user_text,
-        limit=MEMORY_RETRIEVAL_LIMIT,
-        min_score=MEMORY_RETRIEVAL_MIN_SCORE,
-    )
-
-    retrieved_context = session_archive.format_retrieved_context(retrieved_turns)
-
-    debug_enabled = (
+def memory_debug_enabled():
+    return (
         os.getenv(
             "NANCEE_MEMORY_DEBUG",
             "false",
@@ -92,36 +77,56 @@ def retrieve_session_context(
         == "true"
     )
 
-    if debug_enabled:
+
+def retrieve_session_context(session_archive, user_text):
+    started = time.perf_counter()
+
+    if not MEMORY_RECALL_ENABLED:
+        if memory_debug_enabled():
+            print(
+                f"[MEMORY RECALL] disabled=true query={user_text!r}",
+                flush=True,
+            )
+        return ""
+
+    retrieved_turns = session_archive.retrieve(
+        user_text,
+        limit=MEMORY_RECALL_LIMIT,
+        min_score=MEMORY_RECALL_MIN_SCORE,
+        snippet_words=MEMORY_RECALL_SNIPPET_WORDS,
+    )
+
+    retrieved_context = session_archive.format_related_context(
+        retrieved_turns,
+        max_characters=MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
+    )
+
+    elapsed = time.perf_counter() - started
+
+    if memory_debug_enabled():
         print(
-            "[MEMORY RETRIEVAL] "
+            "[MEMORY RECALL] "
             f"query={user_text!r} "
             f"hits={len(retrieved_turns)} "
-            f"ids="
-            f"{[turn['archive_id'] for turn in retrieved_turns]} "
-            f"scores="
-            f"{[turn['score'] for turn in retrieved_turns]}",
+            f"ids={[turn['archive_id'] for turn in retrieved_turns]} "
+            f"scores={[turn['score'] for turn in retrieved_turns]} "
+            f"context_characters={len(retrieved_context)} "
+            f"elapsed={elapsed:.6f}s",
             flush=True,
         )
 
         if retrieved_context:
             print(
-                f"[MEMORY RETRIEVAL CONTEXT]\n{retrieved_context}",
+                f"[MEMORY RECALL CONTEXT]\n{retrieved_context}",
                 flush=True,
             )
         else:
-            print(
-                "[MEMORY RETRIEVAL CONTEXT] <none>",
-                flush=True,
-            )
+            print("[MEMORY RECALL CONTEXT] <none>", flush=True)
 
     return retrieved_context
 
 
-def archive_session_memory_if_needed(
-    short_term_memory,
-    session_archive,
-):
+def archive_session_memory_if_needed(short_term_memory, session_archive):
     started = time.perf_counter()
 
     archived_turns = archive_active_memory_if_needed(
@@ -132,20 +137,16 @@ def archive_session_memory_if_needed(
         keep_recent_turns=MEMORY_KEEP_RECENT_TURNS,
     )
 
+    elapsed = time.perf_counter() - started
+
     if not archived_turns:
+        if memory_debug_enabled():
+            print(
+                f"[MEMORY ARCHIVE] moved=0 elapsed={elapsed:.6f}s",
+                flush=True,
+            )
         return 0
 
-    promoted_facts = promote_archived_facts(
-        short_term_memory,
-        archived_turns,
-    )
-
-    print(
-        f"[MEMORY FACTS] promoted={json.dumps(promoted_facts, sort_keys=True)}",
-        flush=True,
-    )
-
-    elapsed = time.perf_counter() - started
     active_stats = short_term_memory.get_stats()
     archive_stats = session_archive.get_stats()
 
@@ -154,6 +155,8 @@ def archive_session_memory_if_needed(
         f"moved={len(archived_turns)} "
         f"active_turns={active_stats['turn_count']} "
         f"archived_turns={archive_stats['turn_count']} "
+        f"archive_max={archive_stats['max_turns']} "
+        f"evicted={session_archive.last_evicted_count()} "
         f"elapsed={elapsed:.6f}s",
         flush=True,
     )
@@ -161,19 +164,13 @@ def archive_session_memory_if_needed(
     try:
         context_prime_coordinator.start(
             history=short_term_memory.get_messages(),
-            memory_context=short_term_memory.build_memory_context(),
+            memory_context="",
         )
 
-        print(
-            "[MEMORY PRIME] Background prime started.",
-            flush=True,
-        )
+        print("[MEMORY PRIME] Background prime started.", flush=True)
 
     except RuntimeError as error:
-        print(
-            f"[MEMORY PRIME] Could not start prime: {error}",
-            flush=True,
-        )
+        print(f"[MEMORY PRIME] Could not start prime: {error}", flush=True)
 
     return len(archived_turns)
 
@@ -737,7 +734,7 @@ def main():
     short_term_memory = ShortTermMemory(
         max_turns=None,
     )
-    session_archive = SessionArchive()
+    session_archive = SessionArchive(max_turns=MEMORY_ARCHIVE_TURN_LIMIT)
 
     print(
         "Opening persistent audio stream...",
@@ -819,7 +816,7 @@ def main():
                 response = stream_ollama_response(
                     user_text=user_text,
                     history=short_term_memory.get_messages(),
-                    memory_context=(short_term_memory.build_memory_context()),
+                    memory_context="",
                     retrieved_context=retrieved_context,
                 )
 

@@ -2,8 +2,33 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
+_REMEMBER_FACT_PATTERN = re.compile(
+    r"\b(?:remember that|please remember that|don't forget that|keep in mind that)\s+"
+    r"(.{3,220}?)"
+    r"(?=\s*(?:[.!?;]|$))",
+    re.IGNORECASE,
+)
+
+_MY_GENERIC_FACT_PATTERN = re.compile(
+    r"\bmy\s+"
+    r"([A-Za-z][A-Za-z0-9' -]{1,45}?)\s+"
+    r"(?:is|are)\s+"
+    r"(.{1,160}?)"
+    r"(?=\s*(?:[.!?;]|$))",
+    re.IGNORECASE,
+)
+
+_GENERIC_FACT_SKIP_KEYS = {
+    "name",
+    "favorite band",
+    "favourite band",
+    "favorite type of music",
+    "favorite kind of music",
+    "favorite genre of music",
+}
 _NAME_PATTERN = re.compile(
     r"\bmy name is\s+"
     r"([A-Za-z][A-Za-z' -]{0,40}?)"
@@ -57,18 +82,17 @@ def _clean_fact_value(value: str) -> str:
     ).strip(" \t\r\n,.;:!?")
 
 
+def normalize_fact_text(value: str) -> str:
+    return _clean_fact_value(value)
+
+
 def _title_name(value: str) -> str:
     words = []
 
     for word in _clean_fact_value(value).split():
         if "'" in word:
             pieces = word.split("'")
-            words.append(
-                "'".join(
-                    piece.capitalize()
-                    for piece in pieces
-                )
-            )
+            words.append("'".join(piece.capitalize() for piece in pieces))
         else:
             words.append(word.capitalize())
 
@@ -115,6 +139,53 @@ def _named_band_origin(
     return _clean_fact_value(match.group(1))
 
 
+def _sentence_case(value: str) -> str:
+    clean = normalize_fact_text(value)
+
+    if not clean:
+        return ""
+
+    return clean[0].upper() + clean[1:]
+
+
+def _extract_generic_facts(user_text: str) -> list[dict[str, Any]]:
+    facts: list[dict[str, Any]] = []
+
+    for match in _REMEMBER_FACT_PATTERN.finditer(user_text):
+        fact = _sentence_case(match.group(1))
+
+        if fact:
+            facts.append(
+                {
+                    "fact": fact,
+                    "source_text": user_text,
+                    "confidence": 1.0,
+                }
+            )
+
+    for match in _MY_GENERIC_FACT_PATTERN.finditer(user_text):
+        key = normalize_fact_text(match.group(1)).lower()
+        value = normalize_fact_text(match.group(2))
+
+        if not key or not value:
+            continue
+
+        if key in _GENERIC_FACT_SKIP_KEYS:
+            continue
+
+        fact = f"Anders's {key} is {value}"
+
+        facts.append(
+            {
+                "fact": fact,
+                "source_text": user_text,
+                "confidence": 0.9,
+            }
+        )
+
+    return facts
+
+
 def promote_archived_facts(
     memory: Any,
     archived_turns: list[dict[str, str]],
@@ -125,7 +196,8 @@ def promote_archived_facts(
     a source of session facts. Turns are processed in chronological order, so
     a later user correction replaces an earlier value.
     """
-
+    started = time.perf_counter()
+    generic_fact_candidates: list[dict[str, Any]] = []
     changes: dict[str, Any] = {}
     working_state = _existing_working_state(memory)
 
@@ -152,10 +224,7 @@ def promote_archived_facts(
     if not isinstance(existing_codes, list):
         existing_codes = []
 
-    known_codes = [
-        str(code).upper()
-        for code in existing_codes
-    ]
+    known_codes = [str(code).upper() for code in existing_codes]
     seen_codes = set(known_codes)
 
     for turn in archived_turns:
@@ -172,49 +241,35 @@ def promote_archived_facts(
         if not user_text:
             continue
 
+        generic_fact_candidates.extend(_extract_generic_facts(user_text))
+
         name_match = _NAME_PATTERN.search(user_text)
 
         if name_match:
-            user_name = _title_name(
-                name_match.group(1)
-            )
+            user_name = _title_name(name_match.group(1))
             memory.set_session_fact(
                 "user_name",
                 user_name,
             )
             changes["user_name"] = user_name
 
-        music_match = _FAVORITE_MUSIC_PATTERN.search(
-            user_text
-        )
+        music_match = _FAVORITE_MUSIC_PATTERN.search(user_text)
 
         if music_match:
-            favorite_music = _clean_fact_value(
-                music_match.group(1)
-            )
+            favorite_music = _clean_fact_value(music_match.group(1))
             memory.set_session_fact(
                 "favorite_music",
                 favorite_music,
             )
             changes["favorite_music"] = favorite_music
 
-        band_match = _FAVORITE_BAND_PATTERN.search(
-            user_text
-        )
+        band_match = _FAVORITE_BAND_PATTERN.search(user_text)
 
         if band_match:
-            new_favorite_band = _clean_fact_value(
-                band_match.group(1)
-            )
+            new_favorite_band = _clean_fact_value(band_match.group(1))
 
-            if (
-                favorite_band
-                and new_favorite_band.lower()
-                != favorite_band.lower()
-            ):
-                memory.remove_session_fact(
-                    "favorite_band_origin"
-                )
+            if favorite_band and new_favorite_band.lower() != favorite_band.lower():
+                memory.remove_session_fact("favorite_band_origin")
 
             favorite_band = new_favorite_band
             memory.set_session_fact(
@@ -223,16 +278,12 @@ def promote_archived_facts(
             )
             changes["favorite_band"] = favorite_band
 
-        origin_match = _PRONOUN_BAND_ORIGIN_PATTERN.search(
-            user_text
-        )
+        origin_match = _PRONOUN_BAND_ORIGIN_PATTERN.search(user_text)
 
         origin = None
 
         if origin_match and favorite_band:
-            origin = _clean_fact_value(
-                origin_match.group(1)
-            )
+            origin = _clean_fact_value(origin_match.group(1))
         elif favorite_band:
             origin = _named_band_origin(
                 user_text,
@@ -246,14 +297,10 @@ def promote_archived_facts(
             )
             changes["favorite_band_origin"] = origin
 
-        vehicle_match = _VEHICLE_PATTERN.search(
-            user_text
-        )
+        vehicle_match = _VEHICLE_PATTERN.search(user_text)
 
         if vehicle_match:
-            vehicle = _clean_fact_value(
-                vehicle_match.group(1)
-            )
+            vehicle = _clean_fact_value(vehicle_match.group(1))
             memory.set_session_fact(
                 "vehicle",
                 vehicle,
@@ -270,9 +317,22 @@ def promote_archived_facts(
             known_codes.append(normalized_code)
 
     if known_codes:
-        memory.set_last_dtc_codes(
-            known_codes
-        )
+        memory.set_last_dtc_codes(known_codes)
         changes["last_dtc_codes"] = known_codes
+
+    if generic_fact_candidates:
+        added_generic_facts = memory.add_generic_facts(generic_fact_candidates)
+        changes["generic_facts"] = [fact["fact"] for fact in added_generic_facts]
+
+    elapsed = time.perf_counter() - started
+    print(
+        "[MEMORY EXTRACT] "
+        f"turns={len(archived_turns)} "
+        f"typed_keys={[key for key in changes.keys() if key != 'generic_facts']} "
+        f"generic_candidates={len(generic_fact_candidates)} "
+        f"generic_added={len(changes.get('generic_facts', []))} "
+        f"elapsed={elapsed:.6f}s",
+        flush=True,
+    )
 
     return changes

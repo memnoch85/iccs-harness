@@ -4,6 +4,31 @@ from short_term_memory import ShortTermMemory
 
 
 class TestShortTermMemory(unittest.TestCase):
+    def test_generic_fact_limit_pops_oldest(self):
+        memory = ShortTermMemory(max_turns=None)
+
+        for index in range(30):
+            memory.add_generic_fact(f"Fact number {index}")
+
+        snapshot = memory.snapshot()
+        facts = snapshot["working_state"]["generic_facts"]
+
+        self.assertEqual(len(facts), 24)
+        self.assertEqual(facts[0]["fact"], "Fact number 6")
+        self.assertEqual(facts[-1]["fact"], "Fact number 29")
+
+    def test_related_memory_context_returns_match(self):
+        memory = ShortTermMemory(max_turns=None)
+        memory.add_generic_fact(
+            "Anders's mechanic is named Dave.",
+            source_text="Remember that my mechanic's name is Dave.",
+        )
+
+        context = memory.build_related_memory_context("What is my mechanic's name?")
+
+        self.assertIn("Dave", context)
+        self.assertIn("RELATED SESSION MEMORY", context)
+
     def test_stats_and_snapshot_exclude_removed_consolidation_state(self):
         memory = ShortTermMemory()
         memory.add_turn("hello", "hi")

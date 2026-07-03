@@ -1,9 +1,159 @@
 import json
+import time
 from collections import deque
 from copy import deepcopy
 
+from config import (
+    MEMORY_GENERIC_FACT_LIMIT,
+    MEMORY_RELATED_CONTEXT_MAX_CHARACTERS,
+    MEMORY_RELATED_FACT_LIMIT,
+    MEMORY_RELATED_MIN_SCORE,
+)
+from session_memory_index import (
+    build_fact_record,
+    format_related_memory_context,
+    normalize_fact_text,
+    select_related_facts,
+)
+
 
 class ShortTermMemory:
+    def add_generic_fact(
+        self,
+        fact,
+        *,
+        source_text="",
+        confidence=1.0,
+    ):
+        clean_fact = normalize_fact_text(fact)
+
+        if not clean_fact:
+            return None
+
+        started = time.perf_counter()
+        facts = self._working_state["generic_facts"]
+
+        for existing in facts:
+            if existing.get("fact", "").lower() == clean_fact.lower():
+                existing["source_text"] = normalize_fact_text(source_text)
+                existing["confidence"] = float(confidence)
+                elapsed = time.perf_counter() - started
+                print(
+                    "[MEMORY REMEMBER] "
+                    f"updated id={existing.get('id')} "
+                    f"elapsed={elapsed:.6f}s "
+                    f"fact={clean_fact!r}",
+                    flush=True,
+                )
+                return deepcopy(existing)
+
+        record = build_fact_record(
+            fact_id=self._next_generic_fact_id,
+            fact=clean_fact,
+            source_text=source_text,
+            confidence=confidence,
+        )
+
+        self._next_generic_fact_id += 1
+        facts.append(record)
+
+        evicted = []
+        while len(facts) > MEMORY_GENERIC_FACT_LIMIT:
+            evicted.append(facts.pop(0))
+
+        elapsed = time.perf_counter() - started
+        print(
+            "[MEMORY REMEMBER] "
+            f"added id={record['id']} "
+            f"stored={len(facts)} "
+            f"evicted={len(evicted)} "
+            f"elapsed={elapsed:.6f}s "
+            f"fact={record['fact']!r}",
+            flush=True,
+        )
+
+        return deepcopy(record)
+
+    def add_generic_facts(self, facts):
+        added = []
+
+        for fact in facts:
+            if isinstance(fact, dict):
+                record = self.add_generic_fact(
+                    fact.get("fact", ""),
+                    source_text=fact.get("source_text", ""),
+                    confidence=fact.get("confidence", 1.0),
+                )
+            else:
+                record = self.add_generic_fact(fact)
+
+            if record is not None:
+                added.append(record)
+
+        return added
+
+    def retrieve_related_facts(
+        self,
+        query,
+        *,
+        limit=MEMORY_RELATED_FACT_LIMIT,
+        min_score=MEMORY_RELATED_MIN_SCORE,
+    ):
+        started = time.perf_counter()
+        facts = self._working_state.get("generic_facts", [])
+
+        related = select_related_facts(
+            facts,
+            str(query),
+            limit=limit,
+            min_score=min_score,
+        )
+
+        elapsed = time.perf_counter() - started
+        print(
+            "[MEMORY REMEMBER LOOKUP] "
+            f"query={str(query)!r} "
+            f"stored={len(facts)} "
+            f"hits={len(related)} "
+            f"ids={[fact.get('id') for fact in related]} "
+            f"scores={[fact.get('score') for fact in related]} "
+            f"elapsed={elapsed:.6f}s",
+            flush=True,
+        )
+
+        return related
+
+    def build_related_memory_context(
+        self,
+        query,
+        *,
+        limit=MEMORY_RELATED_FACT_LIMIT,
+        min_score=MEMORY_RELATED_MIN_SCORE,
+        max_characters=MEMORY_RELATED_CONTEXT_MAX_CHARACTERS,
+    ):
+        started = time.perf_counter()
+
+        related = self.retrieve_related_facts(
+            query,
+            limit=limit,
+            min_score=min_score,
+        )
+
+        context = format_related_memory_context(
+            related,
+            max_characters=max_characters,
+        )
+
+        elapsed = time.perf_counter() - started
+        print(
+            "[MEMORY REMEMBER CONTEXT] "
+            f"characters={len(context)} "
+            f"elapsed={elapsed:.6f}s",
+            flush=True,
+        )
+
+        return context
+
     def __init__(self, max_turns=None):
         if max_turns is not None:
             if isinstance(max_turns, bool) or not isinstance(
@@ -18,6 +168,7 @@ class ShortTermMemory:
         self._max_turns = max_turns
         self._turns = deque(maxlen=max_turns)
         self._working_state = self._new_working_state()
+        self._next_generic_fact_id = 1
 
     @staticmethod
     def _new_working_state():
@@ -32,6 +183,7 @@ class ShortTermMemory:
                 "engine_running": None,
             },
             "session_facts": {},
+            "generic_facts": [],
         }
 
     @staticmethod
@@ -230,6 +382,7 @@ class ShortTermMemory:
             "message_count": len(self._turns) * 2,
             "history_characters": history_characters,
             "memory_context_characters": len(memory_context),
+            "generic_fact_count": len(self._working_state.get("generic_facts", [])),
         }
 
     def snapshot(self):
@@ -250,6 +403,8 @@ class ShortTermMemory:
     def clear_session(self):
         self._turns.clear()
         self._working_state = self._new_working_state()
+        self._working_state = self._new_working_state()
+        self._next_generic_fact_id = 1
 
     def extract_oldest_turns(
         self,

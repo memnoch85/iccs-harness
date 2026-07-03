@@ -156,20 +156,43 @@ class TestSessionArchive(unittest.TestCase):
         self.assertEqual(len(hits), 2)
 
     def test_format_retrieved_context(self):
-        context = SessionArchive.format_retrieved_context(
+        archive = SessionArchive(max_turns=24)
+
+        archive.add_turns(
             [
                 {
-                    "archive_id": 1,
-                    "user": "My name is Anders.",
-                    "assistant": "Hello, Anders.",
-                    "score": 4.0,
+                    "user": "We said the force equation is F equals m times a.",
+                    "assistant": "Right, force equals mass times acceleration.",
                 }
             ]
         )
 
-        self.assertIn("Earlier session excerpt 1", context)
-        self.assertIn("User said: My name is Anders.", context)
-        self.assertIn("Nancee replied: Hello, Anders.", context)
+        retrieved = archive.retrieve(
+            "What was the force equation?",
+            limit=1,
+            min_score=1.0,
+            snippet_words=18,
+        )
+
+        context = archive.format_related_context(
+            retrieved,
+            max_characters=650,
+        )
+
+        self.assertIn(
+            "RELATED SESSION MEMORY",
+            context,
+        )
+
+        self.assertIn(
+            "force equation",
+            context.lower(),
+        )
+
+        self.assertIn(
+            "F equals m times a",
+            context,
+        )
 
     def test_archive_trigger_keeps_two_recent_turns(self):
         memory = ShortTermMemory(max_turns=None)

@@ -13,17 +13,6 @@ class TtsRequest:
     emphasized: bool = False
 
 
-def enqueue_tts_text(text):
-    request = build_tts_request(
-        text=text,
-        normal_speed=SPEED,
-        emphasis_speed=TTS_EMPHASIS_SPEED,
-    )
-
-    if request is not None:
-        text_queue.put(request)
-
-
 def build_tts_request(
     text,
     normal_speed,
