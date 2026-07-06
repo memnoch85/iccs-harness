@@ -1,6 +1,7 @@
 import json
 import os
 import queue
+import re
 import subprocess
 import threading
 import time
@@ -14,17 +15,13 @@ import sounddevice as sd
 from config import (
     BLOCKSIZE,
     LLM_MODEL,
-    MEMORY_ACTIVE_CHARACTER_LIMIT,
-    MEMORY_ACTIVE_TURN_LIMIT,
-    MEMORY_ARCHIVE_TURN_LIMIT,
-    MEMORY_KEEP_RECENT_TURNS,
-    MEMORY_PRIME_BRIDGE_TEXT,
-    MEMORY_PRIME_GRACE_SECONDS,
     MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
     MEMORY_RECALL_ENABLED,
     MEMORY_RECALL_LIMIT,
     MEMORY_RECALL_MIN_SCORE,
     MEMORY_RECALL_SNIPPET_WORDS,
+    MEMORY_RECALL_TURN_LIMIT,
+    MEMORY_RECENT_PROMPT_TURNS,
     MODEL_DIR,
     NUM_THREADS,
     PREROLL_MS,
@@ -34,16 +31,12 @@ from config import (
     TTS_SILENCE_SCALE,
     VOICE_ID,
 )
-from context_prime import ContextPrimeCoordinator
 from ollama_runtime import (
     ensure_ollama_model_loaded,
     prime_ollama_context,
     stream_ollama_response,
 )
-from session_archive import (
-    SessionArchive,
-    archive_active_memory_if_needed,
-)
+from session_archive import SessionArchive
 from short_term_memory import ShortTermMemory
 from tts_chunking import (
     extract_tts_chunk,
@@ -57,8 +50,6 @@ stop_event = threading.Event()
 audio_lock = threading.Lock()
 audio_chunks = deque()
 first_audio_enqueued = False
-
-context_prime_coordinator = ContextPrimeCoordinator(prime_ollama_context)
 
 
 NANCEE_ROOT = Path(__file__).resolve().parent.parent
@@ -78,7 +69,321 @@ def memory_debug_enabled():
     )
 
 
-def retrieve_session_context(session_archive, user_text):
+
+_QUESTION_PREFIXES = (
+    "what ",
+    "who ",
+    "where ",
+    "when ",
+    "why ",
+    "how ",
+    "do ",
+    "does ",
+    "did ",
+    "can ",
+    "could ",
+    "would ",
+    "should ",
+    "is ",
+    "are ",
+)
+
+_RECALL_QUERY_PATTERNS = (
+    r"\bdo you remember\b",
+    r"\bcan you remember\b",
+    r"\bdo you recall\b",
+    r"\bcan you recall\b",
+    r"\btell me what my\b",
+    r"\bcan you tell me what my\b",
+    r"\bwhat did i\b",
+    r"\bwhat do i\b",
+    r"\bwhat i\s+(?:drive|own|have)\b",
+    r"\bwhat am i driving\b",
+    r"\bwhat car\s+(?:am i driving|do i drive|do i have)\b",
+    r"\bwhat vehicle\s+(?:am i driving|do i drive|do i have)\b",
+    r"\bwhat kind of\s+(?:car|vehicle)\s+do i\s+(?:drive|own|have)\b",
+    r"\bwhat type of\s+(?:car|vehicle)\s+do i\s+(?:drive|own|have)\b",
+    r"\bcan you tell me what i\s+(?:drive|own|have)\b",
+    r"\bcan you tell me what car\s+(?:i drive|i have|i am driving)\b",
+    r"\bcan you tell me what vehicle\s+(?:i drive|i have|i am driving)\b",
+    r"\bwhat is my\b",
+    r"\bwhat's my\b",
+    r"\bwho is my\b",
+    r"\bwho's my\b",
+    r"\bwhere is .* from\b",
+    r"\bwhere .* is from\b",
+    r"\bwhat .* did i mention\b",
+    r"\bwhat .* did i tell you\b",
+    r"\bi told you .* earlier\b",
+)
+
+_DECLARATIVE_MEMORY_PATTERNS = (
+    r"\bmy\s+[^?.!,]{1,60}\s+(?:is|are|was|were)\b",
+    r"\bthis is\s+[a-z][a-z' -]{1,50}\b",
+    r"\bi\s+(?:am|have|own|drive|like|prefer|use|work|live|need|want)\b",
+    r"\bi[' ]?m\s+[a-z][a-z' -]{1,50}\b",
+    r"\bwe\s+(?:are|have|own|use|work|live|need|want)\b",
+    r"\bour\s+[^?.!,]{1,60}\s+(?:is|are|was|were)\b",
+)
+
+
+def normalize_user_text_for_memory(user_text):
+    lowered = re.sub(
+        r"\s+",
+        " ",
+        str(user_text).strip().lower(),
+    )
+
+    return re.sub(
+        r"^(nancy|nancee)[,\s]+",
+        "",
+        lowered,
+    )
+
+
+def memory_sentence_chunks(user_text):
+    text = normalize_user_text_for_memory(user_text)
+
+    return [
+        chunk.strip()
+        for chunk in re.split(
+            r"(?<=[.!?])\s+|[;\n]+",
+            text,
+        )
+        if chunk.strip()
+    ]
+
+
+def looks_like_recall_request(user_text):
+    lowered = normalize_user_text_for_memory(user_text)
+
+    if not lowered:
+        return False
+
+    return any(
+        re.search(
+            pattern,
+            lowered,
+            flags=re.IGNORECASE,
+        )
+        for pattern in _RECALL_QUERY_PATTERNS
+    )
+
+
+def looks_like_question_text(user_text):
+    lowered = normalize_user_text_for_memory(user_text)
+
+    if not lowered:
+        return False
+
+    if "?" in lowered:
+        return True
+
+    if lowered.startswith(_QUESTION_PREFIXES):
+        return True
+
+    return looks_like_recall_request(lowered)
+
+
+def has_declarative_memory_content(user_text):
+    for sentence in memory_sentence_chunks(user_text):
+        if looks_like_question_text(sentence):
+            continue
+
+        if any(
+            re.search(
+                pattern,
+                sentence,
+                flags=re.IGNORECASE,
+            )
+            for pattern in _DECLARATIVE_MEMORY_PATTERNS
+        ):
+            return True
+
+    return False
+
+
+
+
+_MEMORY_JUNK_PATTERNS = (
+    r"\bhere to test\b",
+    r"\btest your memory\b",
+    r"\btest .* capabilities\b",
+    r"\bplease remember that\b",
+    r"\bremember this\b",
+)
+
+
+def clean_memory_fragment(sentence):
+    cleaned = str(sentence).strip()
+
+    cleaned = re.sub(
+        r"^[,\s.!?]+",
+        "",
+        cleaned,
+    )
+
+    cleaned = re.sub(
+        r"^(hello|hi|hey|okay|ok|so|also|and|great|alright)\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    cleaned = re.sub(
+        r"^(nancy|nancee)[,\s]+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    cleaned = re.sub(
+        r"^you know\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    cleaned = re.sub(
+        r"\s+",
+        " ",
+        cleaned,
+    ).strip()
+
+    cleaned = cleaned.rstrip(".")
+
+    # Convert "this is Anders" into a more useful memory fact.
+    match = re.fullmatch(
+        r"this is\s+([A-Z][A-Za-z' -]{1,50})",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    if match:
+        name = match.group(1).strip()
+        return f"my name is {name}"
+
+    return cleaned
+
+
+
+
+def _clean_extracted_fact(value):
+    cleaned = str(value).strip()
+
+    cleaned = re.sub(
+        r"^(hello|hi|hey|okay|ok|so|also|and|great|alright|nancy|nancee)[,\s]+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    cleaned = re.sub(
+        r"^you know\s+",
+        "",
+        cleaned,
+        flags=re.IGNORECASE,
+    )
+
+    cleaned = re.split(
+        r"\b(?:how are you|what about|can you|could you|would you|should you|please remember|remember that)\b",
+        cleaned,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0]
+
+    cleaned = cleaned.strip(" ,.!?")
+
+    return re.sub(r"\s+", " ", cleaned).strip()
+
+
+def extract_recall_user_text(user_text):
+    text = normalize_user_text_for_memory(user_text)
+    remembered = []
+
+    fact_patterns = (
+        (
+            r"\bmy name is\s+([^?.!,]{1,60})",
+            lambda match: f"the user name is {_clean_extracted_fact(match.group(1))}",
+        ),
+        (
+            r"\bthis is\s+([^?.!,]{1,60})",
+            lambda match: f"the user name is {_clean_extracted_fact(match.group(1))}",
+        ),
+        (
+            r"\bi(?:'m| am)\s+(?!here\b|going\b|trying\b|testing\b|driving\b|heading\b|tired\b|hungry\b)([^?.!,]{1,40})",
+            lambda match: f"the user name is {_clean_extracted_fact(match.group(1))}",
+        ),
+        (
+            r"\bi drive\s+([^?.!,]{1,90})",
+            lambda match: f"the user drives {_clean_extracted_fact(match.group(1))}",
+        ),
+        (
+            r"\bi own\s+([^?.!,]{1,90})",
+            lambda match: f"the user owns {_clean_extracted_fact(match.group(1))}",
+        ),
+        (
+            r"\bmy (?:car|vehicle) is\s+([^?.!,]{1,90})",
+            lambda match: f"the user vehicle is {_clean_extracted_fact(match.group(1))}",
+        ),
+        (
+            r"\bmy favorite band is\s+([^?.!,]{1,90})",
+            lambda match: f"the user favorite band is {_clean_extracted_fact(match.group(1))}",
+        ),
+        (
+            r"\bmy mechanic(?:'s name)? is\s+([^?.!,]{1,60})",
+            lambda match: f"the user mechanic is {_clean_extracted_fact(match.group(1))}",
+        ),
+    )
+
+    for pattern, builder in fact_patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            fact = _clean_extracted_fact(builder(match))
+
+            if fact:
+                remembered.append(fact)
+
+    if not remembered:
+        return ""
+
+    deduped = []
+    seen = set()
+
+    for fact in remembered:
+        key = fact.lower()
+
+        if key not in seen:
+            seen.add(key)
+            deduped.append(fact)
+
+    return ". ".join(deduped).strip() + "."
+
+
+def should_retrieve_recall(user_text):
+    if has_declarative_memory_content(user_text):
+        return False
+
+    return looks_like_recall_request(user_text)
+
+
+def should_store_recall_turn(user_text):
+    if has_declarative_memory_content(user_text):
+        return True
+
+    if looks_like_question_text(user_text):
+        return False
+
+    return False
+
+
+if MEMORY_RECALL_TURN_LIMIT <= 0:
+    raise ValueError("MEMORY_RECALL_TURN_LIMIT must be positive.")
+
+if MEMORY_RECENT_PROMPT_TURNS <= 0:
+    raise ValueError("MEMORY_RECENT_PROMPT_TURNS must be positive.")
+
+
+def retrieve_session_context(recall_memory, user_text):
     started = time.perf_counter()
 
     if not MEMORY_RECALL_ENABLED:
@@ -89,14 +394,14 @@ def retrieve_session_context(session_archive, user_text):
             )
         return ""
 
-    retrieved_turns = session_archive.retrieve(
+    retrieved_turns = recall_memory.retrieve(
         user_text,
         limit=MEMORY_RECALL_LIMIT,
         min_score=MEMORY_RECALL_MIN_SCORE,
         snippet_words=MEMORY_RECALL_SNIPPET_WORDS,
     )
 
-    retrieved_context = session_archive.format_related_context(
+    retrieved_context = recall_memory.format_related_context(
         retrieved_turns,
         max_characters=MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
     )
@@ -126,80 +431,19 @@ def retrieve_session_context(session_archive, user_text):
     return retrieved_context
 
 
-def archive_session_memory_if_needed(short_term_memory, session_archive):
-    started = time.perf_counter()
-
-    archived_turns = archive_active_memory_if_needed(
-        memory=short_term_memory,
-        archive=session_archive,
-        max_active_turns=MEMORY_ACTIVE_TURN_LIMIT,
-        max_active_characters=MEMORY_ACTIVE_CHARACTER_LIMIT,
-        keep_recent_turns=MEMORY_KEEP_RECENT_TURNS,
-    )
-
-    elapsed = time.perf_counter() - started
-
-    if not archived_turns:
-        if memory_debug_enabled():
-            print(
-                f"[MEMORY ARCHIVE] moved=0 elapsed={elapsed:.6f}s",
-                flush=True,
-            )
-        return 0
-
-    active_stats = short_term_memory.get_stats()
-    archive_stats = session_archive.get_stats()
-
-    print(
-        "[MEMORY ARCHIVE] "
-        f"moved={len(archived_turns)} "
-        f"active_turns={active_stats['turn_count']} "
-        f"archived_turns={archive_stats['turn_count']} "
-        f"archive_max={archive_stats['max_turns']} "
-        f"evicted={session_archive.last_evicted_count()} "
-        f"elapsed={elapsed:.6f}s",
-        flush=True,
-    )
-
-    try:
-        context_prime_coordinator.start(
-            history=short_term_memory.get_messages(),
-            memory_context="",
-        )
-
-        print("[MEMORY PRIME] Background prime started.", flush=True)
-
-    except RuntimeError as error:
-        print(f"[MEMORY PRIME] Could not start prime: {error}", flush=True)
-
-    return len(archived_turns)
-
-
-def print_memory_status(
-    short_term_memory,
-    session_archive,
-    phase,
-    archived_now=0,
-):
-    active_stats = short_term_memory.get_stats()
-    archive_stats = session_archive.get_stats()
-
-    active_turns = active_stats["turn_count"]
-    active_characters = active_stats["history_characters"]
-    archived_total = archive_stats["turn_count"]
-
-    prime_state = "running" if context_prime_coordinator.is_running() else "idle"
+def print_memory_status(recent_prompt_memory, recall_memory, phase):
+    recent_stats = recent_prompt_memory.get_stats()
+    recall_stats = recall_memory.get_stats()
 
     print(
         "[MEMORY STATUS] "
         f"phase={phase} "
-        f"active_turns={active_turns} "
-        f"(trigger > {MEMORY_ACTIVE_TURN_LIMIT}) "
-        f"active_characters={active_characters} "
-        f"(trigger > {MEMORY_ACTIVE_CHARACTER_LIMIT}) "
-        f"archived_total={archived_total} "
-        f"archived_now={archived_now} "
-        f"prime={prime_state}",
+        f"recent_turns={recent_stats['turn_count']} "
+        f"recent_max={recent_stats['max_turns']} "
+        f"recent_characters={recent_stats['history_characters']} "
+        f"recall_turns={recall_stats['turn_count']} "
+        f"recall_max={recall_stats['max_turns']} "
+        f"recall_characters={recall_stats['archive_characters']}",
         flush=True,
     )
 
@@ -642,55 +886,6 @@ def wait_for_audio_to_drain():
     time.sleep(0.25)
 
 
-def play_memory_prime_bridge():
-    print(
-        f"\nNancee: {MEMORY_PRIME_BRIDGE_TEXT}",
-        flush=True,
-    )
-
-    enqueue_tts_text(MEMORY_PRIME_BRIDGE_TEXT)
-
-    # Wait for Kokoro to generate the phrase.
-    text_queue.join()
-
-    # Wait for the phrase to finish playing.
-    wait_for_audio_to_drain()
-
-
-def wait_for_context_prime_before_llm_request():
-    if not context_prime_coordinator.is_running():
-        return
-
-    print(
-        "[MEMORY PRIME] User input arrived while prime is running.",
-        flush=True,
-    )
-
-    try:
-        bridge_used = context_prime_coordinator.wait_if_needed(
-            grace_seconds=MEMORY_PRIME_GRACE_SECONDS,
-            bridge_callback=play_memory_prime_bridge,
-        )
-
-    except Exception as error:
-        print(
-            f"[MEMORY PRIME] Prime failed: {error!r}",
-            flush=True,
-        )
-        return
-
-    if bridge_used:
-        print(
-            "[MEMORY PRIME] Bridge played and prime completed.",
-            flush=True,
-        )
-    else:
-        print(
-            "[MEMORY PRIME] Prime completed during grace period.",
-            flush=True,
-        )
-
-
 def main():
     print(
         "Loading Sherpa Kokoro...",
@@ -720,6 +915,11 @@ def main():
             LLM_MODEL,
         )
 
+        prime_ollama_context(
+            history=[],
+            memory_context="",
+        )
+
     except RuntimeError as error:
         print(
             f"[STARTUP ERROR] {error}",
@@ -731,10 +931,13 @@ def main():
 
         raise SystemExit(1)
 
-    short_term_memory = ShortTermMemory(
-        max_turns=None,
+    recent_prompt_memory = ShortTermMemory(
+        max_turns=MEMORY_RECENT_PROMPT_TURNS,
     )
-    session_archive = SessionArchive(max_turns=MEMORY_ARCHIVE_TURN_LIMIT)
+
+    recall_memory = SessionArchive(
+        max_turns=MEMORY_RECALL_TURN_LIMIT,
+    )
 
     print(
         "Opening persistent audio stream...",
@@ -790,21 +993,72 @@ def main():
 
             global_start = time.time()
 
-            retrieved_context = retrieve_session_context(
-                session_archive,
-                user_text,
-            )
+            recall_requested = should_retrieve_recall(user_text)
+
+            if recall_requested:
+                retrieved_context = retrieve_session_context(
+                    recall_memory,
+                    user_text,
+                )
+
+                if not str(retrieved_context).strip():
+                    direct_answer = "I do not remember that yet."
+
+                    print_memory_status(
+                        recent_prompt_memory,
+                        recall_memory,
+                        "before_request",
+                    )
+
+                    print(
+                        f"\nNancee: {direct_answer}",
+                        flush=True,
+                    )
+
+                    enqueue_tts_text(direct_answer)
+
+                    recent_prompt_memory.add_turn(
+                        user_text=user_text,
+                        assistant_text=direct_answer,
+                    )
+
+                    text_queue.join()
+                    wait_for_audio_to_drain()
+
+                    if memory_debug_enabled():
+                        print(
+                            "[MEMORY RECALL MISS] answered_without_llm=true",
+                            flush=True,
+                        )
+
+                    print_memory_status(
+                        recent_prompt_memory,
+                        recall_memory,
+                        "after_turn",
+                    )
+
+                    total = time.time() - global_start
+
+                    print(
+                        f"\n[TURN DONE] total={total:.3f}s",
+                        flush=True,
+                    )
+
+                    continue
+            else:
+                retrieved_context = ""
+
+                if memory_debug_enabled():
+                    print(
+                        "[MEMORY RECALL] skipped=true reason=not_recall_request",
+                        flush=True,
+                    )
 
             print_memory_status(
-                short_term_memory,
-                session_archive,
+                recent_prompt_memory,
+                recall_memory,
                 "before_request",
             )
-
-            # The user may speak and Whisper may transcribe while the
-            # background prime runs. The real Ollama request must wait
-            # until that prime finishes.
-            wait_for_context_prime_before_llm_request()
 
             print(
                 "\nNancee: ",
@@ -815,7 +1069,7 @@ def main():
             try:
                 response = stream_ollama_response(
                     user_text=user_text,
-                    history=short_term_memory.get_messages(),
+                    history=[] if retrieved_context else recent_prompt_memory.get_messages(),
                     memory_context="",
                     retrieved_context=retrieved_context,
                 )
@@ -833,8 +1087,6 @@ def main():
                     flush=True,
                 )
 
-                # Finish any speech that was already queued before
-                # the streamed request failed.
                 text_queue.join()
                 wait_for_audio_to_drain()
                 continue
@@ -846,41 +1098,48 @@ def main():
                 )
                 continue
 
-            short_term_memory.add_turn(
+            # Diagnostic baseline:
+            # keep assistant text from poisoning future prompts/recall.
+            memory_assistant_text = "Okay."
+
+            recall_user_text = extract_recall_user_text(user_text)
+
+            if recall_user_text:
+                recall_memory.add_turn(
+                    user_text=recall_user_text,
+                    assistant_text=memory_assistant_text,
+                )
+
+                if memory_debug_enabled():
+                    print(
+                        f"[MEMORY EXTRACT] stored={recall_user_text!r}",
+                        flush=True,
+                    )
+            elif memory_debug_enabled():
+                print(
+                    "[MEMORY INDEX SKIP] question-like turn was not stored in recall",
+                    flush=True,
+                )
+
+            recent_prompt_memory.add_turn(
                 user_text=user_text,
-                assistant_text=assistant_text,
+                assistant_text=memory_assistant_text,
             )
 
-            # Finish normal TTS before starting the CPU-heavy Ollama
-            # prime. This protects the benchmarked TTS responsiveness.
             text_queue.join()
             wait_for_audio_to_drain()
 
-            # This preserves the existing archive decision and starts
-            # the same post-archive prime in the background.
-            archived_now = archive_session_memory_if_needed(
-                short_term_memory,
-                session_archive,
-            )
-
             print_memory_status(
-                short_term_memory,
-                session_archive,
+                recent_prompt_memory,
+                recall_memory,
                 "after_turn",
-                archived_now,
             )
 
-            if (
-                os.getenv(
-                    "NANCEE_MEMORY_DEBUG",
-                    "false",
-                ).lower()
-                == "true"
-            ):
+            if memory_debug_enabled():
                 print(
                     "[MEMORY DEBUG] "
-                    f"active={short_term_memory.get_stats()} "
-                    f"archive={session_archive.get_stats()}",
+                    f"recent={recent_prompt_memory.get_stats()} "
+                    f"recall={recall_memory.get_stats()}",
                     flush=True,
                 )
 
@@ -890,16 +1149,8 @@ def main():
                 f"\n[TURN DONE] total={total:.3f}s",
                 flush=True,
             )
+
         stop_asr_worker()
-
-        try:
-            context_prime_coordinator.shutdown()
-
-        except Exception as error:
-            print(
-                f"[MEMORY PRIME] Shutdown error: {error!r}",
-                flush=True,
-            )
 
         stop_event.set()
         worker.join(timeout=2.0)

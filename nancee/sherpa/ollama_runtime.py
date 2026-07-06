@@ -29,7 +29,7 @@ from warmup_contract import (
     build_warmup_fingerprint,
 )
 
-# Context primes and real chat requests must not compete.
+# Keep Ollama requests serialized for predictable local-model behavior.
 _OLLAMA_REQUEST_LOCK = threading.Lock()
 
 
@@ -92,6 +92,8 @@ def build_ollama_prefix_messages(
     return messages
 
 
+
+
 def build_ollama_messages(
     *,
     user_text,
@@ -104,18 +106,27 @@ def build_ollama_messages(
         memory_context=memory_context,
     )
 
+    clean_retrieved_context = str(retrieved_context).strip()
+    if clean_retrieved_context:
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "Use the relevant user memory below to answer the user's question. "
+                    "In memory lines, I, me, and my refer to the human user, not Nancee. "
+                    "Do not guess.\n\n"
+                    f"{clean_retrieved_context}"
+                ),
+            }
+        )
+
     messages.append(
         {
             "role": "user",
-            "content": build_retrieved_user_text(
-                user_text=user_text,
-                retrieved_context=retrieved_context,
-            ),
+            "content": str(user_text).strip(),
         }
     )
-
     return messages
-
 
 def is_ollama_model_loaded(
     model_name,
@@ -334,6 +345,7 @@ def ensure_ollama_model_loaded(
     )
 
 
+
 def prime_ollama_context(
     *,
     history=None,
@@ -437,6 +449,7 @@ def prime_ollama_context(
     return result
 
 
+
 def stream_ollama_response(
     user_text,
     history=None,
@@ -454,6 +467,15 @@ def stream_ollama_response(
         "request",
         prefix_messages=messages[:-1],
         full_messages=messages,
+    )
+    print(
+        "[PROMPT SHAPE] "
+        f"messages={len(messages)} "
+        f"prefix_messages={len(messages[:-1])} "
+        f"history_messages={len(history or [])} "
+        f"retrieved_context_chars={len(str(retrieved_context).strip())} "
+        f"memory_context_chars={len(str(memory_context).strip())}",
+        flush=True,
     )
 
     if (

@@ -1,9 +1,0 @@
-Thu  2 Jul 16:51:04 BST 2026
-Linux raspberrypi 6.18.29+rpt-rpi-2712 #1 SMP PREEMPT Debian 1:6.18.29-1+rpt1 (2026-05-12) aarch64 GNU/Linux
-Python 3.13.5
-ollama version is 0.17.7
-frequency(0)=2400033792
-temp=44.4'C
-throttled=0x0
-NAME              ID              SIZE      PROCESSOR    CONTEXT    UNTIL   
-phi4-mini:3.8b    78fad5d182a7    3.0 GB    100% CPU     4096       Forever    

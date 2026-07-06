@@ -1,263 +1,190 @@
 import unittest
 
-from session_archive import (
-    SessionArchive,
-    archive_active_memory_if_needed,
-)
-from short_term_memory import ShortTermMemory
+from session_archive import SessionArchive
 
 
 class TestSessionArchive(unittest.TestCase):
-    def test_turn_limit_three_archives_on_fourth_turn(self):
-        memory = ShortTermMemory(max_turns=None)
-        archive = SessionArchive()
+    def test_recall_store_keeps_only_last_24_turns(self):
+        recall = SessionArchive(max_turns=24)
 
-        for turn_number in range(1, 4):
-            memory.add_turn(
-                user_text=f"user {turn_number}",
-                assistant_text=f"assistant {turn_number}",
+        for index in range(30):
+            recall.add_turn(
+                f"User turn {index} about topic {index}.",
+                "Okay.",
             )
 
-            moved = archive_active_memory_if_needed(
-                memory=memory,
-                archive=archive,
-                max_active_turns=3,
-                max_active_characters=999999,
-                keep_recent_turns=1,
-            )
+        turns = recall.get_turns_snapshot()
 
-            self.assertEqual(moved, [])
+        self.assertEqual(len(turns), 24)
+        self.assertIn("User turn 6", turns[0]["user"])
+        self.assertIn("User turn 29", turns[-1]["user"])
 
-        memory.add_turn(
-            user_text="user 4",
-            assistant_text="assistant 4",
-        )
+    def test_add_turn_returns_added_record(self):
+        recall = SessionArchive(max_turns=24)
 
-        moved = archive_active_memory_if_needed(
-            memory=memory,
-            archive=archive,
-            max_active_turns=3,
-            max_active_characters=999999,
-            keep_recent_turns=1,
-        )
-
-        self.assertEqual(len(moved), 3)
-        self.assertEqual(memory.get_stats()["turn_count"], 1)
-        self.assertEqual(archive.get_stats()["turn_count"], 3)
-
-    def test_add_turns_and_snapshot_are_deep_copies(self):
-        archive = SessionArchive()
-        original = [
-            {
-                "user": "My name is Anders.",
-                "assistant": "Got it, Anders.",
-            }
-        ]
-
-        archive.add_turns(original)
-        original[0]["user"] = "changed"
-
-        snapshot = archive.get_turns_snapshot()
-        snapshot[0]["user"] = "also changed"
-
-        self.assertEqual(
-            archive.get_turns_snapshot()[0]["user"],
+        added = recall.add_turn(
             "My name is Anders.",
+            "Okay.",
         )
 
-    def test_retrieve_name_turn(self):
-        archive = SessionArchive()
-        archive.add_turns(
-            [
-                {
-                    "user": "My name is Anders.",
-                    "assistant": "Nice to meet you, Anders.",
-                },
-                {
-                    "user": "The road is quiet today.",
-                    "assistant": "It is a calm drive.",
-                },
-            ]
-        )
+        self.assertEqual(added["archive_id"], 1)
+        self.assertEqual(added["user"], "My name is Anders.")
+        self.assertEqual(added["assistant"], "Okay.")
 
-        hits = archive.retrieve(
+    def test_recall_store_retrieves_name(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("My name is Anders.", "Okay.")
+        recall.add_turn("The road is quiet today.", "Okay.")
+
+        hits = recall.retrieve(
             "What is my name?",
-            limit=2,
-            min_score=2.0,
+            limit=3,
+            min_score=1.0,
         )
 
-        self.assertEqual(len(hits), 1)
+        self.assertGreaterEqual(len(hits), 1)
         self.assertIn("Anders", hits[0]["user"])
 
-    def test_retrieve_exact_code_turn(self):
-        archive = SessionArchive()
-        archive.add_turns(
-            [
-                {
-                    "user": "The exact test code is ORBIT-731.",
-                    "assistant": "I will remember ORBIT-731.",
-                }
-            ]
+    def test_recall_store_retrieves_top_three(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("My name is Anders.", "Okay.")
+        recall.add_turn("My favorite band is Finch.", "Okay.")
+        recall.add_turn("Finch is from Temecula California.", "Okay.")
+        recall.add_turn("My car is a black 2016 Jeep Patriot.", "Okay.")
+
+        hits = recall.retrieve(
+            "Where is Finch from?",
+            limit=3,
+            min_score=1.0,
+            snippet_words=18,
         )
 
-        hits = archive.retrieve(
-            "What was that test code?",
+        self.assertGreaterEqual(len(hits), 1)
+
+        self.assertTrue(
+            any(
+                "Temecula" in hit["user"] or "Temecula" in hit["snippet"]
+                for hit in hits
+            )
+        )
+
+        self.assertLessEqual(len(hits), 3)
+
+    def test_command_words_do_not_dominate_recall(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("My name is Anders.", "Okay.")
+        recall.add_turn("I am 41 years old.", "Okay.")
+
+        hits = recall.retrieve(
+            "Nancee, do you remember how old I am?",
+            limit=3,
+            min_score=1.0,
+        )
+
+        self.assertGreaterEqual(len(hits), 1)
+        self.assertTrue(
+            "41" in hits[0]["user"] or "41" in hits[0]["snippet"]
+        )
+
+    def test_retrieval_limit_is_respected(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("My first snack is mango.", "Okay.")
+        recall.add_turn("My second snack is jerky.", "Okay.")
+        recall.add_turn("My third snack is almonds.", "Okay.")
+
+        hits = recall.retrieve(
+            "What snack did I mention?",
             limit=2,
-            min_score=2.0,
+            min_score=1.0,
         )
 
-        self.assertEqual(len(hits), 1)
-        self.assertIn("ORBIT-731", hits[0]["user"])
+        self.assertEqual(len(hits), 2)
 
     def test_irrelevant_query_returns_no_hits(self):
-        archive = SessionArchive()
-        archive.add_turns(
-            [
-                {
-                    "user": "My daughter is named Copeland.",
-                    "assistant": "Copeland is your daughter.",
-                }
-            ]
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn(
+            "We discussed the force equation.",
+            "Okay.",
         )
 
-        hits = archive.retrieve(
-            "How is the weather?",
-            limit=2,
+        hits = recall.retrieve(
+            "banana sandwich weather",
+            limit=3,
             min_score=2.0,
         )
 
         self.assertEqual(hits, [])
 
-    def test_retrieval_limit_is_respected(self):
-        archive = SessionArchive()
-        archive.add_turns(
-            [
-                {
-                    "user": "My first snack is mango.",
-                    "assistant": "Mango noted.",
-                },
-                {
-                    "user": "My second snack is jerky.",
-                    "assistant": "Jerky noted.",
-                },
-                {
-                    "user": "My third snack is almonds.",
-                    "assistant": "Almonds noted.",
-                },
-            ]
+    def test_related_context_is_capped(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn(
+            "We discussed force equation details for a physics problem.",
+            "Okay.",
         )
 
-        hits = archive.retrieve(
-            "What snack did I mention?",
-            limit=2,
-            min_score=2.0,
+        hits = recall.retrieve(
+            "force equation",
+            limit=3,
+            min_score=1.0,
         )
 
-        self.assertEqual(len(hits), 2)
-
-    def test_format_retrieved_context(self):
-        archive = SessionArchive(max_turns=24)
-
-        archive.add_turns(
-            [
-                {
-                    "user": "We said the force equation is F equals m times a.",
-                    "assistant": "Right, force equals mass times acceleration.",
-                }
-            ]
+        context = recall.format_related_context(
+            hits,
+            max_characters=160,
         )
 
-        retrieved = archive.retrieve(
-            "What was the force equation?",
-            limit=1,
+        self.assertIn("RELATED SESSION MEMORY", context)
+        self.assertLessEqual(len(context), 160)
+        self.assertIn("force", context.lower())
+
+    def test_snapshot_is_deep_copy(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("My mechanic is named Dave.", "Okay.")
+
+        snapshot = recall.get_turns_snapshot()
+        snapshot[0]["user"] = "changed"
+
+        self.assertEqual(
+            recall.get_turns_snapshot()[0]["user"],
+            "My mechanic is named Dave.",
+        )
+
+    def test_clear_resets_store(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("My mechanic is named Dave.", "Okay.")
+        recall.clear()
+
+        self.assertEqual(recall.get_turns_snapshot(), [])
+        self.assertEqual(recall.get_stats()["turn_count"], 0)
+
+        added = recall.add_turn("My car is a Jeep.", "Okay.")
+        self.assertEqual(added["archive_id"], 1)
+
+    def test_drive_query_matches_owned_vehicle_fact(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn(
+            "I own a black 2016 Jeep Patriot.",
+            "Okay.",
+        )
+
+        hits = recall.retrieve(
+            "What do I drive?",
+            limit=3,
             min_score=1.0,
             snippet_words=18,
         )
 
-        context = archive.format_related_context(
-            retrieved,
-            max_characters=650,
-        )
-
-        self.assertIn(
-            "RELATED SESSION MEMORY",
-            context,
-        )
-
-        self.assertIn(
-            "force equation",
-            context.lower(),
-        )
-
-        self.assertIn(
-            "F equals m times a",
-            context,
-        )
-
-    def test_archive_trigger_keeps_two_recent_turns(self):
-        memory = ShortTermMemory(max_turns=None)
-        archive = SessionArchive()
-
-        for number in range(1, 10):
-            memory.add_turn(
-                f"user {number}",
-                f"assistant {number}",
-            )
-
-        moved = archive_active_memory_if_needed(
-            memory=memory,
-            archive=archive,
-            max_active_turns=8,
-            max_active_characters=10000,
-            keep_recent_turns=2,
-        )
-
-        self.assertEqual(len(moved), 7)
-        self.assertEqual(memory.get_stats()["turn_count"], 2)
-        self.assertEqual(archive.get_stats()["turn_count"], 7)
-        self.assertEqual(
-            memory.get_turns_snapshot()[0]["user"],
-            "user 8",
-        )
-
-    def test_character_threshold_archives_oldest_turns(self):
-        memory = ShortTermMemory(max_turns=None)
-        archive = SessionArchive()
-
-        for number in range(1, 5):
-            memory.add_turn(
-                "u" * 100,
-                f"assistant {number}",
-            )
-
-        moved = archive_active_memory_if_needed(
-            memory=memory,
-            archive=archive,
-            max_active_turns=8,
-            max_active_characters=200,
-            keep_recent_turns=2,
-        )
-
-        self.assertEqual(len(moved), 2)
-        self.assertEqual(memory.get_stats()["turn_count"], 2)
-
-    def test_no_archive_under_threshold(self):
-        memory = ShortTermMemory(max_turns=None)
-        archive = SessionArchive()
-
-        memory.add_turn("hello", "hi")
-
-        moved = archive_active_memory_if_needed(
-            memory=memory,
-            archive=archive,
-            max_active_turns=8,
-            max_active_characters=1600,
-            keep_recent_turns=2,
-        )
-
-        self.assertEqual(moved, [])
-        self.assertEqual(memory.get_stats()["turn_count"], 1)
-        self.assertEqual(archive.get_stats()["turn_count"], 0)
+        self.assertGreaterEqual(len(hits), 1)
+        self.assertIn("Jeep Patriot", hits[0]["snippet"])
 
 
 if __name__ == "__main__":

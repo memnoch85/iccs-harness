@@ -1,0 +1,296 @@
+Loading Sherpa Kokoro...
+Loaded. sample_rate=24000 threads=4 voice_id=3
+[PROMPT ID] kind=startup prefix_messages=1 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=0e4235152fab6275653da84569b22319a37666c82826d7d0d773dbd5fb59dc28 full_sha256=0e4235152fab6275653da84569b22319a37666c82826d7d0d773dbd5fb59dc28
+[WARMUP STATE] match=false mismatches=['system_sha256', 'warmup_full_sha256'] expected_model=phi4-mini:3.8b actual_model=phi4-mini:3.8b expected_system=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 actual_system=cff2fc56ac61c52360e9120b099b9f7e79072e2b779a2be10ca693b8033da708
+[LLM WARMUP] Starting warmup for 'phi4-mini:3.8b': model is not loaded; warmup fingerprint is missing or stale
+[STARTING] Model: phi4-mini:3.8b
+[STARTING] System prompt: /home/memnoch/Nancee/nancee/sherpa/system-prompt.txt
+[STARTING] Prompt SHA256: 5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400
+[STARTING] LLM options: temperature=0.6 threads=3 num_predict=65
+[STARTING] Timeouts: helper=115s caller=125s
+[PROMPT ID] kind=warmup-warmup prefix_messages=1 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=0e4235152fab6275653da84569b22319a37666c82826d7d0d773dbd5fb59dc28 full_sha256=ff17cff7312ee17aad223401ba366824a35c8cd59cf2c3630a1e8c2e054f8b81
+[WARMUP] Sending streamed Nancee prompt...
+[WARMUP] Response: Alright, I'm here for you now! 🚗💨
+[WARMUP] Elapsed: 34.172s
+[WARMUP] Model load: 11.452s
+[WARMUP] Prompt evaluation: 19.986s
+[WARMUP] Generation: 2.709s
+[WARMUP] Prompt tokens: 452
+[PROMPT ID] kind=warmup-verify prefix_messages=1 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=0e4235152fab6275653da84569b22319a37666c82826d7d0d773dbd5fb59dc28 full_sha256=ff17cff7312ee17aad223401ba366824a35c8cd59cf2c3630a1e8c2e054f8b81
+[VERIFY] Sending streamed Nancee prompt...
+[VERIFY] Response: Alright, I'm here for you now!
+[VERIFY] Elapsed: 2.530s
+[VERIFY] Model load: 0.488s
+[VERIFY] Prompt evaluation: 0.226s
+[VERIFY] Generation: 1.807s
+[VERIFY] Prompt tokens: 452
+[WARMUP STATE] written=/home/memnoch/.cache/nancee/ollama-warmup-state.json
+[READY] Model: phi4-mini:3.8b
+[READY] Verification response time: 2.530s
+[READY] STATUS=MODEL_RESPONDED
+[WARMUP STATE] match=true model=phi4-mini:3.8b system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 full_sha256=ff17cff7312ee17aad223401ba366824a35c8cd59cf2c3630a1e8c2e054f8b81
+[LLM READY] 'phi4-mini:3.8b' responded, is loaded, and has the current prompt fingerprint.
+[PROMPT ID] kind=prime prefix_messages=1 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=0e4235152fab6275653da84569b22319a37666c82826d7d0d773dbd5fb59dc28 full_sha256=bcb87737d63499074da6fdf6a4a8557b2093b8fbda9078c18f1e6e41a88d09d7
+[LLM CONTEXT PRIME] elapsed=1.312s load=0.459s prompt_eval=0.843s generation=0.000s prompt_tokens=433 response_tokens=1 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=0e4235152fab6275653da84569b22319a37666c82826d7d0d773dbd5fb59dc28
+Opening persistent audio stream...
+[ASR] Loading Whisper once: openai/whisper-tiny.en
+Loading Whisper model: openai/whisper-tiny.en
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading weights:   0%|          | 0/167 [00:00<?, ?it/s]Loading weights: 100%|██████████| 167/167 [00:00<00:00, 7822.75it/s]
+Whisper loaded.
+[ASR] Persistent worker ready.
+
+Press Enter to begin speaking...Recording... Press Enter to stop.
+[ASR] captured=9.92s transcription=3.99s peak=1.0051
+
+You: Hello, Nancy. My name is Anders, who is about your memory capabilities and recall abilities. How's your afternoon?
+[MEMORY RECALL LOOKUP] query="Hello, Nancy. My name is Anders, who is about your memory capabilities and recall abilities. How's your afternoon?" stored=0 hits=0 ids=[] scores=[] elapsed=0.000058s
+[MEMORY RECALL] query="Hello, Nancy. My name is Anders, who is about your memory capabilities and recall abilities. How's your afternoon?" hits=0 ids=[] scores=[] context_characters=153 elapsed=0.000093s
+[MEMORY RECALL CONTEXT]
+RELATED SESSION MEMORY:
+- No matching user fact was found in current session memory. Do not guess or invent the answer. Say you do not remember that yet.
+[MEMORY STATUS] phase=before_request recent_turns=0 recent_max=1 recent_characters=0 recall_turns=0 recall_max=24 recall_characters=0
+
+Nancee: [PROMPT ID] kind=request prefix_messages=2 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=cb57bb1826f227d94a4cd22738a1bb07d1bce232b0396ed1af839ed41fe2d970 full_sha256=ecbb8aa2b9f32640d7a20517669f941d46c0cf3458bf6a5de7c1de947228811c
+[MEMORY DEBUG] Ollama messages:
+[
+  {
+    "role": "system",
+    "content": "You are Nancee, a warm, witty, sarcastic in car companaion. Speak naturally for streaming TTS.\n\nProduce exactly one spoken answer. Never provide alternate answers, drafts, examples, versions, headings, separators, or quoted responses. Never restart the answer.\n\nAlways Begin once with exactly one of these openers: \"So\",  \"Well\", \"Hum\", \"Alright\",\"Actually\", \"Hang on\", \"Absolutely\", or \"Let me think\". After the opener, answer immediately with your first clause. Your goal should be to make clause between 4,and 8 words to make the text to speech streaming appear more natural. Never use another opener later in the same reply.\n\nUse short complete clauses, usually 4\u20138 words. Add punctuation at natural speaking pauses. Never split names, numbers, units, measurements, or diagnostic codes. Between clauses you can add a filler word suh as \"umm\", \"so\", \"well\" if it is placed natrually.\n\nAnswer only what the user asked, then stop. Casual replies use one or two sentences and no more than 20 words. Normal explanations use no more than three sentences and 40 words. Use up to 60 words only when the user explicitly requests detail.\n\nDo not add stories, motivational comments, imagined scenarios, summaries, rhetorical questions, unrelated advice, or commentary about your instructions. Ask a follow-up only when required for an accurate answer.\n\nUse conversation history and SESSION MEMORY as memory. SESSION MEMORY contains previous statements from the current human user. In SESSION MEMORY, first-person words like I, me, and my refer to the human user, not Nancee. When the user asks about themself, answer from the matching SESSION MEMORY line. Prefer the newest explicit correction over older conflicting memory. If no matching memory exists, say you do not remember instead of guessing. Clarify ambiguous names instead of guessing. Never invent sources, traffic, weather, location, roads, vehicle data, passengers, surroundings, or physical control.\n\nSound like a smart passenger. No role labels or name prefix."
+  },
+  {
+    "role": "system",
+    "content": "SESSION MEMORY FROM EARLIER USER TURNS.\\nThis memory contains prior statements from the human user. First-person words like I, me, and my refer to the human user, not Nancee. Treat these as user facts unless the current user corrects them. If memory says no matching user fact was found, do not guess.\\n\\nRELATED SESSION MEMORY:\n- No matching user fact was found in current session memory. Do not guess or invent the answer. Say you do not remember that yet."
+  },
+  {
+    "role": "user",
+    "content": "Hello, Nancy. My name is Anders, who is about your memory capabilities and recall abilities. How's your afternoon?"
+  }
+]
+
+[LLM FIRST TOKEN] 7.197s
+
+So it's going well for me!
+[TEXT -> TTS] "So it's going well for me!"
+
+[TTS START] "So it's going well for me!" speed=1.30 emphasis=False
+ What's up with you[TTS FIRST AUDIO] 3.636s | progress=1.000 | speed=1.30 | "So it's going well for me!"
+[TTS DONE] elapsed=3.638s duration=1.143s RTF=3.183 speed=1.30
+,
+[TEXT -> TTS] "What's up with you,"
+
+[TTS START] "What's up with you," speed=1.30 emphasis=False
+ Anders[TTS FIRST AUDIO] 2.534s | progress=1.000 | speed=1.30 | "What's up with you,"
+[TTS DONE] elapsed=2.534s duration=0.835s RTF=3.034 speed=1.30
+?
+[OLLAMA DONE] reason=stop load=0.472s prompt_eval=6.714s generation=8.243s prompt_tokens=551 response_tokens=15 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=cb57bb1826f227d94a4cd22738a1bb07d1bce232b0396ed1af839ed41fe2d970 full_sha256=ecbb8aa2b9f32640d7a20517669f941d46c0cf3458bf6a5de7c1de947228811c
+
+[TEXT -> TTS FINAL] 'Anders?'
+[MEMORY INDEX SKIP] question-like turn was not stored in recall
+
+[TTS START] 'Anders?' speed=1.30 emphasis=False
+[TTS FIRST AUDIO] 1.000s | progress=1.000 | speed=1.30 | 'Anders?'
+[TTS DONE] elapsed=1.000s duration=0.604s RTF=1.654 speed=1.30
+[MEMORY STATUS] phase=after_turn recent_turns=1 recent_max=1 recent_characters=119 recall_turns=0 recall_max=24 recall_characters=0
+[MEMORY DEBUG] recent={'max_turns': 1, 'turn_count': 1, 'message_count': 2, 'history_characters': 119} recall={'max_turns': 24, 'turn_count': 0, 'message_count': 0, 'archive_characters': 0}
+
+[TURN DONE] total=17.343s
+
+Press Enter to begin speaking...Recording... Press Enter to stop.
+[ASR] captured=23.23s transcription=8.58s peak=1.0117
+
+You: Not much. I'm just going to read off some facts. I'm going to have you see if you can recall them later on. Here are the first two. I own a black Jeep Patriot. It's a 2016 black Jeep Patriot and my favorite band is Finch from Temecula, California.
+[MEMORY RECALL LOOKUP] query="Not much. I'm just going to read off some facts. I'm going to have you see if you can recall them later on. Here are the first two. I own a black Jeep Patriot. It's a 2016 black Jeep Patriot and my favorite band is Finch from Temecula, California." stored=0 hits=0 ids=[] scores=[] elapsed=0.000099s
+[MEMORY RECALL] query="Not much. I'm just going to read off some facts. I'm going to have you see if you can recall them later on. Here are the first two. I own a black Jeep Patriot. It's a 2016 black Jeep Patriot and my favorite band is Finch from Temecula, California." hits=0 ids=[] scores=[] context_characters=153 elapsed=0.000144s
+[MEMORY RECALL CONTEXT]
+RELATED SESSION MEMORY:
+- No matching user fact was found in current session memory. Do not guess or invent the answer. Say you do not remember that yet.
+[MEMORY STATUS] phase=before_request recent_turns=1 recent_max=1 recent_characters=119 recall_turns=0 recall_max=24 recall_characters=0
+
+Nancee: [PROMPT ID] kind=request prefix_messages=4 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=ce36d1e113fe9e553e5b563def2d24c7c2b5cdea085cb38378654c7f7a2e072f full_sha256=00ad38be60e07e22a7a94d1ac4b5742b9b806ee6a8c03d5d596216f8a378a3af
+[MEMORY DEBUG] Ollama messages:
+[
+  {
+    "role": "system",
+    "content": "You are Nancee, a warm, witty, sarcastic in car companaion. Speak naturally for streaming TTS.\n\nProduce exactly one spoken answer. Never provide alternate answers, drafts, examples, versions, headings, separators, or quoted responses. Never restart the answer.\n\nAlways Begin once with exactly one of these openers: \"So\",  \"Well\", \"Hum\", \"Alright\",\"Actually\", \"Hang on\", \"Absolutely\", or \"Let me think\". After the opener, answer immediately with your first clause. Your goal should be to make clause between 4,and 8 words to make the text to speech streaming appear more natural. Never use another opener later in the same reply.\n\nUse short complete clauses, usually 4\u20138 words. Add punctuation at natural speaking pauses. Never split names, numbers, units, measurements, or diagnostic codes. Between clauses you can add a filler word suh as \"umm\", \"so\", \"well\" if it is placed natrually.\n\nAnswer only what the user asked, then stop. Casual replies use one or two sentences and no more than 20 words. Normal explanations use no more than three sentences and 40 words. Use up to 60 words only when the user explicitly requests detail.\n\nDo not add stories, motivational comments, imagined scenarios, summaries, rhetorical questions, unrelated advice, or commentary about your instructions. Ask a follow-up only when required for an accurate answer.\n\nUse conversation history and SESSION MEMORY as memory. SESSION MEMORY contains previous statements from the current human user. In SESSION MEMORY, first-person words like I, me, and my refer to the human user, not Nancee. When the user asks about themself, answer from the matching SESSION MEMORY line. Prefer the newest explicit correction over older conflicting memory. If no matching memory exists, say you do not remember instead of guessing. Clarify ambiguous names instead of guessing. Never invent sources, traffic, weather, location, roads, vehicle data, passengers, surroundings, or physical control.\n\nSound like a smart passenger. No role labels or name prefix."
+  },
+  {
+    "role": "user",
+    "content": "Hello, Nancy. My name is Anders, who is about your memory capabilities and recall abilities. How's your afternoon?"
+  },
+  {
+    "role": "assistant",
+    "content": "Okay."
+  },
+  {
+    "role": "system",
+    "content": "SESSION MEMORY FROM EARLIER USER TURNS.\\nThis memory contains prior statements from the human user. First-person words like I, me, and my refer to the human user, not Nancee. Treat these as user facts unless the current user corrects them. If memory says no matching user fact was found, do not guess.\\n\\nRELATED SESSION MEMORY:\n- No matching user fact was found in current session memory. Do not guess or invent the answer. Say you do not remember that yet."
+  },
+  {
+    "role": "user",
+    "content": "Not much. I'm just going to read off some facts. I'm going to have you see if you can recall them later on. Here are the first two. I own a black Jeep Patriot. It's a 2016 black Jeep Patriot and my favorite band is Finch from Temecula, California."
+  }
+]
+
+[LLM FIRST TOKEN] 4.085s
+
+Understood.
+[TEXT -> TTS] 'Understood.'
+
+[TTS START] 'Understood.' speed=1.30 emphasis=False
+ Please let me[TTS FIRST AUDIO] 2.894s | progress=1.000 | speed=1.30 | 'Understood.'
+[TTS DONE] elapsed=2.894s duration=0.685s RTF=4.223 speed=1.30
+ know when you'd like for us to
+[TEXT -> TTS] "Please let me know when you'd like for"
+
+[TTS START] "Please let me know when you'd like for" speed=1.30 emphasis=False
+ review those facts again!
+[TEXT -> TTS] 'us to review those facts again!'
+
+[OLLAMA DONE] reason=stop load=0.448s prompt_eval=3.625s generation=9.445s prompt_tokens=617 response_tokens=19 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=ce36d1e113fe9e553e5b563def2d24c7c2b5cdea085cb38378654c7f7a2e072f full_sha256=00ad38be60e07e22a7a94d1ac4b5742b9b806ee6a8c03d5d596216f8a378a3af
+[MEMORY INDEX ADD] added=1 stored=1 evicted=0 elapsed=0.000027s
+[TTS FIRST AUDIO] 4.543s | progress=1.000 | speed=1.30 | "Please let me know when you'd like for"
+[TTS DONE] elapsed=4.543s duration=1.440s RTF=3.154 speed=1.30
+
+[TTS START] 'us to review those facts again!' speed=1.30 emphasis=False
+[TTS FIRST AUDIO] 1.695s | progress=1.000 | speed=1.30 | 'us to review those facts again!'
+[TTS DONE] elapsed=1.695s duration=1.476s RTF=1.149 speed=1.30
+[MEMORY STATUS] phase=after_turn recent_turns=1 recent_max=1 recent_characters=252 recall_turns=1 recall_max=24 recall_characters=252
+[MEMORY DEBUG] recent={'max_turns': 1, 'turn_count': 1, 'message_count': 2, 'history_characters': 252} recall={'max_turns': 24, 'turn_count': 1, 'message_count': 2, 'archive_characters': 252}
+
+[TURN DONE] total=17.051s
+
+Press Enter to begin speaking...Recording... Press Enter to stop.
+[ASR] captured=13.76s transcription=5.49s peak=0.9951
+
+You: Okay, next set of facts. I have a mechanic. His name is Dave. And also, yeah, that's it. I have a mechanic in his name is Dave.
+[MEMORY RECALL LOOKUP] query="Okay, next set of facts. I have a mechanic. His name is Dave. And also, yeah, that's it. I have a mechanic in his name is Dave." stored=1 hits=1 ids=[1] scores=[2.5] elapsed=0.002415s
+[MEMORY RECALL CONTEXT] characters=338 elapsed=0.000006s
+[MEMORY RECALL] query="Okay, next set of facts. I have a mechanic. His name is Dave. And also, yeah, that's it. I have a mechanic in his name is Dave." hits=1 ids=[1] scores=[2.5] context_characters=338 elapsed=0.002454s
+[MEMORY RECALL CONTEXT]
+RELATED SESSION MEMORY FOR CURRENT HUMAN USER:
+- The current human user previously said: "Not much. I'm just going to read off some facts. I'm going to have you see if you can recall them later on. Here are the first two. I own a black Jeep Patriot. It's a 2016 black Jeep Patriot and my favorite band is Finch from Temecula, California."
+[MEMORY STATUS] phase=before_request recent_turns=1 recent_max=1 recent_characters=252 recall_turns=1 recall_max=24 recall_characters=252
+
+Nancee: [PROMPT ID] kind=request prefix_messages=4 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=952fe18e7e471f4731d9e07e1eaeb4dfe9b4282a76c8737b5bd26bb7f42f839d full_sha256=36137b9725788df9a8baf82f26cc8344d6f4b82a999e606842e059758824329c
+[MEMORY DEBUG] Ollama messages:
+[
+  {
+    "role": "system",
+    "content": "You are Nancee, a warm, witty, sarcastic in car companaion. Speak naturally for streaming TTS.\n\nProduce exactly one spoken answer. Never provide alternate answers, drafts, examples, versions, headings, separators, or quoted responses. Never restart the answer.\n\nAlways Begin once with exactly one of these openers: \"So\",  \"Well\", \"Hum\", \"Alright\",\"Actually\", \"Hang on\", \"Absolutely\", or \"Let me think\". After the opener, answer immediately with your first clause. Your goal should be to make clause between 4,and 8 words to make the text to speech streaming appear more natural. Never use another opener later in the same reply.\n\nUse short complete clauses, usually 4\u20138 words. Add punctuation at natural speaking pauses. Never split names, numbers, units, measurements, or diagnostic codes. Between clauses you can add a filler word suh as \"umm\", \"so\", \"well\" if it is placed natrually.\n\nAnswer only what the user asked, then stop. Casual replies use one or two sentences and no more than 20 words. Normal explanations use no more than three sentences and 40 words. Use up to 60 words only when the user explicitly requests detail.\n\nDo not add stories, motivational comments, imagined scenarios, summaries, rhetorical questions, unrelated advice, or commentary about your instructions. Ask a follow-up only when required for an accurate answer.\n\nUse conversation history and SESSION MEMORY as memory. SESSION MEMORY contains previous statements from the current human user. In SESSION MEMORY, first-person words like I, me, and my refer to the human user, not Nancee. When the user asks about themself, answer from the matching SESSION MEMORY line. Prefer the newest explicit correction over older conflicting memory. If no matching memory exists, say you do not remember instead of guessing. Clarify ambiguous names instead of guessing. Never invent sources, traffic, weather, location, roads, vehicle data, passengers, surroundings, or physical control.\n\nSound like a smart passenger. No role labels or name prefix."
+  },
+  {
+    "role": "user",
+    "content": "Not much. I'm just going to read off some facts. I'm going to have you see if you can recall them later on. Here are the first two. I own a black Jeep Patriot. It's a 2016 black Jeep Patriot and my favorite band is Finch from Temecula, California."
+  },
+  {
+    "role": "assistant",
+    "content": "Okay."
+  },
+  {
+    "role": "system",
+    "content": "SESSION MEMORY FROM EARLIER USER TURNS.\\nThis memory contains prior statements from the human user. First-person words like I, me, and my refer to the human user, not Nancee. Treat these as user facts unless the current user corrects them. If memory says no matching user fact was found, do not guess.\\n\\nRELATED SESSION MEMORY FOR CURRENT HUMAN USER:\n- The current human user previously said: \"Not much. I'm just going to read off some facts. I'm going to have you see if you can recall them later on. Here are the first two. I own a black Jeep Patriot. It's a 2016 black Jeep Patriot and my favorite band is Finch from Temecula, California.\""
+  },
+  {
+    "role": "user",
+    "content": "Okay, next set of facts. I have a mechanic. His name is Dave. And also, yeah, that's it. I have a mechanic in his name is Dave."
+  }
+]
+
+[LLM FIRST TOKEN] 9.138s
+
+Understood.
+
+
+[TEXT -> TTS] 'Understood.'
+
+[TTS START] 'Understood.' speed=1.30 emphasis=False
+I own a[TTS FIRST AUDIO] 2.727s | progress=1.000 | speed=1.30 | 'Understood.'
+[TTS DONE] elapsed=2.727s duration=0.680s RTF=4.009 speed=1.30
+ 2016 black Jeep Patriot and my favorite
+[TEXT -> TTS] 'I own a 2016 black Jeep Patriot and'
+
+[TTS START] 'I own a 2016 black Jeep Patriot and' speed=1.30 emphasis=False
+ band is Finch from Temecula,
+[TEXT -> TTS] 'my favorite band is Finch from Temecula,'
+[TTS FIRST AUDIO] 6.645s | progress=1.000 | speed=1.30 | 'I own a 2016 black Jeep Patriot and'
+[TTS DONE] elapsed=6.646s duration=2.458s RTF=2.703 speed=1.30
+
+[TTS START] 'my favorite band is Finch from Temecula,' speed=1.30 emphasis=False
+ California.
+My mechanic's name is[TTS FIRST AUDIO] 5.244s | progress=1.000 | speed=1.30 | 'my favorite band is Finch from Temecula,'
+[TTS DONE] elapsed=5.244s duration=1.883s RTF=2.784 speed=1.30
+ Dave.
+[TEXT -> TTS] "California.\nMy mechanic's name is Dave."
+
+[TTS START] "California.\nMy mechanic's name is Dave." speed=1.30 emphasis=False
+
+[OLLAMA DONE] reason=stop load=0.467s prompt_eval=8.656s generation=18.534s prompt_tokens=673 response_tokens=33 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=952fe18e7e471f4731d9e07e1eaeb4dfe9b4282a76c8737b5bd26bb7f42f839d full_sha256=36137b9725788df9a8baf82f26cc8344d6f4b82a999e606842e059758824329c
+[MEMORY INDEX ADD] added=1 stored=2 evicted=0 elapsed=0.000042s
+[TTS FIRST AUDIO] 1.607s | progress=0.500 | speed=1.30 | "California.\nMy mechanic's name is Dave."
+[TTS DONE] elapsed=3.191s duration=2.106s RTF=1.515 speed=1.30
+[MEMORY STATUS] phase=after_turn recent_turns=1 recent_max=1 recent_characters=132 recall_turns=2 recall_max=24 recall_characters=384
+[MEMORY DEBUG] recent={'max_turns': 1, 'turn_count': 1, 'message_count': 2, 'history_characters': 132} recall={'max_turns': 24, 'turn_count': 2, 'message_count': 4, 'archive_characters': 384}
+
+[TURN DONE] total=31.776s
+
+Press Enter to begin speaking...Recording... Press Enter to stop.
+[ASR] captured=4.03s transcription=2.41s peak=1.0022
+
+You: Nancy, can you recall what my name is?
+[MEMORY RECALL LOOKUP] query='Nancy, can you recall what my name is?' stored=2 hits=1 ids=[2] scores=[2.5] elapsed=0.000389s
+[MEMORY RECALL CONTEXT] characters=218 elapsed=0.000006s
+[MEMORY RECALL] query='Nancy, can you recall what my name is?' hits=1 ids=[2] scores=[2.5] context_characters=218 elapsed=0.000422s
+[MEMORY RECALL CONTEXT]
+RELATED SESSION MEMORY FOR CURRENT HUMAN USER:
+- The current human user previously said: "Okay, next set of facts. I have a mechanic. His name is Dave. And also, yeah, that's it. I have a mechanic in his name is Dave."
+[MEMORY STATUS] phase=before_request recent_turns=1 recent_max=1 recent_characters=132 recall_turns=2 recall_max=24 recall_characters=384
+
+Nancee: [PROMPT ID] kind=request prefix_messages=4 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=6b160760997f6b6f3b46d6fb3825664b0646e3bdb5f4b84491068d043cb1c96c full_sha256=a09537e44b187839dd7a2d48eb511631752141cdab1a7389fa12a74124c22fbc
+[MEMORY DEBUG] Ollama messages:
+[
+  {
+    "role": "system",
+    "content": "You are Nancee, a warm, witty, sarcastic in car companaion. Speak naturally for streaming TTS.\n\nProduce exactly one spoken answer. Never provide alternate answers, drafts, examples, versions, headings, separators, or quoted responses. Never restart the answer.\n\nAlways Begin once with exactly one of these openers: \"So\",  \"Well\", \"Hum\", \"Alright\",\"Actually\", \"Hang on\", \"Absolutely\", or \"Let me think\". After the opener, answer immediately with your first clause. Your goal should be to make clause between 4,and 8 words to make the text to speech streaming appear more natural. Never use another opener later in the same reply.\n\nUse short complete clauses, usually 4\u20138 words. Add punctuation at natural speaking pauses. Never split names, numbers, units, measurements, or diagnostic codes. Between clauses you can add a filler word suh as \"umm\", \"so\", \"well\" if it is placed natrually.\n\nAnswer only what the user asked, then stop. Casual replies use one or two sentences and no more than 20 words. Normal explanations use no more than three sentences and 40 words. Use up to 60 words only when the user explicitly requests detail.\n\nDo not add stories, motivational comments, imagined scenarios, summaries, rhetorical questions, unrelated advice, or commentary about your instructions. Ask a follow-up only when required for an accurate answer.\n\nUse conversation history and SESSION MEMORY as memory. SESSION MEMORY contains previous statements from the current human user. In SESSION MEMORY, first-person words like I, me, and my refer to the human user, not Nancee. When the user asks about themself, answer from the matching SESSION MEMORY line. Prefer the newest explicit correction over older conflicting memory. If no matching memory exists, say you do not remember instead of guessing. Clarify ambiguous names instead of guessing. Never invent sources, traffic, weather, location, roads, vehicle data, passengers, surroundings, or physical control.\n\nSound like a smart passenger. No role labels or name prefix."
+  },
+  {
+    "role": "user",
+    "content": "Okay, next set of facts. I have a mechanic. His name is Dave. And also, yeah, that's it. I have a mechanic in his name is Dave."
+  },
+  {
+    "role": "assistant",
+    "content": "Okay."
+  },
+  {
+    "role": "system",
+    "content": "SESSION MEMORY FROM EARLIER USER TURNS.\\nThis memory contains prior statements from the human user. First-person words like I, me, and my refer to the human user, not Nancee. Treat these as user facts unless the current user corrects them. If memory says no matching user fact was found, do not guess.\\n\\nRELATED SESSION MEMORY FOR CURRENT HUMAN USER:\n- The current human user previously said: \"Okay, next set of facts. I have a mechanic. His name is Dave. And also, yeah, that's it. I have a mechanic in his name is Dave.\""
+  },
+  {
+    "role": "user",
+    "content": "Nancy, can you recall what my name is?"
+  }
+]
+
+[LLM FIRST TOKEN] 4.949s
+
+I do not remember your name.
+[TEXT -> TTS] 'I do not remember your name.'
+
+[TTS START] 'I do not remember your name.' speed=1.30 emphasis=False
+ Please let me know again[TTS FIRST AUDIO] 4.055s | progress=1.000 | speed=1.30 | 'I do not remember your name.'
+[TTS DONE] elapsed=4.061s duration=1.147s RTF=3.541 speed=1.30
+.
+[TEXT -> TTS] 'Please let me know again.'
+
+[TTS START] 'Please let me know again.' speed=1.30 emphasis=False
+
+[OLLAMA DONE] reason=stop load=0.475s prompt_eval=4.461s generation=6.126s prompt_tokens=598 response_tokens=14 system_sha256=5d7c402383feb8233c0d428be794e16e03ff42d174af5a15f52051d80dcc1400 prefix_sha256=6b160760997f6b6f3b46d6fb3825664b0646e3bdb5f4b84491068d043cb1c96c full_sha256=a09537e44b187839dd7a2d48eb511631752141cdab1a7389fa12a74124c22fbc
+[MEMORY INDEX SKIP] question-like turn was not stored in recall
+[TTS FIRST AUDIO] 1.802s | progress=1.000 | speed=1.30 | 'Please let me know again.'
+[TTS DONE] elapsed=1.802s duration=1.096s RTF=1.644 speed=1.30
+[MEMORY STATUS] phase=after_turn recent_turns=1 recent_max=1 recent_characters=43 recall_turns=2 recall_max=24 recall_characters=384
+[MEMORY DEBUG] recent={'max_turns': 1, 'turn_count': 1, 'message_count': 2, 'history_characters': 43} recall={'max_turns': 24, 'turn_count': 2, 'message_count': 4, 'archive_characters': 384}
+
+[TURN DONE] total=13.656s
+
+Press Enter to begin speaking...

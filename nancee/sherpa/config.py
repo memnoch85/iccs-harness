@@ -1,10 +1,18 @@
 import os
 
-# Short-term indexed recall configuration adding thes to the top because I don't konw what are the old ones rn
-MEMORY_ARCHIVE_TURN_LIMIT = int(
+
+# Short-term memory / recall configuration
+MEMORY_RECALL_TURN_LIMIT = int(
     os.getenv(
-        "NANCEE_MEMORY_ARCHIVE_TURN_LIMIT",
+        "NANCEE_MEMORY_RECALL_TURN_LIMIT",
         "24",
+    )
+)
+
+MEMORY_RECENT_PROMPT_TURNS = int(
+    os.getenv(
+        "NANCEE_MEMORY_RECENT_PROMPT_TURNS",
+        "1",
     )
 )
 
@@ -44,103 +52,25 @@ MEMORY_RECALL_SNIPPET_WORDS = int(
     )
 )
 
-MEMORY_PRIME_GRACE_SECONDS = float(
-    os.getenv(
-        "NANCEE_MEMORY_PRIME_GRACE_SECONDS",
-        "0.5",
-    )
-)
 
-MEMORY_PRIME_BRIDGE_TEXT = os.getenv(
-    "NANCEE_MEMORY_PRIME_BRIDGE_TEXT",
-    "One moment. I'm updating my memory.",
-).strip()
+if MEMORY_RECALL_TURN_LIMIT <= 0:
+    raise ValueError("MEMORY_RECALL_TURN_LIMIT must be positive.")
 
-if MEMORY_PRIME_GRACE_SECONDS < 0:
-    raise ValueError("MEMORY_PRIME_GRACE_SECONDS cannot be negative.")
+if MEMORY_RECENT_PROMPT_TURNS <= 0:
+    raise ValueError("MEMORY_RECENT_PROMPT_TURNS must be positive.")
 
-if not MEMORY_PRIME_BRIDGE_TEXT:
-    raise ValueError("MEMORY_PRIME_BRIDGE_TEXT cannot be empty.")
+if MEMORY_RECALL_LIMIT <= 0:
+    raise ValueError("MEMORY_RECALL_LIMIT must be positive.")
 
-# Memory configuration
-MEMORY_ACTIVE_TURN_LIMIT = int(
-    os.getenv(
-        "NANCEE_MEMORY_ACTIVE_TURN_LIMIT",
-        "10",
-    )
-)
+if MEMORY_RECALL_MIN_SCORE < 0:
+    raise ValueError("MEMORY_RECALL_MIN_SCORE cannot be negative.")
 
-MEMORY_ACTIVE_CHARACTER_LIMIT = int(
-    os.getenv(
-        "NANCEE_MEMORY_ACTIVE_CHARACTER_LIMIT",
-        "2400",
-    )
-)
+if MEMORY_RECALL_CONTEXT_MAX_CHARACTERS <= 0:
+    raise ValueError("MEMORY_RECALL_CONTEXT_MAX_CHARACTERS must be positive.")
 
-MEMORY_KEEP_RECENT_TURNS = int(
-    os.getenv(
-        "NANCEE_MEMORY_KEEP_RECENT_TURNS",
-        "1",
-    )
-)
+if MEMORY_RECALL_SNIPPET_WORDS <= 0:
+    raise ValueError("MEMORY_RECALL_SNIPPET_WORDS must be positive.")
 
-MEMORY_RETRIEVAL_LIMIT = int(
-    os.getenv(
-        "NANCEE_MEMORY_RETRIEVAL_LIMIT",
-        "2",
-    )
-)
-
-MEMORY_RETRIEVAL_MIN_SCORE = float(
-    os.getenv(
-        "NANCEE_MEMORY_RETRIEVAL_MIN_SCORE",
-        "2.0",
-    )
-)
-
-MEMORY_RETRIEVAL_ENABLED = (
-    os.getenv(
-        "NANCEE_MEMORY_RETRIEVAL_ENABLED",
-        "false",
-    ).lower()
-    == "true"
-)
-
-MEMORY_GENERIC_FACT_LIMIT = int(
-    os.getenv(
-        "NANCEE_MEMORY_GENERIC_FACT_LIMIT",
-        "24",
-    )
-)
-
-MEMORY_RELATED_FACT_LIMIT = int(
-    os.getenv(
-        "NANCEE_MEMORY_RELATED_FACT_LIMIT",
-        "3",
-    )
-)
-
-MEMORY_RELATED_CONTEXT_MAX_CHARACTERS = int(
-    os.getenv(
-        "NANCEE_MEMORY_RELATED_CONTEXT_MAX_CHARACTERS",
-        "420",
-    )
-)
-
-MEMORY_RELATED_MIN_SCORE = float(
-    os.getenv(
-        "NANCEE_MEMORY_RELATED_MIN_SCORE",
-        "1.0",
-    )
-)
-
-MEMORY_RELATED_CONTEXT_ENABLED = (
-    os.getenv(
-        "NANCEE_MEMORY_RELATED_CONTEXT_ENABLED",
-        "true",
-    ).lower()
-    == "true"
-)
 
 # Sherpa/Kokoro configuration
 MODEL_DIR = os.environ.get(
@@ -176,7 +106,6 @@ NUM_THREADS = int(
     )
 )
 
-
 BLOCKSIZE = int(
     os.environ.get(
         "BLOCKSIZE",
@@ -193,6 +122,10 @@ PREROLL_MS = int(
 
 TTS_SILENCE_SCALE = 0.2
 TTS_MAX_NUM_SENTENCES = 1
+
+
+if TTS_EMPHASIS_SPEED <= 0:
+    raise ValueError("TTS_EMPHASIS_SPEED must be greater than zero.")
 
 
 # Text chunking configuration
@@ -218,39 +151,14 @@ MAX_CHUNK_WORDS = int(
 )
 
 
-if MEMORY_ACTIVE_TURN_LIMIT <= 2:
-    raise ValueError("MEMORY_ACTIVE_TURN_LIMIT must be greater than 2.")
+if FIRST_CHUNK_MIN_WORDS <= 0:
+    raise ValueError("FIRST_CHUNK_MIN_WORDS must be positive.")
 
-if MEMORY_ACTIVE_CHARACTER_LIMIT <= 0:
-    raise ValueError("MEMORY_ACTIVE_CHARACTER_LIMIT must be positive.")
+if TARGET_CHUNK_WORDS <= 0:
+    raise ValueError("TARGET_CHUNK_WORDS must be positive.")
 
-
-if MEMORY_KEEP_RECENT_TURNS < 0 or MEMORY_KEEP_RECENT_TURNS >= MEMORY_ACTIVE_TURN_LIMIT:
-    raise ValueError(
-        "MEMORY_KEEP_RECENT_TURNS must be zero or greater and "
-        "smaller than MEMORY_ACTIVE_TURN_LIMIT."
-    )
-
-if MEMORY_RETRIEVAL_LIMIT <= 0:
-    raise ValueError("MEMORY_RETRIEVAL_LIMIT must be positive.")
-
-if MEMORY_RETRIEVAL_MIN_SCORE < 0:
-    raise ValueError("MEMORY_RETRIEVAL_MIN_SCORE cannot be negative.")
-
-if TTS_EMPHASIS_SPEED <= 0:
-    raise ValueError("TTS_EMPHASIS_SPEED must be greater than zero.")
-
-if MEMORY_GENERIC_FACT_LIMIT <= 0:
-    raise ValueError("MEMORY_GENERIC_FACT_LIMIT must be positive.")
-
-if MEMORY_RELATED_FACT_LIMIT <= 0:
-    raise ValueError("MEMORY_RELATED_FACT_LIMIT must be positive.")
-
-if MEMORY_RELATED_CONTEXT_MAX_CHARACTERS <= 0:
-    raise ValueError("MEMORY_RELATED_CONTEXT_MAX_CHARACTERS must be positive.")
-
-if MEMORY_RELATED_MIN_SCORE < 0:
-    raise ValueError("MEMORY_RELATED_MIN_SCORE cannot be negative.")
+if MAX_CHUNK_WORDS <= 0:
+    raise ValueError("MAX_CHUNK_WORDS must be positive.")
 
 
 # Ollama configuration
