@@ -281,7 +281,7 @@ SYSTEM_PROMPT_FILE = os.environ.get(
 
 
 # Ollama generation settings
-LLM_TEMPERATURE = 0.70
+LLM_TEMPERATURE = 0.6
 LLM_NUM_THREADS = 3
 LLM_NUM_PREDICT = 65
 
