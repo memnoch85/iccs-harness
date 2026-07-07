@@ -657,3 +657,98 @@ def _nancee_format_related_context_raw_memory_v2(
 
 
 SessionArchive.format_related_context = _nancee_format_related_context_raw_memory_v2
+
+# NANCEE schema overlay v3.
+# Keeps retrieval/scoring intact; only formats retrieved memory facts.
+def _nancee_format_related_context_schema_v3(
+    self,
+    hits,
+    max_characters=None,
+    *args,
+    **kwargs,
+):
+    if not hits:
+        return ""
+
+    lines = ["RELEVANT USER MEMORY FACTS:"]
+
+    for hit in hits:
+        user_text = str(
+            hit.get("user")
+            or hit.get("user_text")
+            or ""
+        ).strip()
+
+        if not user_text:
+            continue
+
+        parts = [
+            part.strip()
+            for part in user_text.split(".")
+            if part.strip()
+        ]
+
+        for part in parts:
+            lines.append(f"- {part}.")
+
+    if len(lines) == 1:
+        return ""
+
+    context = "\n".join(lines)
+
+    if max_characters and len(context) > max_characters:
+        return context[:max_characters].rstrip()
+
+    return context
+
+
+SessionArchive.format_related_context = _nancee_format_related_context_schema_v3
+
+# NANCEE schema overlay v4.
+# Same retrieval/scoring. Stronger generic perspective instruction.
+def _nancee_format_related_context_schema_v4(
+    self,
+    hits,
+    max_characters=None,
+    *args,
+    **kwargs,
+):
+    if not hits:
+        return ""
+
+    lines = [
+        "RELEVANT USER MEMORY FACTS:",
+        "Perspective rule: these facts describe the human user. Answer with you/your, not I/my.",
+    ]
+
+    for hit in hits:
+        user_text = str(
+            hit.get("user")
+            or hit.get("user_text")
+            or ""
+        ).strip()
+
+        if not user_text:
+            continue
+
+        parts = [
+            part.strip()
+            for part in user_text.split(".")
+            if part.strip()
+        ]
+
+        for part in parts:
+            lines.append(f"- {part}.")
+
+    if len(lines) <= 2:
+        return ""
+
+    context = "\n".join(lines)
+
+    if max_characters and len(context) > max_characters:
+        return context[:max_characters].rstrip()
+
+    return context
+
+
+SessionArchive.format_related_context = _nancee_format_related_context_schema_v4
