@@ -1,5 +1,5 @@
 import os
-
+from pathlib import Path
 
 # Short-term memory / recall configuration
 MEMORY_RECALL_TURN_LIMIT = int(
@@ -98,11 +98,16 @@ if USER_PROFILE_CONTEXT_MAX_CHARACTERS <= 0:
 
 
 # Sherpa/Kokoro configuration
-MODEL_DIR = os.environ.get(
-    "SHERPA_MODEL_DIR",
-    "kokoro-multi-lang-v1_0",
-)
+SHERPA_DIRECTORY = Path(__file__).resolve().parent
 
+MODEL_DIR = str(
+    Path(
+        os.environ.get(
+            "SHERPA_MODEL_DIR",
+            SHERPA_DIRECTORY / "kokoro-multi-lang-v1_0",
+        )
+    ).expanduser()
+)
 VOICE_ID = int(
     os.environ.get(
         "VOICE_ID",
@@ -168,6 +173,14 @@ TARGET_CHUNK_WORDS = int(
     )
 )
 
+
+FIRST_CHUNK_MAX_WORDS = int(
+    os.environ.get(
+        "FIRST_CHUNK_MAX_WORDS",
+        "4",
+    )
+)
+
 MAX_CHUNK_WORDS = int(
     os.environ.get(
         "MAX_CHUNK_WORDS",
@@ -214,18 +227,24 @@ SYSTEM_PROMPT_FILE = os.environ.get(
 
 
 # Ollama generation settings
-LLM_TEMPERATURE = float(os.environ.get(
-    "NANCEE_LLM_TEMPERATURE",
-    "0.3",
-))
-LLM_NUM_THREADS = int(os.environ.get(
-    "NANCEE_LLM_NUM_THREADS",
-    "3",
-))
-LLM_NUM_PREDICT = int(os.environ.get(
-    "NANCEE_LLM_NUM_PREDICT",
-    "20",
-))
+LLM_TEMPERATURE = float(
+    os.environ.get(
+        "NANCEE_LLM_TEMPERATURE",
+        "0.3",
+    )
+)
+LLM_NUM_THREADS = int(
+    os.environ.get(
+        "NANCEE_LLM_NUM_THREADS",
+        "3",
+    )
+)
+LLM_NUM_PREDICT = int(
+    os.environ.get(
+        "NANCEE_LLM_NUM_PREDICT",
+        "65",
+    )
+)
 
 
 # Timeout values
@@ -242,6 +261,7 @@ def load_system_prompt():
     ) as prompt_file:
         return prompt_file.read().strip()
 
+
 # Memory debug logging.
 # Enable with:
 #   export NANCEE_MEMORY_DEBUG=true
@@ -253,3 +273,29 @@ MEMORY_DEBUG_ENABLED = (
     == "true"
 )
 
+# Latency bridge configuration.
+LATENCY_BRIDGE_ENABLED = (
+    os.getenv(
+        "NANCEE_LATENCY_BRIDGE_ENABLED",
+        "true",
+    ).lower()
+    == "true"
+)
+
+LATENCY_BRIDGE_SECONDS = float(
+    os.getenv(
+        "NANCEE_LATENCY_BRIDGE_SECONDS",
+        "3.0",
+    )
+)
+
+LATENCY_BRIDGE_PHRASE = os.getenv(
+    "NANCEE_LATENCY_BRIDGE_PHRASE",
+    "Let me check that.",
+).strip()
+
+if LATENCY_BRIDGE_SECONDS <= 0:
+    raise ValueError("LATENCY_BRIDGE_SECONDS must be greater than zero.")
+
+if len(LATENCY_BRIDGE_PHRASE.split()) != 4:
+    raise ValueError("LATENCY_BRIDGE_PHRASE must contain exactly four words.")

@@ -14,6 +14,9 @@ import sherpa_onnx
 import sounddevice as sd
 from config import (
     BLOCKSIZE,
+    LATENCY_BRIDGE_ENABLED,
+    LATENCY_BRIDGE_PHRASE,
+    LATENCY_BRIDGE_SECONDS,
     LLM_MODEL,
     MEMORY_DEBUG_ENABLED,
     MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
@@ -23,7 +26,6 @@ from config import (
     MEMORY_RECALL_SNIPPET_WORDS,
     MEMORY_RECALL_TURN_LIMIT,
     MEMORY_RECENT_PROMPT_TURNS,
-    USER_PROFILE_CONTEXT_ENABLED,
     MODEL_DIR,
     NUM_THREADS,
     PREROLL_MS,
@@ -31,12 +33,18 @@ from config import (
     TTS_EMPHASIS_SPEED,
     TTS_MAX_NUM_SENTENCES,
     TTS_SILENCE_SCALE,
+    USER_PROFILE_CONTEXT_ENABLED,
     VOICE_ID,
 )
+from latency_bridge import LatencyBridge
 from ollama_runtime import (
     ensure_ollama_model_loaded,
     prime_ollama_context,
     stream_ollama_response,
+)
+from recall_policy import (
+    looks_like_perspective_correction,
+    repair_recall_perspective,
 )
 from session_archive import SessionArchive
 from short_term_memory import ShortTermMemory
@@ -64,7 +72,6 @@ asr_process = None
 
 def memory_debug_enabled():
     return MEMORY_DEBUG_ENABLED
-
 
 
 _QUESTION_PREFIXES = (
@@ -160,6 +167,9 @@ def looks_like_recall_request(user_text):
     if not lowered:
         return False
 
+    if looks_like_perspective_correction(lowered):
+        return True
+
     return any(
         re.search(
             pattern,
@@ -201,8 +211,6 @@ def has_declarative_memory_content(user_text):
             return True
 
     return False
-
-
 
 
 _MEMORY_JUNK_PATTERNS = (
@@ -266,8 +274,6 @@ def clean_memory_fragment(sentence):
     return cleaned
 
 
-
-
 def _clean_extracted_fact(value):
     cleaned = str(value).strip()
 
@@ -324,15 +330,21 @@ def extract_recall_user_text(user_text):
         ),
         (
             r"\bmy (?:car|vehicle) is\s+([^?.!,]{1,90})",
-            lambda match: f"the user vehicle is {_clean_extracted_fact(match.group(1))}",
+            lambda match: (
+                f"the user vehicle is {_clean_extracted_fact(match.group(1))}"
+            ),
         ),
         (
             r"\bmy favorite band is\s+([^?.!,]{1,90})",
-            lambda match: f"the user favorite band is {_clean_extracted_fact(match.group(1))}",
+            lambda match: (
+                f"the user favorite band is {_clean_extracted_fact(match.group(1))}"
+            ),
         ),
         (
             r"\bmy mechanic(?:'s name)? is\s+([^?.!,]{1,60})",
-            lambda match: f"the user mechanic is {_clean_extracted_fact(match.group(1))}",
+            lambda match: (
+                f"the user mechanic is {_clean_extracted_fact(match.group(1))}"
+            ),
         ),
     )
 
@@ -474,6 +486,7 @@ def print_memory_status(recent_prompt_memory, recall_memory, phase):
         f"recall_characters={recall_characters}",
         flush=True,
     )
+
 
 def read_asr_message():
     if asr_process is None or asr_process.stdout is None:
@@ -787,7 +800,7 @@ def tts_worker(tts):
             text_queue.task_done()
 
 
-def stream_text_to_tts(text_iter):
+def stream_text_to_tts(text_iter, first_token_callback=None):
     buffer = ""
     full_response = []
     is_first = True
@@ -832,6 +845,9 @@ def stream_text_to_tts(text_iter):
 
         if first_token_time is None:
             first_token_time = time.time()
+
+            if first_token_callback is not None:
+                first_token_callback()
 
             print(
                 f"\n[LLM FIRST TOKEN] {first_token_time - start:.3f}s\n",
@@ -900,6 +916,79 @@ def stream_text_to_tts(text_iter):
     return full_text
 
 
+def generate_bridge_audio(tts, phrase):
+    """Generate bridge speech once before the conversation loop."""
+    request = build_tts_request(
+        text=phrase,
+        normal_speed=SPEED,
+        emphasis_speed=TTS_EMPHASIS_SPEED,
+    )
+
+    if request is None:
+        raise ValueError("Latency bridge phrase produced an empty TTS request.")
+
+    gen_config = sherpa_onnx.GenerationConfig()
+    gen_config.sid = VOICE_ID
+    gen_config.silence_scale = TTS_SILENCE_SCALE
+    gen_config.speed = request.speed
+
+    audio = tts.generate(
+        phrase,
+        gen_config,
+    )
+
+    samples = np.asarray(
+        audio.samples,
+        dtype=np.float32,
+    ).copy()
+
+    return (
+        samples,
+        int(audio.sample_rate),
+    )
+
+
+def collect_text_response(text_iter, first_token_callback=None):
+    """Collect a short recall answer so it can be checked before speech."""
+    started = time.time()
+    first_token_seen = False
+    tokens = []
+
+    for token in text_iter:
+        if not first_token_seen:
+            first_token_seen = True
+            if first_token_callback is not None:
+                first_token_callback()
+            print(
+                f"\n[LLM FIRST TOKEN] {time.time() - started:.3f}s\n",
+                flush=True,
+            )
+
+        print(token, end="", flush=True)
+        tokens.append(token)
+
+    if tokens:
+        print()
+
+    return "".join(tokens).strip()
+
+
+def enqueue_complete_response(text):
+    """Chunk a validated complete response through existing TTS rules."""
+    buffer = str(text).strip()
+    is_first = True
+
+    while buffer:
+        extracted = extract_tts_chunk(buffer, is_first)
+        if extracted is None:
+            enqueue_tts_text(buffer)
+            break
+
+        chunk, buffer = extracted
+        enqueue_tts_text(chunk)
+        is_first = False
+
+
 def wait_for_audio_to_drain():
     while True:
         with audio_lock:
@@ -911,16 +1000,6 @@ def wait_for_audio_to_drain():
         time.sleep(0.05)
 
     time.sleep(0.25)
-
-
-
-
-
-
-
-
-
-
 
 
 # NANCEE FTS5 ONLY MEMORY MODE START
@@ -951,6 +1030,7 @@ def should_store_recall_turn(user_text):
 def should_retrieve_recall(user_text):
     return looks_like_question_text(user_text)
 
+
 # NANCEE FTS5 ONLY MEMORY MODE END
 
 
@@ -961,6 +1041,18 @@ def main():
     )
 
     tts = build_tts()
+    bridge_samples, bridge_sample_rate = generate_bridge_audio(
+        tts,
+        LATENCY_BRIDGE_PHRASE,
+    )
+
+    print(
+        "[LATENCY BRIDGE] "
+        f"enabled={LATENCY_BRIDGE_ENABLED} "
+        f"threshold={LATENCY_BRIDGE_SECONDS:.3f}s "
+        f"phrase={LATENCY_BRIDGE_PHRASE!r}",
+        flush=True,
+    )
 
     print(
         f"Loaded. sample_rate={tts.sample_rate} "
@@ -1012,8 +1104,7 @@ def main():
 
     if initial_profile_context:
         print(
-            "[USER PROFILE] loaded=true "
-            f"characters={len(initial_profile_context)}",
+            f"[USER PROFILE] loaded=true characters={len(initial_profile_context)}",
             flush=True,
         )
     else:
@@ -1134,7 +1225,10 @@ def main():
                     user_text,
                 )
 
-                if not str(retrieved_context).strip() and not str(profile_context).strip():
+                if (
+                    not str(retrieved_context).strip()
+                    and not str(profile_context).strip()
+                ):
                     direct_answer = "I do not remember that yet."
 
                     print_memory_status(
@@ -1198,16 +1292,65 @@ def main():
                 end="",
                 flush=True,
             )
+            bridge = None
+
+            def play_latency_bridge():
+                print(
+                    f"\n[LATENCY BRIDGE] fired phrase={LATENCY_BRIDGE_PHRASE!r}",
+                    flush=True,
+                )
+
+                enqueue_audio(
+                    bridge_samples.copy(),
+                    bridge_sample_rate,
+                )
 
             try:
+                bridge = LatencyBridge(
+                    delay_seconds=LATENCY_BRIDGE_SECONDS,
+                    enabled=LATENCY_BRIDGE_ENABLED,
+                    on_fire=play_latency_bridge,
+                )
+                bridge.start()
+
+                if looks_like_perspective_correction(user_text):
+                    request_history = recent_prompt_memory.get_messages()
+                elif recall_requested:
+                    request_history = []
+                else:
+                    request_history = recent_prompt_memory.get_messages()
+
                 response = stream_ollama_response(
                     user_text=user_text,
-                    history=[] if recall_requested else recent_prompt_memory.get_messages(),
-                    memory_context=profile_context if USER_PROFILE_CONTEXT_ENABLED else "",
+                    history=request_history,
+                    memory_context=profile_context
+                    if USER_PROFILE_CONTEXT_ENABLED
+                    else "",
                     retrieved_context=retrieved_context,
                 )
 
-                assistant_text = stream_text_to_tts(response)
+                if recall_requested and str(retrieved_context).strip():
+                    assistant_text = collect_text_response(
+                        response,
+                        first_token_callback=bridge.resolve,
+                    )
+
+                    assistant_text, repaired = repair_recall_perspective(
+                        assistant_text,
+                    )
+
+                    if repaired:
+                        print(
+                            f"[MEMORY PERSPECTIVE REPAIR] output={assistant_text!r}",
+                            flush=True,
+                        )
+
+                    enqueue_complete_response(assistant_text)
+                else:
+                    assistant_text = stream_text_to_tts(
+                        response,
+                        first_token_callback=bridge.resolve,
+                    )
 
             except (
                 TimeoutError,
@@ -1224,6 +1367,10 @@ def main():
                 wait_for_audio_to_drain()
                 continue
 
+            finally:
+                if bridge is not None:
+                    bridge.resolve()
+
             if not assistant_text:
                 print(
                     "\n[LLM ERROR] Ollama returned no response text.",
@@ -1231,9 +1378,9 @@ def main():
                 )
                 continue
 
-            # Diagnostic baseline:
-            # keep assistant text from poisoning future prompts/recall.
-            memory_assistant_text = "Okay."
+            # Preserve Nancee's real answer in the one-turn live prompt.
+            # FTS5 still stores only the raw user utterance.
+            memory_assistant_text = assistant_text
 
             # FTS5 raw utterance recall archive.
             # Store only non-recall user turns. Do not extract facts here.

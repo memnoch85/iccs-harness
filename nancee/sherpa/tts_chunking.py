@@ -119,6 +119,12 @@ def extract_tts_chunk(
         if is_punctuation_only(candidate):
             continue
 
+        if is_first and candidate_words > 4:
+            return _split_at_word_count(
+                buffer,
+                4,
+            )
+
         if candidate_words <= MAX_CHUNK_WORDS:
             remainder = buffer[boundary:].lstrip()
             return candidate, remainder
@@ -143,6 +149,14 @@ def extract_tts_chunk(
             buffer,
         )
     )
+
+    # Start TTS quickly even when the model has not emitted
+    # punctuation yet.
+    if is_first and len(word_matches) >= 4:
+        return _split_at_word_count(
+            buffer,
+            4,
+        )
 
     # Without punctuation, wait until at least ten words are
     # visible before forcing an eight-word chunk. That leaves

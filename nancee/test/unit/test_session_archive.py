@@ -134,8 +134,8 @@ class TestSessionArchive(unittest.TestCase):
         hits = recall.retrieve("Where did I buy hot sauce?", limit=3)
         context = recall.format_related_context(hits, max_characters=650)
 
-        self.assertIn("RELEVANT USER MEMORY", context)
-        self.assertIn("Human user said", context)
+        self.assertIn("MEMORY SPEAKER: human user", context)
+        self.assertIn('User said: "I bought hot sauce at Ocean Market."', context)
         self.assertIn("I bought hot sauce at Ocean Market.", context)
 
     def test_related_context_is_capped(self):
@@ -147,7 +147,7 @@ class TestSessionArchive(unittest.TestCase):
         context = recall.format_related_context(hits, max_characters=80)
 
         self.assertLessEqual(len(context), 80)
-        self.assertTrue(context.startswith("RELEVANT USER MEMORY"))
+        self.assertTrue(context.startswith("MEMORY SPEAKER: human user"))
 
 
 if __name__ == "__main__":
