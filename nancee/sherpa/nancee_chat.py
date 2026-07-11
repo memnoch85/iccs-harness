@@ -45,6 +45,7 @@ from tts_chunking import (
     is_punctuation_only,
 )
 from tts_request import build_tts_request
+from user_profile import UserProfile
 
 text_queue = queue.Queue()
 stop_event = threading.Event()
@@ -377,8 +378,8 @@ def should_store_recall_turn(user_text):
 if MEMORY_RECALL_TURN_LIMIT <= 0:
     raise ValueError("MEMORY_RECALL_TURN_LIMIT must be positive.")
 
-if MEMORY_RECENT_PROMPT_TURNS <= 0:
-    raise ValueError("MEMORY_RECENT_PROMPT_TURNS must be positive.")
+if MEMORY_RECENT_PROMPT_TURNS < 0:
+    raise ValueError("MEMORY_RECENT_PROMPT_TURNS cannot be negative.")
 
 
 def retrieve_session_context(recall_memory, user_text):
@@ -1005,6 +1006,21 @@ def main():
         max_turns=MEMORY_RECALL_TURN_LIMIT,
     )
 
+    user_profile = UserProfile.load()
+    initial_profile_context = user_profile.format_context()
+
+    if initial_profile_context:
+        print(
+            "[USER PROFILE] loaded=true "
+            f"characters={len(initial_profile_context)}",
+            flush=True,
+        )
+    else:
+        print(
+            "[USER PROFILE] loaded=false",
+            flush=True,
+        )
+
     print(
         "Opening persistent audio stream...",
         flush=True,
@@ -1059,6 +1075,8 @@ def main():
 
             global_start = time.time()
 
+            profile_context = user_profile.format_context()
+
             recall_requested = should_retrieve_recall(user_text)
 
             if recall_requested:
@@ -1067,7 +1085,7 @@ def main():
                     user_text,
                 )
 
-                if not str(retrieved_context).strip():
+                if not str(retrieved_context).strip() and not str(profile_context).strip():
                     direct_answer = "I do not remember that yet."
 
                     print_memory_status(
@@ -1135,8 +1153,8 @@ def main():
             try:
                 response = stream_ollama_response(
                     user_text=user_text,
-                    history=[],
-                    memory_context="",
+                    history=[] if recall_requested else recent_prompt_memory.get_messages(),
+                    memory_context=profile_context,
                     retrieved_context=retrieved_context,
                 )
 

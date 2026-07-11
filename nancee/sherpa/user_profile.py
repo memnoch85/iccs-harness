@@ -1,0 +1,81 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+from config import USER_PROFILE_CONTEXT_MAX_CHARACTERS, USER_PROFILE_FILE
+
+
+class UserProfile:
+    def __init__(self, facts: dict[str, Any] | None = None):
+        self.facts = facts or {}
+
+    @classmethod
+    def load(cls, path: str | None = None) -> "UserProfile":
+        profile_path = Path(path or USER_PROFILE_FILE).expanduser()
+
+        try:
+            data = json.loads(profile_path.read_text(encoding="utf-8"))
+        except FileNotFoundError:
+            return cls({})
+        except (OSError, json.JSONDecodeError) as error:
+            print(f"[USER PROFILE] Could not load {profile_path}: {error!r}", flush=True)
+            return cls({})
+
+        if not isinstance(data, dict):
+            print(f"[USER PROFILE] Ignoring non-object profile file: {profile_path}", flush=True)
+            return cls({})
+
+        return cls(data)
+
+    def is_empty(self) -> bool:
+        return not bool(self.facts)
+
+    @staticmethod
+    def _format_value(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (int, float)):
+            return str(value)
+        if isinstance(value, list):
+            parts = [UserProfile._format_value(item) for item in value]
+            return ", ".join(part for part in parts if part)
+        if isinstance(value, dict):
+            parts = []
+            for key, item in sorted(value.items()):
+                formatted = UserProfile._format_value(item)
+                if formatted:
+                    parts.append(f"{key}: {formatted}")
+            return "; ".join(parts)
+        return str(value).strip()
+
+    def format_context(self, max_characters: int | None = None) -> str:
+        if not self.facts:
+            return ""
+
+        max_characters = max_characters or USER_PROFILE_CONTEXT_MAX_CHARACTERS
+
+        lines = [
+            "KNOWN USER PROFILE:",
+            "These are stable facts about the human user, not about Nancee.",
+            "Use them only when relevant.",
+            "If the answer is not in the user profile or retrieved memory, say you do not remember.",
+            "PROFILE FACTS:",
+        ]
+
+        for key, value in sorted(self.facts.items()):
+            formatted = self._format_value(value)
+            if not formatted:
+                continue
+            clean_key = str(key).replace("_", " ").strip()
+            lines.append(f"- {clean_key}: {formatted}")
+
+        text = "\n".join(lines)
+        if max_characters and len(text) > max_characters:
+            text = text[:max_characters].rstrip()
+        return text

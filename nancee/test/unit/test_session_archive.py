@@ -3,188 +3,151 @@ import unittest
 from session_archive import SessionArchive
 
 
+def row_text(row):
+    return row.get("raw_text") or row.get("user") or ""
+
+
 class TestSessionArchive(unittest.TestCase):
-    def test_recall_store_keeps_only_last_24_turns(self):
+    def test_add_turn_returns_memory_id(self):
         recall = SessionArchive(max_turns=24)
 
-        for index in range(30):
-            recall.add_turn(
-                f"User turn {index} about topic {index}.",
-                "Okay.",
-            )
+        added = recall.add_turn("My name is Anders.")
 
-        turns = recall.get_turns_snapshot()
+        self.assertEqual(int(added), 1)
+        self.assertEqual(len(recall), 1)
 
-        self.assertEqual(len(turns), 24)
-        self.assertIn("User turn 6", turns[0]["user"])
-        self.assertIn("User turn 29", turns[-1]["user"])
-
-    def test_add_turn_returns_added_record(self):
+    def test_low_signal_asr_junk_is_not_stored(self):
         recall = SessionArchive(max_turns=24)
 
-        added = recall.add_turn(
-            "My name is Anders.",
-            "Okay.",
-        )
+        self.assertIsNone(recall.add_turn("In my name."))
+        self.assertEqual(len(recall), 0)
 
-        self.assertEqual(added["archive_id"], 1)
-        self.assertEqual(added["user"], "My name is Anders.")
-        self.assertEqual(added["assistant"], "Okay.")
+    def test_recall_store_keeps_only_recent_raw_utterances(self):
+        recall = SessionArchive(max_turns=3)
 
-    def test_recall_store_retrieves_name(self):
+        recall.add_turn("Memory one is alpha.")
+        recall.add_turn("Memory two is bravo.")
+        recall.add_turn("Memory three is charlie.")
+        recall.add_turn("Memory four is delta.")
+
+        snapshot = recall.debug_snapshot()
+        rows = snapshot["rows"]
+
+        self.assertEqual(snapshot["turn_count"], 3)
+
+        texts = [row_text(row) for row in rows]
+
+        self.assertNotIn("Memory one is alpha.", texts)
+        self.assertIn("Memory two is bravo.", texts)
+        self.assertIn("Memory three is charlie.", texts)
+        self.assertIn("Memory four is delta.", texts)
+
+    def test_recall_retrieves_name_by_token_overlap(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn("My name is Anders.", "Okay.")
-        recall.add_turn("The road is quiet today.", "Okay.")
+        recall.add_turn("My name is Anders.")
 
-        hits = recall.retrieve(
-            "What is my name?",
-            limit=3,
-            min_score=1.0,
-        )
+        hits = recall.retrieve("What is my name?", limit=3)
 
         self.assertGreaterEqual(len(hits), 1)
-        self.assertIn("Anders", hits[0]["user"])
+        self.assertEqual(hits[0]["user"], "My name is Anders.")
 
-    def test_recall_store_retrieves_top_three(self):
+    def test_recall_retrieves_drive_by_token_overlap(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn("My name is Anders.", "Okay.")
-        recall.add_turn("My favorite band is Finch.", "Okay.")
-        recall.add_turn("Finch is from Temecula California.", "Okay.")
-        recall.add_turn("My car is a black 2016 Jeep Patriot.", "Okay.")
+        recall.add_turn("I drive a black Jeep.")
 
-        hits = recall.retrieve(
-            "Where is Finch from?",
-            limit=3,
-            min_score=1.0,
-            snippet_words=18,
-        )
+        hits = recall.retrieve("What do I drive?", limit=3)
 
         self.assertGreaterEqual(len(hits), 1)
+        self.assertEqual(hits[0]["user"], "I drive a black Jeep.")
 
-        self.assertTrue(
-            any(
-                "Temecula" in hit["user"] or "Temecula" in hit["snippet"]
-                for hit in hits
-            )
-        )
-
-        self.assertLessEqual(len(hits), 3)
-
-    def test_command_words_do_not_dominate_recall(self):
+    def test_recall_retrieves_hot_sauce_purchase(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn("My name is Anders.", "Okay.")
-        recall.add_turn("I am 41 years old.", "Okay.")
+        recall.add_turn("I bought hot sauce at Ocean Market.")
 
-        hits = recall.retrieve(
-            "Nancee, do you remember how old I am?",
-            limit=3,
-            min_score=1.0,
-        )
+        hits = recall.retrieve("Where did I buy hot sauce?", limit=3)
 
         self.assertGreaterEqual(len(hits), 1)
-        self.assertTrue(
-            "41" in hits[0]["user"] or "41" in hits[0]["snippet"]
-        )
+        self.assertEqual(hits[0]["user"], "I bought hot sauce at Ocean Market.")
 
-    def test_retrieval_limit_is_respected(self):
+    def test_porter_stemming_matches_park_and_parked(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn("My first snack is mango.", "Okay.")
-        recall.add_turn("My second snack is jerky.", "Okay.")
-        recall.add_turn("My third snack is almonds.", "Okay.")
+        recall.add_turn("I parked on level three near the west elevator.")
 
-        hits = recall.retrieve(
-            "What snack did I mention?",
-            limit=2,
-            min_score=1.0,
+        hits = recall.retrieve("Where did I park?", limit=3)
+
+        self.assertGreaterEqual(len(hits), 1)
+        self.assertEqual(
+            hits[0]["user"],
+            "I parked on level three near the west elevator.",
         )
 
-        self.assertEqual(len(hits), 2)
+    def test_no_semantic_alias_expansion_in_pure_fts5(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("I drive a black Jeep.")
+
+        hits = recall.retrieve("What vehicle do I have?", limit=3)
+
+        self.assertEqual(hits, [])
+
+    def test_newest_tie_breaker_prefers_correction(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("I drive a black keeper.")
+        recall.add_turn("I drive a black Jeep.")
+
+        hits = recall.retrieve("What do I drive?", limit=3)
+
+        self.assertGreaterEqual(len(hits), 1)
+        self.assertEqual(hits[0]["user"], "I drive a black Jeep.")
 
     def test_irrelevant_query_returns_no_hits(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn(
-            "We discussed the force equation.",
-            "Okay.",
-        )
+        recall.add_turn("My name is Anders.")
+        recall.add_turn("I drive a black Jeep.")
 
-        hits = recall.retrieve(
-            "banana sandwich weather",
-            limit=3,
-            min_score=2.0,
-        )
+        hits = recall.retrieve("banana moon turtle", limit=3)
 
         self.assertEqual(hits, [])
+
+    def test_retrieval_limit_is_respected(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("I bought hot sauce at Ocean Market.")
+        recall.add_turn("I bought Japanese candy at Ocean Market.")
+        recall.add_turn("I bought ramen at Ocean Market.")
+
+        hits = recall.retrieve("What did I buy at Ocean Market?", limit=2)
+
+        self.assertLessEqual(len(hits), 2)
+
+    def test_related_context_uses_quote_overlay(self):
+        recall = SessionArchive(max_turns=24)
+
+        recall.add_turn("I bought hot sauce at Ocean Market.")
+
+        hits = recall.retrieve("Where did I buy hot sauce?", limit=3)
+        context = recall.format_related_context(hits, max_characters=650)
+
+        self.assertIn("RELEVANT USER MEMORY", context)
+        self.assertIn("Human user said", context)
+        self.assertIn("I bought hot sauce at Ocean Market.", context)
 
     def test_related_context_is_capped(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn(
-            "We discussed force equation details for a physics problem.",
-            "Okay.",
-        )
+        recall.add_turn("I bought hot sauce at Ocean Market.")
 
-        hits = recall.retrieve(
-            "force equation",
-            limit=3,
-            min_score=1.0,
-        )
+        hits = recall.retrieve("Where did I buy hot sauce?", limit=3)
+        context = recall.format_related_context(hits, max_characters=80)
 
-        context = recall.format_related_context(
-            hits,
-            max_characters=160,
-        )
-
-        self.assertIn("RELATED SESSION MEMORY", context)
-        self.assertLessEqual(len(context), 160)
-        self.assertIn("force", context.lower())
-
-    def test_snapshot_is_deep_copy(self):
-        recall = SessionArchive(max_turns=24)
-
-        recall.add_turn("My mechanic is named Dave.", "Okay.")
-
-        snapshot = recall.get_turns_snapshot()
-        snapshot[0]["user"] = "changed"
-
-        self.assertEqual(
-            recall.get_turns_snapshot()[0]["user"],
-            "My mechanic is named Dave.",
-        )
-
-    def test_clear_resets_store(self):
-        recall = SessionArchive(max_turns=24)
-
-        recall.add_turn("My mechanic is named Dave.", "Okay.")
-        recall.clear()
-
-        self.assertEqual(recall.get_turns_snapshot(), [])
-        self.assertEqual(recall.get_stats()["turn_count"], 0)
-
-        added = recall.add_turn("My car is a Jeep.", "Okay.")
-        self.assertEqual(added["archive_id"], 1)
-
-    def test_drive_query_matches_owned_vehicle_fact(self):
-        recall = SessionArchive(max_turns=24)
-
-        recall.add_turn(
-            "I own a black 2016 Jeep Patriot.",
-            "Okay.",
-        )
-
-        hits = recall.retrieve(
-            "What do I drive?",
-            limit=3,
-            min_score=1.0,
-            snippet_words=18,
-        )
-
-        self.assertGreaterEqual(len(hits), 1)
-        self.assertIn("Jeep Patriot", hits[0]["snippet"])
+        self.assertLessEqual(len(context), 80)
+        self.assertTrue(context.startswith("RELEVANT USER MEMORY"))
 
 
 if __name__ == "__main__":

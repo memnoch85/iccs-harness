@@ -6,7 +6,7 @@ from typing import Optional, List
 
 STOPWORDS = {
     'a', 'an', 'and', 'are', 'as', 'at', 'be', 'but', 'can', 'could',
-    'did', 'do', 'does', 'for', 'from', 'how', 'i', 'im', 'is', 'it',
+    'did', 'do', 'does', 'for', 'from', 'how', 'i', 'im', 'in', 'is', 'it',
     'me', 'my', 'of', 'on', 'or', 'please', 'that', 'the', 'this',
     'to', 'was', 'were', 'what', 'when', 'where', 'who', 'why', 'with',
     'would', 'you', 'your', 'nancy', 'nancee', 'hey', 'hello', 'hi',
@@ -89,7 +89,7 @@ def format_memory_overlay(hits: List[MemoryHit], max_characters: Optional[int] =
 
 
 class SessionMemoryStore:
-    def __init__(self, max_memories: int = 24, db_path: Optional[str] = None):
+    def __init__(self, max_memories: int = 384, db_path: Optional[str] = None):
         self.max_memories = int(max_memories)
         self.conn = sqlite3.connect(db_path or ':memory:')
         self.conn.row_factory = sqlite3.Row
@@ -138,7 +138,7 @@ class SessionMemoryStore:
             self.conn.execute('DELETE FROM memory_fts WHERE rowid = ?', (int(row['rowid']),))
         self.conn.commit()
 
-    def search_memory(self, query: str, limit: int = 1) -> List[MemoryHit]:
+    def search_memory(self, query: str, limit: int = 3) -> List[MemoryHit]:
         match_query = make_fts_query(query)
         if not match_query:
             return []
@@ -148,7 +148,7 @@ class SessionMemoryStore:
                    bm25(memory_fts) AS bm25_score
             FROM memory_fts
             WHERE memory_fts MATCH ?
-            ORDER BY bm25_score
+            ORDER BY bm25_score ASC, created_ts DESC, rowid DESC
             LIMIT ?
             """,
             (match_query, int(limit)),

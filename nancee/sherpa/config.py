@@ -5,7 +5,7 @@ import os
 MEMORY_RECALL_TURN_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_RECALL_TURN_LIMIT",
-        "24",
+        "384",
     )
 )
 
@@ -27,7 +27,7 @@ MEMORY_RECALL_ENABLED = (
 MEMORY_RECALL_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_RECALL_LIMIT",
-        "1",
+        "3",
     )
 )
 
@@ -56,8 +56,8 @@ MEMORY_RECALL_SNIPPET_WORDS = int(
 if MEMORY_RECALL_TURN_LIMIT <= 0:
     raise ValueError("MEMORY_RECALL_TURN_LIMIT must be positive.")
 
-if MEMORY_RECENT_PROMPT_TURNS <= 0:
-    raise ValueError("MEMORY_RECENT_PROMPT_TURNS must be positive.")
+if MEMORY_RECENT_PROMPT_TURNS < 0:
+    raise ValueError("MEMORY_RECENT_PROMPT_TURNS cannot be negative.")
 
 if MEMORY_RECALL_LIMIT <= 0:
     raise ValueError("MEMORY_RECALL_LIMIT must be positive.")
@@ -70,6 +70,23 @@ if MEMORY_RECALL_CONTEXT_MAX_CHARACTERS <= 0:
 
 if MEMORY_RECALL_SNIPPET_WORDS <= 0:
     raise ValueError("MEMORY_RECALL_SNIPPET_WORDS must be positive.")
+
+# Stable user profile configuration.
+# This is not FTS5 recall. It is a small, explicit profile overlay.
+USER_PROFILE_FILE = os.getenv(
+    "NANCEE_USER_PROFILE_FILE",
+    "/home/memnoch/Nancee/nancee/sherpa/user_profile.json",
+)
+
+USER_PROFILE_CONTEXT_MAX_CHARACTERS = int(
+    os.getenv(
+        "NANCEE_USER_PROFILE_CONTEXT_MAX_CHARACTERS",
+        "1000",
+    )
+)
+
+if USER_PROFILE_CONTEXT_MAX_CHARACTERS <= 0:
+    raise ValueError("USER_PROFILE_CONTEXT_MAX_CHARACTERS must be positive.")
 
 
 # Sherpa/Kokoro configuration
