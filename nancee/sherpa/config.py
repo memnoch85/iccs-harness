@@ -78,6 +78,14 @@ USER_PROFILE_FILE = os.getenv(
     "/home/memnoch/Nancee/nancee/sherpa/user_profile.json",
 )
 
+USER_PROFILE_CONTEXT_ENABLED = (
+    os.getenv(
+        "NANCEE_USER_PROFILE_CONTEXT_ENABLED",
+        "false",
+    ).lower()
+    == "true"
+)
+
 USER_PROFILE_CONTEXT_MAX_CHARACTERS = int(
     os.getenv(
         "NANCEE_USER_PROFILE_CONTEXT_MAX_CHARACTERS",
@@ -206,9 +214,18 @@ SYSTEM_PROMPT_FILE = os.environ.get(
 
 
 # Ollama generation settings
-LLM_TEMPERATURE = 0.3
-LLM_NUM_THREADS = 3
-LLM_NUM_PREDICT = 32
+LLM_TEMPERATURE = float(os.environ.get(
+    "NANCEE_LLM_TEMPERATURE",
+    "0.3",
+))
+LLM_NUM_THREADS = int(os.environ.get(
+    "NANCEE_LLM_NUM_THREADS",
+    "3",
+))
+LLM_NUM_PREDICT = int(os.environ.get(
+    "NANCEE_LLM_NUM_PREDICT",
+    "20",
+))
 
 
 # Timeout values

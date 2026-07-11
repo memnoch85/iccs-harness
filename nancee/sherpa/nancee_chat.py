@@ -23,6 +23,7 @@ from config import (
     MEMORY_RECALL_SNIPPET_WORDS,
     MEMORY_RECALL_TURN_LIMIT,
     MEMORY_RECENT_PROMPT_TURNS,
+    USER_PROFILE_CONTEXT_ENABLED,
     MODEL_DIR,
     NUM_THREADS,
     PREROLL_MS,
@@ -1202,7 +1203,7 @@ def main():
                 response = stream_ollama_response(
                     user_text=user_text,
                     history=[] if recall_requested else recent_prompt_memory.get_messages(),
-                    memory_context=profile_context,
+                    memory_context=profile_context if USER_PROFILE_CONTEXT_ENABLED else "",
                     retrieved_context=retrieved_context,
                 )
 
