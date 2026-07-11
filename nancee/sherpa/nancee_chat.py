@@ -1079,6 +1079,54 @@ def main():
 
             recall_requested = should_retrieve_recall(user_text)
 
+            profile_direct_answer = ""
+
+            if recall_requested:
+                profile_direct_answer = user_profile.direct_answer(user_text)
+
+            if profile_direct_answer:
+                print_memory_status(
+                    recent_prompt_memory,
+                    recall_memory,
+                    "before_request",
+                )
+
+                print(
+                    f"\nNancee: {profile_direct_answer}",
+                    flush=True,
+                )
+
+                enqueue_tts_text(profile_direct_answer)
+
+                recent_prompt_memory.add_turn(
+                    user_text=user_text,
+                    assistant_text=profile_direct_answer,
+                )
+
+                text_queue.join()
+                wait_for_audio_to_drain()
+
+                if memory_debug_enabled():
+                    print(
+                        "[USER PROFILE DIRECT] answered_without_llm=true",
+                        flush=True,
+                    )
+
+                print_memory_status(
+                    recent_prompt_memory,
+                    recall_memory,
+                    "after_turn",
+                )
+
+                total = time.time() - global_start
+
+                print(
+                    f"\n[TURN DONE] total={total:.3f}s",
+                    flush=True,
+                )
+
+                continue
+
             if recall_requested:
                 retrieved_context = retrieve_session_context(
                     recall_memory,
