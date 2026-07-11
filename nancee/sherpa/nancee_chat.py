@@ -15,6 +15,7 @@ import sounddevice as sd
 from config import (
     BLOCKSIZE,
     LLM_MODEL,
+    MEMORY_DEBUG_ENABLED,
     MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
     MEMORY_RECALL_ENABLED,
     MEMORY_RECALL_LIMIT,
@@ -60,13 +61,7 @@ asr_process = None
 
 
 def memory_debug_enabled():
-    return (
-        os.getenv(
-            "NANCEE_MEMORY_DEBUG",
-            "false",
-        ).lower()
-        == "true"
-    )
+    return MEMORY_DEBUG_ENABLED
 
 
 
@@ -96,6 +91,9 @@ _RECALL_QUERY_PATTERNS = (
     r"\btell me what my\b",
     r"\bcan you tell me what my\b",
     r"\bwhat did i\b",
+    r"\bwhere did i\b",
+    r"\bwhere do i\b",
+    r"\bwhere is\b",
     r"\bwhat do i\b",
     r"\bwhat i\s+(?:drive|own|have)\b",
     r"\bwhat am i driving\b",
@@ -413,8 +411,8 @@ def retrieve_session_context(recall_memory, user_text):
             "[MEMORY RECALL] "
             f"query={user_text!r} "
             f"hits={len(retrieved_turns)} "
-            f"ids={[turn['archive_id'] for turn in retrieved_turns]} "
-            f"scores={[turn['score'] for turn in retrieved_turns]} "
+            f"ids={[turn.get('archive_id', turn.get('id')) for turn in retrieved_turns]} "
+            f"scores={[turn.get('score', turn.get('bm25_score')) for turn in retrieved_turns]} "
             f"context_characters={len(retrieved_context)} "
             f"elapsed={elapsed:.6f}s",
             flush=True,
@@ -435,18 +433,45 @@ def print_memory_status(recent_prompt_memory, recall_memory, phase):
     recent_stats = recent_prompt_memory.get_stats()
     recall_stats = recall_memory.get_stats()
 
+    # Old SessionArchive used:
+    #   turn_count, max_turns, archive_characters
+    # New FTS5-backed store may use:
+    #   count, max_memories
+    recall_turns = recall_stats.get(
+        "turn_count",
+        recall_stats.get("count", 0),
+    )
+
+    recall_max = recall_stats.get(
+        "max_turns",
+        recall_stats.get("max_memories", 0),
+    )
+
+    recall_characters = recall_stats.get("archive_characters")
+
+    if recall_characters is None:
+        recall_characters = 0
+
+        try:
+            if hasattr(recall_memory, "store"):
+                recall_characters = sum(
+                    len(str(row.get("raw_text", "")))
+                    for row in recall_memory.store.debug_dump()
+                )
+        except Exception:
+            recall_characters = 0
+
     print(
         "[MEMORY STATUS] "
         f"phase={phase} "
         f"recent_turns={recent_stats['turn_count']} "
         f"recent_max={recent_stats['max_turns']} "
         f"recent_characters={recent_stats['history_characters']} "
-        f"recall_turns={recall_stats['turn_count']} "
-        f"recall_max={recall_stats['max_turns']} "
-        f"recall_characters={recall_stats['archive_characters']}",
+        f"recall_turns={recall_turns} "
+        f"recall_max={recall_max} "
+        f"recall_characters={recall_characters}",
         flush=True,
     )
-
 
 def read_asr_message():
     if asr_process is None or asr_process.stdout is None:
@@ -887,404 +912,45 @@ def wait_for_audio_to_drain():
 
 
 
-# NANCEE MEMORY INDEXER OVERRIDE V3 START
-# Generic memory grammar:
-#   spoken fact -> indexed user memory fact(s)
-# This is not answer routing. It only normalizes facts before indexing.
-import re as _nancee_mem_re
 
 
-_NANCEE_VEHICLE_WORDS = {
-    "car", "truck", "suv", "jeep", "toyota", "honda", "ford", "chevy",
-    "chevrolet", "subaru", "dodge", "ram", "nissan", "mazda", "bmw",
-    "audi", "tesla", "patriot", "wrangler", "camry", "corolla",
-}
 
 
-def _nancee_clean_memory_value(value):
-    value = str(value).strip()
-    value = _nancee_mem_re.sub(r"^[,.\s]+|[,.\s]+$", "", value)
-    value = _nancee_mem_re.sub(r"\s+", " ", value)
-    value = value.lower()
-    return value
 
 
-def _nancee_clean_memory_key(key):
-    key = str(key).strip().lower()
-    key = _nancee_mem_re.sub(r"['’]s\b", "", key)
-    key = _nancee_mem_re.sub(r"[^a-z0-9]+", " ", key)
-    key = _nancee_mem_re.sub(r"\s+", " ", key).strip()
-    return key
 
 
-def _nancee_is_vehicle_value(value):
-    words = set(_nancee_clean_memory_key(value).split())
-    return bool(words & _NANCEE_VEHICLE_WORDS)
 
-
-def _nancee_fact(key, value):
-    key = _nancee_clean_memory_key(key)
-    value = _nancee_clean_memory_value(value)
-
-    if not key or not value:
-        return ""
-
-    return f"user {key}: {value}."
-
-
-def _nancee_join_facts(*facts):
-    cleaned = []
-    seen = set()
-
-    for fact in facts:
-        fact = str(fact).strip()
-        if not fact:
-            continue
-
-        if not fact.endswith("."):
-            fact += "."
-
-        lowered = fact.lower()
-        if lowered in seen:
-            continue
-
-        seen.add(lowered)
-        cleaned.append(fact)
-
-    return " ".join(cleaned)
-
-
-def _nancee_memory_input(text):
-    text = str(text).strip()
-    text = text.replace("’", "'")
-    text = _nancee_mem_re.sub(r"^\s*(hey|hello|hi|oh)?\s*nanc(?:y|ee)[,\s]+", "", text, flags=_nancee_mem_re.I)
-    text = _nancee_mem_re.sub(r"^\s*(also|and|so|well|okay)[,\s]+", "", text, flags=_nancee_mem_re.I)
-    text = _nancee_mem_re.sub(r"^\s*for the record[,\s]+", "", text, flags=_nancee_mem_re.I)
-    text = _nancee_mem_re.sub(r"^\s*just so you know[,\s]+", "", text, flags=_nancee_mem_re.I)
-    text = _nancee_mem_re.sub(r"^\s*remember(?: that)?\s+", "", text, flags=_nancee_mem_re.I)
-    return text.strip()
-
-
+# NANCEE FTS5 ONLY MEMORY MODE START
+#
+# Temporary test mode:
+# - Store raw non-question user utterances.
+# - Retrieve from FTS5 for any question.
+# - Do not extract facts.
+# - Do not use aliases.
+# - Do not use regex fact memory.
+#
+# Question detection is intentionally broad because FTS5 should decide
+# whether anything useful exists.
 def extract_recall_user_text(user_text):
-    text = _nancee_memory_input(user_text)
-    lowered = text.lower()
-
-    # Preferred name / nickname / call-sign.
-    patterns = (
-        (r"\bcall me\s+([^?.!,]{1,60})", lambda m: _nancee_join_facts(
-            _nancee_fact("preferred name", m.group(1)),
-            _nancee_fact("name", m.group(1)),
-            _nancee_fact("call me", m.group(1)),
-        )),
-        (r"\bi go by\s+([^?.!,]{1,60})", lambda m: _nancee_join_facts(
-            _nancee_fact("preferred name", m.group(1)),
-            _nancee_fact("name", m.group(1)),
-        )),
-        (r"\bmy nickname is\s+([^?.!,]{1,60})", lambda m: _nancee_join_facts(
-            _nancee_fact("nickname", m.group(1)),
-            _nancee_fact("preferred name", m.group(1)),
-            _nancee_fact("name", m.group(1)),
-        )),
-        (r"\bmy name is\s+([^?.!,]{1,60})", lambda m: _nancee_fact("name", m.group(1))),
-        (r"\bthis is\s+([^?.!,]{1,60})", lambda m: _nancee_fact("name", m.group(1))),
-        (r"\bi(?:'m| am)\s+(?!here\b|going\b|trying\b|testing\b|driving\b|heading\b|tired\b|hungry\b)([^?.!,]{1,40})", lambda m: _nancee_fact("name", m.group(1))),
-
-        # Vehicle / ownership facts.
-        (r"\bi drive\s+([^?.!,]{1,80})", lambda m: _nancee_join_facts(
-            _nancee_fact("vehicle", m.group(1)),
-            _nancee_fact("owned item", m.group(1)) if _nancee_is_vehicle_value(m.group(1)) else "",
-        )),
-        (r"\bmy car is\s+([^?.!,]{1,80})", lambda m: _nancee_join_facts(
-            _nancee_fact("vehicle", m.group(1)),
-            _nancee_fact("owned item", m.group(1)) if _nancee_is_vehicle_value(m.group(1)) else "",
-        )),
-        (r"\bmy vehicle is\s+([^?.!,]{1,80})", lambda m: _nancee_join_facts(
-            _nancee_fact("vehicle", m.group(1)),
-            _nancee_fact("owned item", m.group(1)) if _nancee_is_vehicle_value(m.group(1)) else "",
-        )),
-        (r"\bi own\s+([^?.!,]{1,80})", lambda m: _nancee_join_facts(
-            _nancee_fact("owned item", m.group(1)),
-            _nancee_fact("vehicle", m.group(1)) if _nancee_is_vehicle_value(m.group(1)) else "",
-        )),
-
-        # Generic favorite/preference grammar.
-        (r"\bmy favorite\s+([a-z0-9 '\-]{1,40})\s+is\s+([^?.!,]{1,100})", lambda m: _nancee_fact(f"favorite {m.group(1)}", m.group(2))),
-        (r"\bthe\s+([a-z0-9 '\-]{1,40})\s+i like most\s+is\s+([^?.!,]{1,100})", lambda m: _nancee_fact(f"favorite {m.group(1)}", m.group(2))),
-        (r"\bi love\s+([^?.!,]{1,100})\s+more than any other\s+([a-z0-9 '\-]{1,40})", lambda m: _nancee_fact(f"favorite {m.group(2)}", m.group(1))),
-        (r"\bmy\s+([a-z0-9 '\-]{1,40})\s+order is\s+([^?.!,]{1,100})", lambda m: _nancee_fact(f"{m.group(1)} order", m.group(2))),
-        (r"\bi like\s+([^?.!,]{1,100})", lambda m: _nancee_fact("preference", m.group(1))),
-        (r"\bi drink\s+([^?.!,]{1,100})", lambda m: _nancee_join_facts(
-            _nancee_fact("drink", m.group(1)),
-            _nancee_fact("preference", m.group(1)),
-        )),
-
-        # Generic possessive property fallback:
-        # "my gym is Vasa", "my mechanic is Dave", "my pharmacy is Walgreens".
-        (r"\bmy\s+([a-z0-9 '\-]{1,40})\s+is\s+([^?.!,]{1,100})", lambda m: _nancee_fact(m.group(1), m.group(2))),
-
-        # Generic location/work/routine grammar.
-        (r"\bi live in\s+([^?.!,]{1,100})", lambda m: _nancee_fact("home city", m.group(1))),
-        (r"\bi work in\s+([^?.!,]{1,100})", lambda m: _nancee_fact("work city", m.group(1))),
-        (r"\bi work as\s+([^?.!,]{1,100})", lambda m: _nancee_fact("job", m.group(1))),
-        (r"\bi take\s+([^?.!,]{1,100})", lambda m: _nancee_fact("route", m.group(1))),
-        (r"\bi shop at\s+([^?.!,]{1,100})", lambda m: _nancee_fact("grocery store", m.group(1))),
-        (r"\bi park in\s+([^?.!,]{1,100})", lambda m: _nancee_fact("parking", m.group(1))),
-    )
-
-    for pattern, builder in patterns:
-        match = _nancee_mem_re.search(pattern, text, flags=_nancee_mem_re.I)
-        if match:
-            fact = builder(match)
-            return fact.strip().lower()
-
     return ""
 
 
 def has_declarative_memory_content(user_text):
-    return bool(extract_recall_user_text(user_text))
+    text = normalize_user_text_for_memory(user_text)
+    return bool(text) and not looks_like_question_text(text)
 
 
 def should_store_recall_turn(user_text):
-    return bool(extract_recall_user_text(user_text))
-
-
-def looks_like_recall_request(user_text):
-    text = str(user_text).strip().lower()
-    text = text.replace("’", "'")
-    text = _nancee_mem_re.sub(r"^\s*(hey|hello|hi|oh)?\s*nanc(?:y|ee)[,\s]+", "", text, flags=_nancee_mem_re.I)
-
-    patterns = (
-        r"\bwhat is my\b",
-        r"\bwhat's my\b",
-        r"\bwho is my\b",
-        r"\bwhere do i\b",
-        r"\bwhere is my\b",
-        r"\bhow do i\b",
-        r"\bwhat do i\s+(drive|own|have|like|use|take|drink)\b",
-        r"\bwhat\s+[a-z0-9 '\-]{1,40}\s+do i like most\b",
-        r"\bwhat should you call me\b",
-        r"\bwhat name do i go by\b",
-        r"\bdo you remember my\b",
-        r"\bcan you recall my\b",
-        r"\bcan you remember my\b",
-        r"\bwhat tires?\b",
-        r"\bwhat oil\b",
-    )
-
-    return any(_nancee_mem_re.search(pattern, text, flags=_nancee_mem_re.I) for pattern in patterns)
+    text = normalize_user_text_for_memory(user_text)
+    return bool(text) and not looks_like_question_text(text)
 
 
 def should_retrieve_recall(user_text):
-    # If the utterance itself contains a storable fact, treat it as a write,
-    # not a lookup.
-    if extract_recall_user_text(user_text):
-        return False
+    return looks_like_question_text(user_text)
 
-    return looks_like_recall_request(user_text)
+# NANCEE FTS5 ONLY MEMORY MODE END
 
-# NANCEE MEMORY INDEXER OVERRIDE V3 END
-
-
-# NANCEE MEMORY INDEXER OVERRIDE V4 START
-# Generic fixes:
-# - do not treat recall questions as storable "I like..." facts
-# - fix greedy "my favorite song is What It Is To Burn"
-# - add natural recall forms like "what car do I drive"
-# - keep storage as indexed memory facts, not answer templates
-
-def _nancee_strip_article(value):
-    value = _nancee_clean_memory_value(value)
-    return _nancee_mem_re.sub(r"^(a|an|the)\s+", "", value, flags=_nancee_mem_re.I)
-
-
-def _nancee_vehicle_facts(value):
-    value = _nancee_strip_article(value)
-    return _nancee_join_facts(
-        _nancee_fact("vehicle", value),
-        _nancee_fact("owned item", value) if _nancee_is_vehicle_value(value) else "",
-    )
-
-
-def _nancee_owned_facts(value):
-    value = _nancee_strip_article(value)
-    return _nancee_join_facts(
-        _nancee_fact("owned item", value),
-        _nancee_fact("vehicle", value) if _nancee_is_vehicle_value(value) else "",
-    )
-
-
-def _nancee_is_recall_question_text(user_text):
-    text = str(user_text).strip().lower()
-    text = text.replace("’", "'")
-    text = _nancee_mem_re.sub(
-        r"^\s*(hey|hello|hi|oh)?\s*nanc(?:y|ee)[,\s]+",
-        "",
-        text,
-        flags=_nancee_mem_re.I,
-    )
-
-    patterns = (
-        r"^(what|who|where|how)\b",
-        r"^do you remember\b",
-        r"^can you recall\b",
-        r"^can you remember\b",
-        r"\bwhat is my\b",
-        r"\bwhat's my\b",
-        r"\bwho is my\b",
-        r"\bwhere do i\b",
-        r"\bwhere is my\b",
-        r"\bhow do i\b",
-        r"\bwhat car do i drive\b",
-        r"\bwhat vehicle do i have\b",
-        r"\bwhat vehicle do i drive\b",
-        r"\bwhat do i\s+(drive|own|have|like|use|take|drink)\b",
-        r"\bwhat\s+[a-z0-9 '\-]{1,40}\s+do i like most\b",
-        r"\bwhat should you call me\b",
-        r"\bwhat name do i go by\b",
-        r"\bdo you remember my\b",
-        r"\bcan you recall my\b",
-        r"\bcan you remember my\b",
-        r"\bwhat tires?\b",
-        r"\bwhat oil\b",
-    )
-
-    return any(
-        _nancee_mem_re.search(pattern, text, flags=_nancee_mem_re.I)
-        for pattern in patterns
-    )
-
-
-def extract_recall_user_text(user_text):
-    # Never index recall questions as facts.
-    if _nancee_is_recall_question_text(user_text):
-        return ""
-
-    text = _nancee_memory_input(user_text)
-
-    patterns = (
-        # Preferred name / nickname / call-sign.
-        (r"\bcall me\s+([^?.!,]{1,60})", lambda m: _nancee_join_facts(
-            _nancee_fact("preferred name", m.group(1)),
-            _nancee_fact("name", m.group(1)),
-            _nancee_fact("call me", m.group(1)),
-        )),
-        (r"\bi go by\s+([^?.!,]{1,60})", lambda m: _nancee_join_facts(
-            _nancee_fact("preferred name", m.group(1)),
-            _nancee_fact("name", m.group(1)),
-        )),
-        (r"\bmy nickname is\s+([^?.!,]{1,60})", lambda m: _nancee_join_facts(
-            _nancee_fact("nickname", m.group(1)),
-            _nancee_fact("preferred name", m.group(1)),
-            _nancee_fact("name", m.group(1)),
-        )),
-        (r"\bmy name is\s+([^?.!,]{1,60})", lambda m: _nancee_fact("name", m.group(1))),
-        (r"\bthis is\s+([^?.!,]{1,60})", lambda m: _nancee_fact("name", m.group(1))),
-        (r"\bi(?:'m| am)\s+(?!here\b|going\b|trying\b|testing\b|driving\b|heading\b|tired\b|hungry\b)([^?.!,]{1,40})", lambda m: _nancee_fact("name", m.group(1))),
-
-        # Vehicle / ownership facts.
-        (r"\bi drive\s+([^?.!,]{1,80})", lambda m: _nancee_vehicle_facts(m.group(1))),
-        (r"\bmy car is\s+([^?.!,]{1,80})", lambda m: _nancee_vehicle_facts(m.group(1))),
-        (r"\bmy vehicle is\s+([^?.!,]{1,80})", lambda m: _nancee_vehicle_facts(m.group(1))),
-        (r"\bi own\s+([^?.!,]{1,80})", lambda m: _nancee_owned_facts(m.group(1))),
-
-        # Generic favorite/preference grammar.
-        # Non-greedy category prevents "favorite song is What It Is To Burn"
-        # from turning into category "song is what it".
-        (r"\bmy favorite\s+([a-z0-9 '\-]{1,40}?)\s+is\s+([^?.!,]{1,100})", lambda m: _nancee_fact(f"favorite {m.group(1)}", m.group(2))),
-        (r"\bthe\s+([a-z0-9 '\-]{1,40}?)\s+i like most\s+is\s+([^?.!,]{1,100})", lambda m: _nancee_fact(f"favorite {m.group(1)}", m.group(2))),
-        (r"\bi love\s+([^?.!,]{1,100}?)\s+more than any other\s+([a-z0-9 '\-]{1,40})", lambda m: _nancee_fact(f"favorite {m.group(2)}", m.group(1))),
-        (r"\bmy\s+([a-z0-9 '\-]{1,40}?)\s+order is\s+([^?.!,]{1,100})", lambda m: _nancee_fact(f"{m.group(1)} order", m.group(2))),
-        (r"\bi drink\s+([^?.!,]{1,100})", lambda m: _nancee_join_facts(
-            _nancee_fact("drink", m.group(1)),
-            _nancee_fact("preference", m.group(1)),
-        )),
-        (r"\bi like\s+([^?.!,]{1,100})", lambda m: _nancee_fact("preference", m.group(1))),
-
-        # Generic possessive property fallback.
-        (r"\bmy\s+([a-z0-9 '\-]{1,40}?)\s+is\s+([^?.!,]{1,100})", lambda m: _nancee_fact(m.group(1), m.group(2))),
-
-        # Generic location/work/routine grammar.
-        (r"\bi live in\s+([^?.!,]{1,100})", lambda m: _nancee_fact("home city", m.group(1))),
-        (r"\bi work in\s+([^?.!,]{1,100})", lambda m: _nancee_fact("work city", m.group(1))),
-        (r"\bi work as\s+([^?.!,]{1,100})", lambda m: _nancee_fact("job", m.group(1))),
-        (r"\bi take\s+([^?.!,]{1,100})", lambda m: _nancee_fact("route", m.group(1))),
-        (r"\bi shop at\s+([^?.!,]{1,100})", lambda m: _nancee_fact("grocery store", m.group(1))),
-        (r"\bi park in\s+([^?.!,]{1,100})", lambda m: _nancee_fact("parking", m.group(1))),
-    )
-
-    for pattern, builder in patterns:
-        match = _nancee_mem_re.search(pattern, text, flags=_nancee_mem_re.I)
-        if match:
-            return builder(match).strip().lower()
-
-    return ""
-
-
-def has_declarative_memory_content(user_text):
-    return bool(extract_recall_user_text(user_text))
-
-
-def should_store_recall_turn(user_text):
-    return bool(extract_recall_user_text(user_text))
-
-
-def looks_like_recall_request(user_text):
-    return _nancee_is_recall_question_text(user_text)
-
-
-def should_retrieve_recall(user_text):
-    return _nancee_is_recall_question_text(user_text)
-
-# NANCEE MEMORY INDEXER OVERRIDE V4 END
-
-
-# NANCEE MEMORY INDEXER OVERRIDE V5 START
-# Generic alias normalization.
-# "call me", "go by", "nickname", and "preferred name" are the same memory neighborhood.
-_nancee_extract_recall_user_text_v4 = extract_recall_user_text
-
-
-def _nancee_name_alias_facts(value):
-    return _nancee_join_facts(
-        _nancee_fact("preferred name", value),
-        _nancee_fact("name", value),
-        _nancee_fact("nickname", value),
-        _nancee_fact("call me", value),
-    )
-
-
-def extract_recall_user_text(user_text):
-    if _nancee_is_recall_question_text(user_text):
-        return ""
-
-    text = _nancee_memory_input(user_text)
-
-    alias_patterns = (
-        r"\bcall me\s+([^?.!,]{1,60})",
-        r"\bi go by\s+([^?.!,]{1,60})",
-        r"\bmy nickname is\s+([^?.!,]{1,60})",
-    )
-
-    for pattern in alias_patterns:
-        match = _nancee_mem_re.search(pattern, text, flags=_nancee_mem_re.I)
-        if match:
-            return _nancee_name_alias_facts(match.group(1)).strip().lower()
-
-    return _nancee_extract_recall_user_text_v4(user_text)
-
-
-def has_declarative_memory_content(user_text):
-    return bool(extract_recall_user_text(user_text))
-
-
-def should_store_recall_turn(user_text):
-    return bool(extract_recall_user_text(user_text))
-
-
-def should_retrieve_recall(user_text):
-    return _nancee_is_recall_question_text(user_text)
-
-# NANCEE MEMORY INDEXER OVERRIDE V5 END
 
 def main():
     print(
@@ -1469,7 +1135,7 @@ def main():
             try:
                 response = stream_ollama_response(
                     user_text=user_text,
-                    history=[] if retrieved_context else recent_prompt_memory.get_messages(),
+                    history=[],
                     memory_context="",
                     retrieved_context=retrieved_context,
                 )
@@ -1502,22 +1168,29 @@ def main():
             # keep assistant text from poisoning future prompts/recall.
             memory_assistant_text = "Okay."
 
-            recall_user_text = extract_recall_user_text(user_text)
-
-            if recall_user_text:
-                recall_memory.add_turn(
-                    user_text=recall_user_text,
+            # FTS5 raw utterance recall archive.
+            # Store only non-recall user turns. Do not extract facts here.
+            # SessionMemoryStore rejects low-signal filler.
+            if not looks_like_question_text(user_text):
+                added_memory_id = recall_memory.add_turn(
+                    user_text=user_text,
                     assistant_text=memory_assistant_text,
                 )
 
                 if memory_debug_enabled():
-                    print(
-                        f"[MEMORY EXTRACT] stored={recall_user_text!r}",
-                        flush=True,
-                    )
+                    if added_memory_id is not None:
+                        print(
+                            f"[MEMORY RAW ADD] id={added_memory_id} stored={user_text!r}",
+                            flush=True,
+                        )
+                    else:
+                        print(
+                            "[MEMORY RAW SKIP] not stored (filler/low-signal)",
+                            flush=True,
+                        )
             elif memory_debug_enabled():
                 print(
-                    "[MEMORY INDEX SKIP] question-like turn was not stored in recall",
+                    "[MEMORY RAW SKIP] question/recall query not stored",
                     flush=True,
                 )
 

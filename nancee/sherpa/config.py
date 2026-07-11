@@ -27,7 +27,7 @@ MEMORY_RECALL_ENABLED = (
 MEMORY_RECALL_LIMIT = int(
     os.getenv(
         "NANCEE_MEMORY_RECALL_LIMIT",
-        "3",
+        "1",
     )
 )
 
@@ -207,3 +207,15 @@ def load_system_prompt():
         encoding="utf-8",
     ) as prompt_file:
         return prompt_file.read().strip()
+
+# Memory debug logging.
+# Enable with:
+#   export NANCEE_MEMORY_DEBUG=true
+MEMORY_DEBUG_ENABLED = (
+    os.getenv(
+        "NANCEE_MEMORY_DEBUG",
+        "false",
+    ).lower()
+    == "true"
+)
+

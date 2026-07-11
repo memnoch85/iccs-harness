@@ -1,0 +1,146 @@
+[
+  {
+    "tokenizer": "porter unicode61",
+    "query_mode": "or",
+    "limit": 3,
+    "top1": 0.7333333333333333,
+    "at_k": 0.8666666666666667,
+    "p50_ms": 0.10386100000000001,
+    "p95_ms": 0.126537
+  },
+  {
+    "tokenizer": "porter unicode61",
+    "query_mode": "or",
+    "limit": 5,
+    "top1": 0.7333333333333333,
+    "at_k": 0.8666666666666667,
+    "p50_ms": 0.104537,
+    "p95_ms": 0.128703
+  },
+  {
+    "tokenizer": "porter unicode61",
+    "query_mode": "and_then_or",
+    "limit": 5,
+    "top1": 0.7333333333333333,
+    "at_k": 0.8666666666666667,
+    "p50_ms": 0.1049995,
+    "p95_ms": 0.156481
+  },
+  {
+    "tokenizer": "porter unicode61",
+    "query_mode": "and_then_or",
+    "limit": 3,
+    "top1": 0.7333333333333333,
+    "at_k": 0.8666666666666667,
+    "p50_ms": 0.105,
+    "p95_ms": 0.155204
+  },
+  {
+    "tokenizer": "porter unicode61",
+    "query_mode": "or",
+    "limit": 2,
+    "top1": 0.7333333333333333,
+    "at_k": 0.8,
+    "p50_ms": 0.10423099999999999,
+    "p95_ms": 0.126
+  },
+  {
+    "tokenizer": "porter unicode61",
+    "query_mode": "and_then_or",
+    "limit": 2,
+    "top1": 0.7333333333333333,
+    "at_k": 0.8,
+    "p50_ms": 0.104889,
+    "p95_ms": 0.154166
+  },
+  {
+    "tokenizer": "porter unicode61",
+    "query_mode": "or",
+    "limit": 1,
+    "top1": 0.7333333333333333,
+    "at_k": 0.7333333333333333,
+    "p50_ms": 0.103537,
+    "p95_ms": 0.123111
+  },
+  {
+    "tokenizer": "porter unicode61",
+    "query_mode": "and_then_or",
+    "limit": 1,
+    "top1": 0.7333333333333333,
+    "at_k": 0.7333333333333333,
+    "p50_ms": 0.1047775,
+    "p95_ms": 0.152352
+  },
+  {
+    "tokenizer": "unicode61",
+    "query_mode": "and_then_or",
+    "limit": 5,
+    "top1": 0.6666666666666666,
+    "at_k": 0.8,
+    "p50_ms": 0.1034625,
+    "p95_ms": 0.155185
+  },
+  {
+    "tokenizer": "unicode61",
+    "query_mode": "or",
+    "limit": 5,
+    "top1": 0.6666666666666666,
+    "at_k": 0.8,
+    "p50_ms": 0.10358300000000001,
+    "p95_ms": 0.127241
+  },
+  {
+    "tokenizer": "unicode61",
+    "query_mode": "and_then_or",
+    "limit": 3,
+    "top1": 0.6666666666666666,
+    "at_k": 0.8,
+    "p50_ms": 0.103648,
+    "p95_ms": 0.153703
+  },
+  {
+    "tokenizer": "unicode61",
+    "query_mode": "or",
+    "limit": 3,
+    "top1": 0.6666666666666666,
+    "at_k": 0.8,
+    "p50_ms": 0.1038055,
+    "p95_ms": 0.125759
+  },
+  {
+    "tokenizer": "unicode61",
+    "query_mode": "or",
+    "limit": 2,
+    "top1": 0.6666666666666666,
+    "at_k": 0.7333333333333333,
+    "p50_ms": 0.103408,
+    "p95_ms": 0.125574
+  },
+  {
+    "tokenizer": "unicode61",
+    "query_mode": "and_then_or",
+    "limit": 2,
+    "top1": 0.6666666666666666,
+    "at_k": 0.7333333333333333,
+    "p50_ms": 0.103907,
+    "p95_ms": 0.152944
+  },
+  {
+    "tokenizer": "unicode61",
+    "query_mode": "and_then_or",
+    "limit": 1,
+    "top1": 0.6666666666666666,
+    "at_k": 0.6666666666666666,
+    "p50_ms": 0.103648,
+    "p95_ms": 0.151093
+  },
+  {
+    "tokenizer": "unicode61",
+    "query_mode": "or",
+    "limit": 1,
+    "top1": 0.6666666666666666,
+    "at_k": 0.6666666666666666,
+    "p50_ms": 0.104074,
+    "p95_ms": 0.143278
+  }
+]
