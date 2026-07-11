@@ -1,0 +1,11 @@
+repeat,shape_id,messages,history_messages,profile_chars,retrieved_context_chars,ok,error,wall_s,first_token_s,prompt_eval_s,generation_s,prompt_tokens,response_tokens,done_reason
+0,system_only_startup_prime,2,0,0,0,True,,1.1707519789997605,1.1706545349989028,0.691193,1e-06,431,1,length
+0,profile_only,3,0,289,0,True,,4.5513646740000695,4.551239895998151,4.074478,1e-06,501,1,length
+0,profile_plus_recent,5,2,289,0,True,,2.120128083999589,2.120026398999471,1.647952,1e-06,517,1,length
+0,profile_plus_retrieved,4,0,289,103,True,,4.290273891998368,4.290172614000767,3.814032,1e-06,564,1,length
+0,profile_plus_recent_plus_retrieved,6,2,289,106,True,,2.9875768150013755,2.987491834002867,2.507614,1e-06,583,1,length
+1,system_only_startup_prime,2,0,0,0,True,,1.1658638019980572,1.1657597279991023,0.690149,1e-06,431,1,length
+1,profile_only,3,0,289,0,True,,4.546151135997206,4.546073228997557,4.075147,1e-06,501,1,length
+1,profile_plus_recent,5,2,289,0,True,,2.1175117090024287,2.117429487003392,1.650113,1e-06,517,1,length
+1,profile_plus_retrieved,4,0,289,103,True,,4.292406647000462,4.292315165999753,3.819393,1e-06,564,1,length
+1,profile_plus_recent_plus_retrieved,6,2,289,106,True,,2.975955558998976,2.975837910998962,2.498593,1e-06,583,1,length
