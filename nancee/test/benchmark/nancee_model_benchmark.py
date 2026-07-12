@@ -25,11 +25,11 @@ except ImportError:
 
 
 MODELS = [
-"llama3.2:3b",
-"qwen2.5:1.5b",
-"phi4-mini:3.8b",
-"qwen2.5:3b",
-"qwen3:4b-instruct-2507-q4_K_M",
+    "llama3.2:3b",
+    "qwen2.5:1.5b",
+    "phi4-mini:3.8b",
+    "qwen2.5:3b",
+    "qwen3:4b-instruct-2507-q4_K_M",
 ]
 
 
@@ -158,12 +158,16 @@ SHOW_URL = f"{API_BASE}/show"
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DEFAULT_PROMPT_PATH = (SCRIPT_DIR / "../../sherpa/system-prompt.txt").resolve()
-SYSTEM_PROMPT_PATH = Path(
-    os.environ.get(
-        "NANCEE_SYSTEM_PROMPT_FILE",
-        str(DEFAULT_PROMPT_PATH),
+SYSTEM_PROMPT_PATH = (
+    Path(
+        os.environ.get(
+            "NANCEE_SYSTEM_PROMPT_FILE",
+            str(DEFAULT_PROMPT_PATH),
+        )
     )
-).expanduser().resolve()
+    .expanduser()
+    .resolve()
+)
 
 RESOURCE_INTERVAL_SECONDS = 5.0
 COLD_START_TIMEOUT_SECONDS = 90.0
@@ -435,7 +439,7 @@ def automatic_checks(answer):
     stripped = answer.strip()
     words = re.findall(r"\b[\w'-]+\b", stripped)
     filler_pattern = re.compile(
-        r"^(?:so|well|hmm|absolutely|actually|alright|hang on)\s*[,!.?:;-]",
+        r"^(?:so|well|hum|absolutely|actually|alright|hang on)\s*[,!.?:;-]",
         re.IGNORECASE,
     )
 
@@ -455,7 +459,9 @@ def automatic_checks(answer):
     }
 
 
-def stream_chat(model_name, system_prompt, user_prompt, timeout_seconds, num_predict=None):
+def stream_chat(
+    model_name, system_prompt, user_prompt, timeout_seconds, num_predict=None
+):
     options = dict(OPTIONS)
 
     if num_predict is not None:
@@ -545,9 +551,7 @@ def stream_chat(model_name, system_prompt, user_prompt, timeout_seconds, num_pre
         "answer": answer,
         "thinking": "".join(thinking_parts).strip(),
         "first_token_seconds": (
-            round(first_token_seconds, 6)
-            if first_token_seconds is not None
-            else None
+            round(first_token_seconds, 6) if first_token_seconds is not None else None
         ),
         "wall_total_seconds": round(wall_total_seconds, 6),
         "ollama_total_seconds": ns_to_seconds(final_data.get("total_duration", 0)),
@@ -635,9 +639,7 @@ def summarize_questions(question_results):
         "warm_wall_total_mean_seconds": mean(wall_totals),
         "warm_wall_total_median_seconds": median(wall_totals),
         "generation_tokens_per_second_median": median(generation_rates),
-        "mandatory_filler_pass_count": sum(
-            1 for passed in filler_results if passed
-        ),
+        "mandatory_filler_pass_count": sum(1 for passed in filler_results if passed),
         "mandatory_filler_test_count": len(filler_results),
     }
 
@@ -723,9 +725,7 @@ def collect_system_info():
     except Exception as error:
         ollama_version = f"unavailable: {error}"
 
-    governor_path = Path(
-        "/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor"
-    )
+    governor_path = Path("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
 
     try:
         governor = governor_path.read_text(encoding="utf-8").strip()
@@ -910,12 +910,8 @@ def main():
 
     installed = installed_models()
     requested_models = list(arguments.models)
-    missing_models = [
-        model for model in requested_models if model not in installed
-    ]
-    available_models = [
-        model for model in requested_models if model in installed
-    ]
+    missing_models = [model for model in requested_models if model not in installed]
+    available_models = [model for model in requested_models if model in installed]
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     output_path = (
@@ -932,9 +928,7 @@ def main():
         "status": "running",
         "system_prompt": {
             "path": str(SYSTEM_PROMPT_PATH),
-            "sha256": hashlib.sha256(
-                system_prompt.encode("utf-8")
-            ).hexdigest(),
+            "sha256": hashlib.sha256(system_prompt.encode("utf-8")).hexdigest(),
             "text": system_prompt,
         },
         "configuration": {
@@ -996,9 +990,7 @@ def main():
 
     try:
         for model in available_models:
-            report["results"].append(
-                benchmark_model(model, system_prompt, installed)
-            )
+            report["results"].append(benchmark_model(model, system_prompt, installed))
             atomic_write_json(output_path, report)
 
     except KeyboardInterrupt:

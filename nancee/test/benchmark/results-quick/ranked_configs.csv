@@ -1,0 +1,2 @@
+temperature,llm_threads,tts_speed,tts_threads,runs,mean_obedience,mean_first_audio_seconds,p95_first_audio_seconds,mean_turn_done_seconds,composite_score
+0.3,3,1.2,4,12,0.8542,3.1046,6.3535,11.0992,80.2957

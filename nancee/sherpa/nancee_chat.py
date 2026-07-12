@@ -33,6 +33,8 @@ from config import (
     PREROLL_MS,
     SPEED,
     TTS_EMPHASIS_SPEED,
+    TTS_FILLER_SPEED,
+    TTS_GAP_FILLER_COOLDOWN_SECONDS,
     TTS_GAP_FILLER_ENABLED,
     TTS_GAP_FILLER_MAX_PER_TURN,
     TTS_GAP_FILLER_PHRASES,
@@ -71,6 +73,7 @@ first_audio_enqueued = False
 gap_filler_lock = threading.Lock()
 gap_filler_audio_cycle = None
 gap_fillers_used = 0
+last_gap_filler_time = 0.0
 
 
 NANCEE_ROOT = Path(__file__).resolve().parent.parent
@@ -720,6 +723,7 @@ def tts_worker(tts):
             request = text_queue.get(
                 timeout=0.05,
             )
+
         except queue.Empty:
             continue
 
@@ -732,15 +736,15 @@ def tts_worker(tts):
             if not text:
                 continue
 
-            # Normal chunks use SPEED.
-            # Chunks containing paired *emphasis* markers use
-            # TTS_EMPHASIS_SPEED, with the asterisks already removed
-            # by build_tts_request().
             gen_config.speed = request.speed
 
             start = time.time()
             first_callback = None
             callback_count = 0
+            gap_timer = None
+
+            # Once set, a watchdog filler must never enqueue.
+            real_audio_started = threading.Event()
 
             print(
                 f"\n[TTS START] {text!r} "
@@ -755,6 +759,7 @@ def tts_worker(tts):
             ):
                 nonlocal first_callback
                 nonlocal callback_count
+                nonlocal gap_timer
 
                 callback_count += 1
                 now = time.time()
@@ -762,6 +767,14 @@ def tts_worker(tts):
                 first_audio_for_request = first_callback is None
 
                 if first_audio_for_request:
+                    # Mark real audio first so a timer callback
+                    # already waking up cannot enqueue a filler.
+                    real_audio_started.set()
+
+                    if gap_timer is not None:
+                        gap_timer.cancel()
+                        gap_timer = None
+
                     first_callback = now
 
                     print(
@@ -783,15 +796,16 @@ def tts_worker(tts):
 
                 return 1
 
-            gap_timer = None
-
-            if (
-                TTS_GAP_FILLER_ENABLED
-                and request.allow_gap_filler
-            ):
+            if TTS_GAP_FILLER_ENABLED and request.allow_gap_filler:
 
                 def play_gap_filler():
                     global gap_fillers_used
+                    global last_gap_filler_time
+
+                    # Real audio may have arrived while this timer
+                    # thread was waking up.
+                    if real_audio_started.is_set():
+                        return
 
                     with audio_lock:
                         answer_audio_waiting = bool(
@@ -802,6 +816,11 @@ def tts_worker(tts):
                         return
 
                     with gap_filler_lock:
+                        # Check again after acquiring the shared
+                        # filler-state lock.
+                        if real_audio_started.is_set():
+                            return
+
                         if (
                             gap_fillers_used
                             >= TTS_GAP_FILLER_MAX_PER_TURN
@@ -811,28 +830,62 @@ def tts_worker(tts):
                         if gap_filler_audio_cycle is None:
                             return
 
+                        now = time.monotonic()
+
+                        if (
+                            last_gap_filler_time > 0.0
+                            and (
+                                now
+                                - last_gap_filler_time
+                            )
+                            < TTS_GAP_FILLER_COOLDOWN_SECONDS
+                        ):
+                            if memory_debug_enabled():
+                                remaining = (
+                                    TTS_GAP_FILLER_COOLDOWN_SECONDS
+                                    - (
+                                        now
+                                        - last_gap_filler_time
+                                    )
+                                )
+
+                                print(
+                                    "\n[TTS GAP FILLER SKIP] "
+                                    "cooldown_active=true "
+                                    f"remaining={remaining:.3f}s",
+                                    flush=True,
+                                )
+
+                            return
+
                         (
                             phrase,
-                            samples,
-                            sample_rate,
+                            filler_samples,
+                            filler_sample_rate,
                         ) = next(
                             gap_filler_audio_cycle
                         )
 
+                        # One final race check before consuming the
+                        # budget and placing filler audio in the queue.
+                        if real_audio_started.is_set():
+                            return
+
                         gap_fillers_used += 1
+                        last_gap_filler_time = now
                         count = gap_fillers_used
 
-                    print(
-                        "\n[TTS GAP FILLER] "
-                        f"phrase={phrase!r} "
-                        f"count={count}",
-                        flush=True,
-                    )
+                        print(
+                            "\n[TTS GAP FILLER] "
+                            f"phrase={phrase!r} "
+                            f"count={count}",
+                            flush=True,
+                        )
 
-                    enqueue_audio(
-                        samples.copy(),
-                        sample_rate,
-                    )
+                        enqueue_audio(
+                            filler_samples.copy(),
+                            filler_sample_rate,
+                        )
 
                 gap_timer = threading.Timer(
                     TTS_GAP_FILLER_SECONDS,
@@ -852,10 +905,13 @@ def tts_worker(tts):
             finally:
                 if gap_timer is not None:
                     gap_timer.cancel()
+                    gap_timer = None
 
-            # Some Sherpa configurations may return complete audio
+            # Some Sherpa configurations return complete audio
             # without invoking the streaming callback.
             if callback_count == 0:
+                real_audio_started.set()
+
                 enqueue_audio(
                     np.asarray(
                         audio.samples,
@@ -1019,7 +1075,11 @@ def stream_text_to_tts(text_iter, first_audio_callback=None):
     return full_text
 
 
-def generate_bridge_audio(tts, phrase):
+def generate_bridge_audio(
+    tts,
+    phrase,
+    speed=TTS_FILLER_SPEED,
+):
     """Generate bridge speech once before the conversation loop."""
     request = build_tts_request(
         text=phrase,
@@ -1033,7 +1093,7 @@ def generate_bridge_audio(tts, phrase):
     gen_config = sherpa_onnx.GenerationConfig()
     gen_config.sid = VOICE_ID
     gen_config.silence_scale = TTS_SILENCE_SCALE
-    gen_config.speed = request.speed
+    gen_config.speed = speed
 
     audio = tts.generate(
         phrase,
@@ -1171,9 +1231,7 @@ def main():
         for phrase in LATENCY_BRIDGE_PHRASES
     ]
 
-    bridge_audio_cycle = itertools.cycle(
-        bridge_audio_options
-    )
+    bridge_audio_cycle = itertools.cycle(bridge_audio_options)
 
     global gap_filler_audio_cycle
 
@@ -1188,9 +1246,7 @@ def main():
         for phrase in TTS_GAP_FILLER_PHRASES
     ]
 
-    gap_filler_audio_cycle = itertools.cycle(
-        gap_filler_audio_options
-    )
+    gap_filler_audio_cycle = itertools.cycle(gap_filler_audio_options)
 
     print(
         "[LATENCY BRIDGE] "
@@ -1314,9 +1370,11 @@ def main():
             global_start = time.time()
 
             global gap_fillers_used
+            global last_gap_filler_time
 
             with gap_filler_lock:
                 gap_fillers_used = 0
+                last_gap_filler_time = 0.0
 
             profile_context = user_profile.format_context()
 

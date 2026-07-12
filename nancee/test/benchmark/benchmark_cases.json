@@ -1,0 +1,14 @@
+[
+  {"id":"greeting","prompt":"Hello, Nancee.","category":"casual","max_words":20,"required_any":[],"forbidden":["as an ai","language model"]},
+  {"id":"turbo_explain","prompt":"Explain how a turbocharger works.","category":"explanation","max_words":35,"required_any":["exhaust","air","compress"],"forbidden":["crankshaft drives the compressor"]},
+  {"id":"abs_explain","prompt":"Explain how anti-lock brakes work.","category":"explanation","max_words":35,"required_any":["wheel","brake","lock"],"forbidden":[]},
+  {"id":"question_intonation_1","prompt":"Are you ready to go?","category":"question","max_words":20,"required_any":[],"forbidden":[]},
+  {"id":"question_intonation_2","prompt":"What should we check first?","category":"question","max_words":25,"required_any":[],"forbidden":[]},
+  {"id":"memory_buy","prompt":"What did I buy?","category":"memory","memory_context":"MEMORY SPEAKER: human user\nPERSPECTIVE: quoted I/me/my means the user; answer as you/your.\nUSER MEMORY:\n- User said: \"Today I bought hot sauce at Macy's.\"","max_words":20,"required_any":["hot sauce"],"forbidden":["i bought","i purchased","groceries"]},
+  {"id":"memory_where","prompt":"Where did I buy hot sauce?","category":"memory","memory_context":"MEMORY SPEAKER: human user\nPERSPECTIVE: quoted I/me/my means the user; answer as you/your.\nUSER MEMORY:\n- User said: \"Today I bought hot sauce at Macy's.\"","max_words":20,"required_any":["macy"],"forbidden":["i bought","i purchased"]},
+  {"id":"memory_who","prompt":"Was it you or me who bought the hot sauce?","category":"memory","memory_context":"MEMORY SPEAKER: human user\nPERSPECTIVE: quoted I/me/my means the user; answer as you/your.\nUSER MEMORY:\n- User said: \"Today I bought hot sauce at Macy's.\"","max_words":24,"required_any":["you"],"forbidden":["i bought it","i purchased it"]},
+  {"id":"false_recall","prompt":"Who's on first?","category":"ordinary","max_words":25,"required_any":[],"forbidden":["hot sauce","macy"]},
+  {"id":"concise_fact","prompt":"What is the capital of France?","category":"fact","max_words":20,"required_any":["paris"],"forbidden":[]},
+  {"id":"natural_presence","prompt":"I had a rough day.","category":"presence","max_words":30,"required_any":[],"forbidden":["as an ai","i cannot feel"]},
+  {"id":"follow_instruction","prompt":"Answer in one short sentence: why does tire pressure change with temperature?","category":"obedience","max_words":30,"required_any":["temperature","pressure"],"forbidden":["1.","2.","3."]}
+]

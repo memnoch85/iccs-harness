@@ -118,9 +118,19 @@ VOICE_ID = int(
 SPEED = float(
     os.environ.get(
         "SPEED",
-        "1.3",
+        "1.25",
     )
 )
+
+TTS_FILLER_SPEED = float(
+    os.getenv(
+        "NANCEE_TTS_FILLER_SPEED",
+        "1.1",
+    )
+)
+
+if TTS_FILLER_SPEED <= 0:
+    raise ValueError("TTS_FILLER_SPEED must be greater than zero.")
 
 TTS_EMPHASIS_SPEED = float(
     os.getenv(
@@ -132,7 +142,7 @@ TTS_EMPHASIS_SPEED = float(
 NUM_THREADS = int(
     os.environ.get(
         "SHERPA_THREADS",
-        "4",
+        "3",
     )
 )
 
@@ -188,7 +198,6 @@ MAX_CHUNK_WORDS = int(
     )
 )
 
-
 if FIRST_CHUNK_MIN_WORDS <= 0:
     raise ValueError("FIRST_CHUNK_MIN_WORDS must be positive.")
 
@@ -236,7 +245,7 @@ LLM_TEMPERATURE = float(
 LLM_NUM_THREADS = int(
     os.environ.get(
         "NANCEE_LLM_NUM_THREADS",
-        "3",
+        "4",
     )
 )
 LLM_NUM_PREDICT = int(
@@ -303,11 +312,11 @@ if LATENCY_BRIDGE_RECALL_SECONDS <= 0:
     raise ValueError("LATENCY_BRIDGE_RECALL_SECONDS must be greater than zero.")
 
 LATENCY_BRIDGE_PHRASES = (
-    "Let me check that.",
-    "Give me one moment.",
-    "Let me think briefly.",
-    "Checking that for you.",
-    "Hang on one moment.",
+    "Let me check that,",
+    "Give me one moment,",
+    "Let me think briefly,",
+    "Checking that for you,",
+    "Hang on one moment,",
 )
 
 for phrase in LATENCY_BRIDGE_PHRASES:
@@ -319,13 +328,18 @@ LATER_CHUNK_MIN_WORDS = int(os.getenv("NANCEE_LATER_CHUNK_MIN_WORDS", "4"))
 LATER_CHUNK_TARGET_WORDS = int(os.getenv("NANCEE_LATER_CHUNK_TARGET_WORDS", "6"))
 LATER_CHUNK_MAX_WORDS = int(os.getenv("NANCEE_LATER_CHUNK_MAX_WORDS", "9"))
 
-if not (1 <= LATER_CHUNK_MIN_WORDS <= LATER_CHUNK_TARGET_WORDS <= LATER_CHUNK_MAX_WORDS):
+if not (
+    1 <= LATER_CHUNK_MIN_WORDS <= LATER_CHUNK_TARGET_WORDS <= LATER_CHUNK_MAX_WORDS
+):
     raise ValueError("Later chunk limits must satisfy 1 <= min <= target <= max.")
 
-TTS_GAP_FILLER_ENABLED = os.getenv("NANCEE_TTS_GAP_FILLER_ENABLED", "true").lower() == "true"
-TTS_GAP_FILLER_SECONDS = float(os.getenv("NANCEE_TTS_GAP_FILLER_SECONDS", "2.50"))
-TTS_GAP_FILLER_MAX_PER_TURN = int(os.getenv("NANCEE_TTS_GAP_FILLER_MAX_PER_TURN", "2"))
-TTS_GAP_FILLER_PHRASES = ("Hmm.", "So...", "Um...")
+TTS_GAP_FILLER_ENABLED = (
+    os.getenv("NANCEE_TTS_GAP_FILLER_ENABLED", "true").lower() == "true"
+)
+TTS_GAP_FILLER_COOLDOWN_SECONDS = 9.0
+TTS_GAP_FILLER_SECONDS = float(os.getenv("NANCEE_TTS_GAP_FILLER_SECONDS", "3.50"))
+TTS_GAP_FILLER_MAX_PER_TURN = int(os.getenv("NANCEE_TTS_GAP_FILLER_MAX_PER_TURN", "3"))
+TTS_GAP_FILLER_PHRASES = ("hum,", "Uh,", "Um,", "That is,")
 
 if TTS_GAP_FILLER_SECONDS <= 0:
     raise ValueError("TTS_GAP_FILLER_SECONDS must be positive")

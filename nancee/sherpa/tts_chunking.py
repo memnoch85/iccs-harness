@@ -15,7 +15,7 @@ FILLER_PREFACES = {
     "alright",
     "anyway",
     "hang on",
-    "hmm",
+    "hum",
     "let me think",
     "let's see",
     "ok",
@@ -51,13 +51,7 @@ _WEAK_CHUNK_ENDINGS = {
 def is_punctuation_only(text):
     stripped = str(text).strip()
 
-    return (
-        bool(stripped)
-        and not any(
-            character.isalnum()
-            for character in stripped
-        )
-    )
+    return bool(stripped) and not any(character.isalnum() for character in stripped)
 
 
 def word_count(text):
@@ -107,18 +101,13 @@ def _split_at_word_count(
     if len(word_matches) < split_word_count:
         return None
 
-    boundary = word_matches[
-        split_word_count - 1
-    ].end()
+    boundary = word_matches[split_word_count - 1].end()
 
     trailing_punctuation = set(
         ".,!?;:'\")]}",
     )
 
-    while (
-        boundary < len(buffer)
-        and buffer[boundary] in trailing_punctuation
-    ):
+    while boundary < len(buffer) and buffer[boundary] in trailing_punctuation:
         boundary += 1
 
     chunk = buffer[:boundary].strip()
@@ -155,11 +144,7 @@ def _extract_semantic_later_chunk(buffer):
             buffer[:boundary],
         )
 
-        if not (
-            LATER_CHUNK_MIN_WORDS
-            <= candidate_word_count
-            <= LATER_CHUNK_MAX_WORDS
-        ):
+        if not (LATER_CHUNK_MIN_WORDS <= candidate_word_count <= LATER_CHUNK_MAX_WORDS):
             continue
 
         # Sentence endings rank ahead of commas,
@@ -173,10 +158,7 @@ def _extract_semantic_later_chunk(buffer):
             else 1
         )
 
-        distance_from_target = abs(
-            candidate_word_count
-            - LATER_CHUNK_TARGET_WORDS
-        )
+        distance_from_target = abs(candidate_word_count - LATER_CHUNK_TARGET_WORDS)
 
         candidates.append(
             (
@@ -194,22 +176,14 @@ def _extract_semantic_later_chunk(buffer):
         chunk = buffer[:boundary].strip()
         remainder = buffer[boundary:].lstrip()
 
-        if (
-            chunk
-            and not is_punctuation_only(chunk)
-        ):
+        if chunk and not is_punctuation_only(chunk):
             return chunk, remainder
 
     # Wait for enough lookahead before forcing a split.
-    if len(word_matches) < (
-        LATER_CHUNK_MAX_WORDS
-        + MIN_REMAINDER_WORDS
-    ):
+    if len(word_matches) < (LATER_CHUNK_MAX_WORDS + MIN_REMAINDER_WORDS):
         return None
 
-    selected_word_count = (
-        LATER_CHUNK_TARGET_WORDS
-    )
+    selected_word_count = LATER_CHUNK_TARGET_WORDS
 
     # Search from the target toward the maximum for
     # a word that is not an awkward connector.
@@ -220,9 +194,7 @@ def _extract_semantic_later_chunk(buffer):
         token = re.sub(
             r"[^a-z0-9']",
             "",
-            word_matches[
-                count - 1
-            ].group(0).lower(),
+            word_matches[count - 1].group(0).lower(),
         )
 
         if token not in _WEAK_CHUNK_ENDINGS:
@@ -254,9 +226,7 @@ def extract_tts_chunk(
         )
 
     # Everything below this point is first-chunk logic.
-    punctuation_pattern = (
-        r"[.!?,;:\n]+(?:\s+|$)"
-    )
+    punctuation_pattern = r"[.!?,;:\n]+(?:\s+|$)"
 
     for match in re.finditer(
         punctuation_pattern,
