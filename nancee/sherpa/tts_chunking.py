@@ -1,9 +1,11 @@
 import re
 
 from config import (
+    FIRST_CHUNK_MAX_WORDS,
     FIRST_CHUNK_MIN_WORDS,
-    MAX_CHUNK_WORDS,
-    TARGET_CHUNK_WORDS,
+    LATER_CHUNK_MAX_WORDS,
+    LATER_CHUNK_MIN_WORDS,
+    LATER_CHUNK_TARGET_WORDS,
 )
 
 MIN_REMAINDER_WORDS = 2
@@ -27,34 +29,61 @@ FILLER_PREFACES = {
     "you know",
 }
 
+_WEAK_CHUNK_ENDINGS = {
+    "a",
+    "an",
+    "and",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "into",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+}
+
 
 def is_punctuation_only(text):
-    stripped = text.strip()
+    stripped = str(text).strip()
 
-    return bool(stripped) and not any(character.isalnum() for character in stripped)
+    return (
+        bool(stripped)
+        and not any(
+            character.isalnum()
+            for character in stripped
+        )
+    )
 
 
 def word_count(text):
     return len(
         re.findall(
             r"\S+",
-            text,
+            str(text),
         )
     )
 
 
 def is_filler_preface(text):
-    normalized = text.lower().strip()
+    normalized = str(text).lower().strip()
+
     normalized = re.sub(
         r"[*_`]",
         "",
         normalized,
     )
+
     normalized = re.sub(
         r"[^a-z0-9'\s]",
         "",
         normalized,
     )
+
     normalized = re.sub(
         r"\s+",
         " ",
@@ -75,7 +104,22 @@ def _split_at_word_count(
         )
     )
 
-    boundary = word_matches[split_word_count - 1].end()
+    if len(word_matches) < split_word_count:
+        return None
+
+    boundary = word_matches[
+        split_word_count - 1
+    ].end()
+
+    trailing_punctuation = set(
+        ".,!?;:'\")]}",
+    )
+
+    while (
+        boundary < len(buffer)
+        and buffer[boundary] in trailing_punctuation
+    ):
+        boundary += 1
 
     chunk = buffer[:boundary].strip()
     remainder = buffer[boundary:].lstrip()
@@ -89,11 +133,113 @@ def _split_at_word_count(
     return chunk, remainder
 
 
+def _extract_semantic_later_chunk(buffer):
+    word_matches = list(
+        re.finditer(
+            r"\S+",
+            buffer,
+        )
+    )
+
+    candidates = []
+
+    # Prefer punctuation boundaries between the configured
+    # minimum and maximum later-chunk sizes.
+    for match in re.finditer(
+        r"""[.!?,;:]+(?:["')\]]+)?(?:\s+|$)""",
+        buffer,
+    ):
+        boundary = match.end()
+
+        candidate_word_count = word_count(
+            buffer[:boundary],
+        )
+
+        if not (
+            LATER_CHUNK_MIN_WORDS
+            <= candidate_word_count
+            <= LATER_CHUNK_MAX_WORDS
+        ):
+            continue
+
+        # Sentence endings rank ahead of commas,
+        # semicolons, and colons.
+        strength = (
+            0
+            if re.search(
+                r"[.!?]",
+                match.group(0),
+            )
+            else 1
+        )
+
+        distance_from_target = abs(
+            candidate_word_count
+            - LATER_CHUNK_TARGET_WORDS
+        )
+
+        candidates.append(
+            (
+                strength,
+                distance_from_target,
+                boundary,
+            )
+        )
+
+    if candidates:
+        candidates.sort()
+
+        boundary = candidates[0][2]
+
+        chunk = buffer[:boundary].strip()
+        remainder = buffer[boundary:].lstrip()
+
+        if (
+            chunk
+            and not is_punctuation_only(chunk)
+        ):
+            return chunk, remainder
+
+    # Wait for enough lookahead before forcing a split.
+    if len(word_matches) < (
+        LATER_CHUNK_MAX_WORDS
+        + MIN_REMAINDER_WORDS
+    ):
+        return None
+
+    selected_word_count = (
+        LATER_CHUNK_TARGET_WORDS
+    )
+
+    # Search from the target toward the maximum for
+    # a word that is not an awkward connector.
+    for count in range(
+        LATER_CHUNK_TARGET_WORDS,
+        LATER_CHUNK_MAX_WORDS + 1,
+    ):
+        token = re.sub(
+            r"[^a-z0-9']",
+            "",
+            word_matches[
+                count - 1
+            ].group(0).lower(),
+        )
+
+        if token not in _WEAK_CHUNK_ENDINGS:
+            selected_word_count = count
+            break
+
+    return _split_at_word_count(
+        buffer,
+        selected_word_count,
+    )
+
+
 def extract_tts_chunk(
     buffer,
     is_first,
 ):
-    stripped = buffer.strip()
+    stripped = str(buffer).strip()
 
     if not stripped:
         return None
@@ -101,9 +247,16 @@ def extract_tts_chunk(
     if is_punctuation_only(stripped):
         return None
 
-    minimum_words = FIRST_CHUNK_MIN_WORDS if is_first else TARGET_CHUNK_WORDS
+    # Later chunks use only the semantic boundary logic.
+    if not is_first:
+        return _extract_semantic_later_chunk(
+            buffer,
+        )
 
-    punctuation_pattern = r"[.!?,;:\n]+(?:\s+|$)"
+    # Everything below this point is first-chunk logic.
+    punctuation_pattern = (
+        r"[.!?,;:\n]+(?:\s+|$)"
+    )
 
     for match in re.finditer(
         punctuation_pattern,
@@ -113,58 +266,35 @@ def extract_tts_chunk(
         candidate = buffer[:boundary].strip()
         candidate_words = word_count(candidate)
 
-        if candidate_words < minimum_words:
+        if candidate_words < FIRST_CHUNK_MIN_WORDS:
             continue
 
         if is_punctuation_only(candidate):
             continue
 
-        if is_first and candidate_words > 4:
+        if candidate_words > FIRST_CHUNK_MAX_WORDS:
             return _split_at_word_count(
                 buffer,
-                4,
+                FIRST_CHUNK_MAX_WORDS,
             )
 
-        if candidate_words <= MAX_CHUNK_WORDS:
-            remainder = buffer[boundary:].lstrip()
-            return candidate, remainder
+        remainder = buffer[boundary:].lstrip()
 
-        # A nine-word sentence would become 8 + 1.
-        # Split it 7 + 2 instead.
-        remaining_after_max = candidate_words - MAX_CHUNK_WORDS
+        return candidate, remainder
 
-        split_word_count = MAX_CHUNK_WORDS
-
-        if remaining_after_max == 1:
-            split_word_count -= 1
-
-        return _split_at_word_count(
-            buffer,
-            split_word_count,
-        )
-
-    word_matches = list(
+    # Start TTS quickly even if punctuation has not
+    # arrived yet.
+    first_words = list(
         re.finditer(
             r"\S+",
             buffer,
         )
     )
 
-    # Start TTS quickly even when the model has not emitted
-    # punctuation yet.
-    if is_first and len(word_matches) >= 4:
+    if len(first_words) >= FIRST_CHUNK_MAX_WORDS:
         return _split_at_word_count(
             buffer,
-            4,
+            FIRST_CHUNK_MAX_WORDS,
         )
 
-    # Without punctuation, wait until at least ten words are
-    # visible before forcing an eight-word chunk. That leaves
-    # at least two words in the buffer.
-    if len(word_matches) < (MAX_CHUNK_WORDS + MIN_REMAINDER_WORDS):
-        return None
-
-    return _split_at_word_count(
-        buffer,
-        MAX_CHUNK_WORDS,
-    )
+    return None

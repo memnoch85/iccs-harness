@@ -13,6 +13,7 @@ class TtsRequest:
     speed: float
     emphasized: bool = False
     first_audio_callback: Callable[[], None] | None = None
+    allow_gap_filler: bool = False
 
 
 def build_tts_request(
@@ -20,6 +21,7 @@ def build_tts_request(
     normal_speed,
     emphasis_speed,
     first_audio_callback=None,
+    allow_gap_filler=False,
 ):
     clean_text = text.strip()
 
@@ -50,4 +52,5 @@ def build_tts_request(
         speed=speed,
         emphasized=emphasized,
         first_audio_callback=first_audio_callback,
+        allow_gap_filler=bool(allow_gap_filler),
     )

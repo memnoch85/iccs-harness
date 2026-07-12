@@ -33,10 +33,6 @@ from config import (
     PREROLL_MS,
     SPEED,
     TTS_EMPHASIS_SPEED,
-    TTS_GAP_FILLER_ENABLED,
-    TTS_GAP_FILLER_MAX_PER_TURN,
-    TTS_GAP_FILLER_PHRASES,
-    TTS_GAP_FILLER_SECONDS,
     TTS_MAX_NUM_SENTENCES,
     TTS_SILENCE_SCALE,
     USER_PROFILE_CONTEXT_ENABLED,
@@ -67,10 +63,6 @@ stop_event = threading.Event()
 audio_lock = threading.Lock()
 audio_chunks = deque()
 first_audio_enqueued = False
-
-gap_filler_lock = threading.Lock()
-gap_filler_audio_cycle = None
-gap_fillers_used = 0
 
 
 NANCEE_ROOT = Path(__file__).resolve().parent.parent
@@ -696,14 +688,12 @@ def output_callback(
 def enqueue_tts_text(
     text,
     first_audio_callback=None,
-    allow_gap_filler=False,
 ):
     request = build_tts_request(
         text=text,
         normal_speed=SPEED,
         emphasis_speed=TTS_EMPHASIS_SPEED,
         first_audio_callback=first_audio_callback,
-        allow_gap_filler=allow_gap_filler,
     )
 
     if request is not None:
@@ -783,75 +773,11 @@ def tts_worker(tts):
 
                 return 1
 
-            gap_timer = None
-
-            if (
-                TTS_GAP_FILLER_ENABLED
-                and request.allow_gap_filler
-            ):
-
-                def play_gap_filler():
-                    global gap_fillers_used
-
-                    with audio_lock:
-                        answer_audio_waiting = bool(
-                            audio_chunks
-                        )
-
-                    if answer_audio_waiting:
-                        return
-
-                    with gap_filler_lock:
-                        if (
-                            gap_fillers_used
-                            >= TTS_GAP_FILLER_MAX_PER_TURN
-                        ):
-                            return
-
-                        if gap_filler_audio_cycle is None:
-                            return
-
-                        (
-                            phrase,
-                            samples,
-                            sample_rate,
-                        ) = next(
-                            gap_filler_audio_cycle
-                        )
-
-                        gap_fillers_used += 1
-                        count = gap_fillers_used
-
-                    print(
-                        "\n[TTS GAP FILLER] "
-                        f"phrase={phrase!r} "
-                        f"count={count}",
-                        flush=True,
-                    )
-
-                    enqueue_audio(
-                        samples.copy(),
-                        sample_rate,
-                    )
-
-                gap_timer = threading.Timer(
-                    TTS_GAP_FILLER_SECONDS,
-                    play_gap_filler,
-                )
-
-                gap_timer.daemon = True
-                gap_timer.start()
-
-            try:
-                audio = tts.generate(
-                    text,
-                    gen_config,
-                    callback=callback,
-                )
-
-            finally:
-                if gap_timer is not None:
-                    gap_timer.cancel()
+            audio = tts.generate(
+                text,
+                gen_config,
+                callback=callback,
+            )
 
             # Some Sherpa configurations may return complete audio
             # without invoking the streaming callback.
@@ -939,12 +865,8 @@ def stream_text_to_tts(text_iter, first_audio_callback=None):
             enqueue_tts_text(" ".join(pending_fillers))
             pending_fillers = []
 
-        # Later chunks may use a short pre-generated filler
-        # if Kokoro leaves a noticeable silent gap.
-        enqueue_tts_text(
-            cleaned_chunk,
-            allow_gap_filler=True,
-        )
+        # Every normal chunk is queued exactly once.
+        enqueue_tts_text(cleaned_chunk)
 
     for token in text_iter:
         full_response.append(token)
@@ -1101,7 +1023,6 @@ def enqueue_complete_response(
         enqueue_tts_text(
             chunk,
             first_audio_callback=pending_first_audio_callback,
-            allow_gap_filler=not is_first,
         )
 
         pending_first_audio_callback = None
@@ -1173,23 +1094,6 @@ def main():
 
     bridge_audio_cycle = itertools.cycle(
         bridge_audio_options
-    )
-
-    global gap_filler_audio_cycle
-
-    gap_filler_audio_options = [
-        (
-            phrase,
-            *generate_bridge_audio(
-                tts,
-                phrase,
-            ),
-        )
-        for phrase in TTS_GAP_FILLER_PHRASES
-    ]
-
-    gap_filler_audio_cycle = itertools.cycle(
-        gap_filler_audio_options
     )
 
     print(
@@ -1312,11 +1216,6 @@ def main():
                 break
 
             global_start = time.time()
-
-            global gap_fillers_used
-
-            with gap_filler_lock:
-                gap_fillers_used = 0
 
             profile_context = user_profile.format_context()
 

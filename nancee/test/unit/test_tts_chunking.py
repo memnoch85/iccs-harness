@@ -31,27 +31,23 @@ class TestTtsChunking(unittest.TestCase):
             ),
         )
 
-    def test_ten_words_force_eight_and_leave_two(self):
-        self.assertEqual(
+    def test_ten_words_without_punctuation_waits_for_lookahead(self):
+        self.assertIsNone(
             extract_tts_chunk(
-                ("one two three four five six seven eight nine ten "),
-                is_first=False,
-            ),
-            (
-                "one two three four five six seven eight",
-                "nine ten ",
-            ),
+                "one two three four five six seven eight nine ten ",
+                False,
+            )
         )
 
-    def test_nine_word_sentence_splits_seven_and_two(self):
+    def test_nine_word_complete_sentence_stays_together(self):
         self.assertEqual(
             extract_tts_chunk(
-                ("one two three four five six seven eight nine. "),
-                is_first=False,
+                "one two three four five six seven eight nine. ",
+                False,
             ),
             (
-                "one two three four five six seven",
-                "eight nine. ",
+                "one two three four five six seven eight nine.",
+                "",
             ),
         )
 

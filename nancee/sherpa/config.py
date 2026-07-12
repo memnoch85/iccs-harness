@@ -313,3 +313,21 @@ LATENCY_BRIDGE_PHRASES = (
 for phrase in LATENCY_BRIDGE_PHRASES:
     if len(phrase.split()) != 4:
         raise ValueError(f"Latency bridge phrase must contain four words: {phrase!r}")
+
+# Later-response semantic chunking.
+LATER_CHUNK_MIN_WORDS = int(os.getenv("NANCEE_LATER_CHUNK_MIN_WORDS", "4"))
+LATER_CHUNK_TARGET_WORDS = int(os.getenv("NANCEE_LATER_CHUNK_TARGET_WORDS", "6"))
+LATER_CHUNK_MAX_WORDS = int(os.getenv("NANCEE_LATER_CHUNK_MAX_WORDS", "9"))
+
+if not (1 <= LATER_CHUNK_MIN_WORDS <= LATER_CHUNK_TARGET_WORDS <= LATER_CHUNK_MAX_WORDS):
+    raise ValueError("Later chunk limits must satisfy 1 <= min <= target <= max.")
+
+TTS_GAP_FILLER_ENABLED = os.getenv("NANCEE_TTS_GAP_FILLER_ENABLED", "true").lower() == "true"
+TTS_GAP_FILLER_SECONDS = float(os.getenv("NANCEE_TTS_GAP_FILLER_SECONDS", "2.50"))
+TTS_GAP_FILLER_MAX_PER_TURN = int(os.getenv("NANCEE_TTS_GAP_FILLER_MAX_PER_TURN", "2"))
+TTS_GAP_FILLER_PHRASES = ("Hmm.", "So...", "Um...")
+
+if TTS_GAP_FILLER_SECONDS <= 0:
+    raise ValueError("TTS_GAP_FILLER_SECONDS must be positive")
+if TTS_GAP_FILLER_MAX_PER_TURN < 0:
+    raise ValueError("TTS_GAP_FILLER_MAX_PER_TURN cannot be negative")

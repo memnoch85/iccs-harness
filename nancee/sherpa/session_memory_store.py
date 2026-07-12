@@ -92,7 +92,11 @@ class MemoryHit:
 def tokenize(text: str) -> List[str]:
     text = str(text).lower().replace("'", " ")
     text = re.sub(r"[^a-z0-9\s]", " ", text)
-    return [tok for tok in text.split() if tok and tok not in STOPWORDS]
+    return [
+        tok
+        for tok in text.split()
+        if len(tok) >= 2 and tok not in STOPWORDS
+    ]
 
 
 def normalize_for_search(text: str) -> str:
