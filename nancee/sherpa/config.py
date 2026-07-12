@@ -86,15 +86,37 @@ USER_PROFILE_CONTEXT_ENABLED = (
     == "true"
 )
 
+
+# Retrieval-only profile context. The complete profile is never placed
+# in the prompt. Only FTS5-matched facts are supplied to the LLM.
+USER_PROFILE_RETRIEVAL_ENABLED = (
+    os.getenv(
+        "NANCEE_USER_PROFILE_RETRIEVAL_ENABLED",
+        "true",
+    ).lower()
+    == "true"
+)
+
+USER_PROFILE_RETRIEVAL_LIMIT = int(
+    os.getenv(
+        "NANCEE_USER_PROFILE_RETRIEVAL_LIMIT",
+        "2",
+    )
+)
+
 USER_PROFILE_CONTEXT_MAX_CHARACTERS = int(
     os.getenv(
         "NANCEE_USER_PROFILE_CONTEXT_MAX_CHARACTERS",
-        "1000",
+        "240",
     )
 )
 
 if USER_PROFILE_CONTEXT_MAX_CHARACTERS <= 0:
     raise ValueError("USER_PROFILE_CONTEXT_MAX_CHARACTERS must be positive.")
+
+
+if USER_PROFILE_RETRIEVAL_LIMIT <= 0:
+    raise ValueError("USER_PROFILE_RETRIEVAL_LIMIT must be positive.")
 
 
 # Sherpa/Kokoro configuration

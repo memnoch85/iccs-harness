@@ -16,9 +16,23 @@ class ProfileLlmRoutingContractTests(unittest.TestCase):
             SOURCE,
         )
 
-    def test_profile_context_is_available_for_recall_questions(self):
-        self.assertIn(
+    def test_profile_context_is_retrieval_only(self):
+        # The full profile must not be injected merely because
+        # the utterance looks like a question or recall request.
+        self.assertNotIn(
             "or recall_requested",
+            SOURCE,
+        )
+
+        # Profile context is supplied only when the retrieval
+        # layer finds a matching authoritative profile fact.
+        self.assertIn(
+            "profile_context_found",
+            SOURCE,
+        )
+
+        self.assertIn(
+            "effective_profile_context",
             SOURCE,
         )
 

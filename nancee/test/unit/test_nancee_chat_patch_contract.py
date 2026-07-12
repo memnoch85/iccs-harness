@@ -20,9 +20,24 @@ class NanceeChatPatchContractTests(unittest.TestCase):
             SOURCE,
         )
 
-    def test_history_routing_uses_memory_hit_not_every_question(self):
+    def test_history_routing_uses_authoritative_context_not_every_question(self):
         self.assertIn(
-            "elif memory_context_found:",
+            "authoritative_context_found = (",
+            SOURCE,
+        )
+
+        self.assertIn(
+            "memory_context_found",
+            SOURCE,
+        )
+
+        self.assertIn(
+            "profile_context_found",
+            SOURCE,
+        )
+
+        self.assertIn(
+            "elif authoritative_context_found:",
             SOURCE,
         )
 

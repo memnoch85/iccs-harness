@@ -28,7 +28,7 @@ class TestUserProfile(unittest.TestCase):
             )
 
             profile = UserProfile.load(str(path))
-            context = profile.format_context()
+            context = profile.format_context(max_characters=4096)
 
             self.assertIn("KNOWN USER PROFILE", context)
             self.assertIn("name: Anders", context)

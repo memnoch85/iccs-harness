@@ -41,10 +41,13 @@ from config import (
     TTS_GAP_FILLER_SECONDS,
     TTS_MAX_NUM_SENTENCES,
     TTS_SILENCE_SCALE,
-    USER_PROFILE_CONTEXT_ENABLED,
+    USER_PROFILE_CONTEXT_MAX_CHARACTERS,
+    USER_PROFILE_RETRIEVAL_ENABLED,
+    USER_PROFILE_RETRIEVAL_LIMIT,
     VOICE_ID,
 )
 from latency_bridge import LatencyBridge
+from profile_fact_index import ProfileFactIndex
 from ollama_runtime import (
     ensure_ollama_model_loaded,
     prime_ollama_context,
@@ -1302,18 +1305,16 @@ def main():
     )
 
     user_profile = UserProfile.load()
-    initial_profile_context = user_profile.format_context()
+    profile_index = ProfileFactIndex(
+        user_profile.facts,
+    )
 
-    if initial_profile_context:
-        print(
-            f"[USER PROFILE] loaded=true characters={len(initial_profile_context)}",
-            flush=True,
-        )
-    else:
-        print(
-            "[USER PROFILE] loaded=false",
-            flush=True,
-        )
+    print(
+        "[USER PROFILE INDEX] "
+        f"loaded={not user_profile.is_empty()} "
+        f"facts={profile_index.count()}",
+        flush=True,
+    )
 
     print(
         "Opening persistent audio stream...",
@@ -1376,32 +1377,42 @@ def main():
                 gap_fillers_used = 0
                 last_gap_filler_time = 0.0
 
-            profile_context = user_profile.format_context()
-
             recall_requested = should_retrieve_recall(user_text)
             explicit_recall_requested = looks_like_recall_request(
                 user_text
             )
 
-            # Profile facts remain deterministic data, but the LLM
-            # phrases the spoken response. Supply profile context for
-            # profile/recall questions even when the always-on profile
-            # overlay is disabled.
-            effective_profile_context = (
-                profile_context
-                if (
-                    USER_PROFILE_CONTEXT_ENABLED
-                    or recall_requested
+            profile_started = time.perf_counter()
+            effective_profile_context = ""
+            profile_hits = []
+
+            if USER_PROFILE_RETRIEVAL_ENABLED:
+                (
+                    effective_profile_context,
+                    profile_hits,
+                ) = profile_index.retrieve_context(
+                    user_text,
+                    limit=USER_PROFILE_RETRIEVAL_LIMIT,
+                    max_characters=(
+                        USER_PROFILE_CONTEXT_MAX_CHARACTERS
+                    ),
                 )
-                else ""
+
+            profile_context_found = bool(
+                effective_profile_context.strip()
+            )
+            profile_elapsed = (
+                time.perf_counter()
+                - profile_started
             )
 
             if memory_debug_enabled():
                 print(
-                    "[USER PROFILE ROUTING] "
-                    "direct_answer=false "
+                    "[USER PROFILE RETRIEVAL] "
+                    f"hits={[hit.key for hit in profile_hits]} "
                     f"context_characters="
-                    f"{len(effective_profile_context)}",
+                    f"{len(effective_profile_context)} "
+                    f"elapsed={profile_elapsed:.6f}s",
                     flush=True,
                 )
 
@@ -1413,54 +1424,6 @@ def main():
 
                 memory_context_found = bool(str(retrieved_context).strip())
 
-                if (
-                    explicit_recall_requested
-                    and not memory_context_found
-                    and not str(effective_profile_context).strip()
-                ):
-                    direct_answer = "I do not remember that yet."
-
-                    print_memory_status(
-                        recent_prompt_memory,
-                        recall_memory,
-                        "before_request",
-                    )
-
-                    print(
-                        f"\nNancee: {direct_answer}",
-                        flush=True,
-                    )
-
-                    enqueue_tts_text(direct_answer)
-
-                    recent_prompt_memory.add_turn(
-                        user_text=user_text,
-                        assistant_text=direct_answer,
-                    )
-
-                    text_queue.join()
-                    wait_for_audio_to_drain()
-
-                    if memory_debug_enabled():
-                        print(
-                            "[MEMORY RECALL MISS] answered_without_llm=true",
-                            flush=True,
-                        )
-
-                    print_memory_status(
-                        recent_prompt_memory,
-                        recall_memory,
-                        "after_turn",
-                    )
-
-                    total = time.time() - global_start
-
-                    print(
-                        f"\n[TURN DONE] total={total:.3f}s",
-                        flush=True,
-                    )
-
-                    continue
             else:
                 retrieved_context = ""
                 memory_context_found = False
@@ -1470,6 +1433,31 @@ def main():
                         "[MEMORY RECALL] skipped=true reason=not_recall_request",
                         flush=True,
                     )
+
+            if (
+                explicit_recall_requested
+                and not memory_context_found
+                and not profile_context_found
+            ):
+                # Keep a recall miss inside the LLM personality path,
+                # but give the model a tiny authoritative instruction
+                # instead of the complete user profile.
+                effective_profile_context = (
+                    "No matching confirmed fact about the human user "
+                    "was retrieved. Say only that you do not remember "
+                    "it yet."
+                )
+
+                if memory_debug_enabled():
+                    print(
+                        "[USER FACT MISS] llm_answer=true",
+                        flush=True,
+                    )
+
+            authoritative_context_found = (
+                memory_context_found
+                or bool(effective_profile_context.strip())
+            )
 
             print_memory_status(
                 recent_prompt_memory,
@@ -1502,7 +1490,7 @@ def main():
                 )
 
             try:
-                if memory_context_found:
+                if authoritative_context_found:
                     bridge_delay_seconds = LATENCY_BRIDGE_RECALL_SECONDS
                 else:
                     bridge_delay_seconds = LATENCY_BRIDGE_NORMAL_SECONDS
@@ -1517,7 +1505,11 @@ def main():
 
                 if looks_like_perspective_correction(user_text):
                     request_history = recent_prompt_memory.get_messages()
-                elif memory_context_found:
+                elif authoritative_context_found:
+                    # Retrieved facts are authoritative. Dropping the
+                    # one-turn chat history keeps the prompt smaller and
+                    # prevents a prior verbose answer from contaminating
+                    # the fact-based response.
                     request_history = []
                 else:
                     request_history = recent_prompt_memory.get_messages()
