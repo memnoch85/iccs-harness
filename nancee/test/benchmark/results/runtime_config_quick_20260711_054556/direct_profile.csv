@@ -1,4 +1,0 @@
-case_id,user_text,expected,actual,ok,elapsed_s
-direct_name,What is my name?,Your name is Anders.,Your name is Anders.,True,0.000072407
-direct_vehicle,What vehicle do I have?,You drive a black Jeep.,You drive a black Jeep.,True,0.000007370
-direct_unknown_color,What is my favorite color?,,,True,0.000005148

@@ -1,4 +1,0 @@
-fact_id,category,total,PASS,ROUTER_RETRIEVE_PASS,EXTRACT_FAIL,ROUTER_FAIL,RETRIEVE_FAIL,LLM_EXPECTED_FAIL,LLM_PERSPECTIVE_FAIL
-name_anders,identity,30,30,0,0,0,0,0,0
-preferred_name_andy,identity,24,24,0,0,0,0,0,0
-vehicle_black_jeep,vehicle,26,26,0,0,0,0,0,0

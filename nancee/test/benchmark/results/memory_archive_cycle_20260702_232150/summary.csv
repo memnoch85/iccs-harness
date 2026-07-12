@@ -1,4 +1,0 @@
-character_limit,keep_recent_turns,warmup_seconds,startup_first_token_seconds,archive_turn,archived_turn_count,prime_seconds,prime_wait_after_5s,prime_wait_after_10s,prime_wait_after_15s,pre_archive_first_token_median,pre_archive_first_token_max,post_archive_first_token_first,post_archive_first_token_median,post_archive_first_token_p95,amortized_prime_seconds_per_turn,structured_checks_passed,structured_checks_total,post_archive_checks_passed,post_archive_checks_total,selection_score
-2400,2,43.06563,7.847836,15,13,26.834636,21.834636,16.834636,11.834636,3.873874,7.847836,1.984839,2.546848,2.857862,1.788976,5,5,5,5,4.646838
-2000,2,44.00941,7.865665,13,11,26.500467,21.500467,16.500467,11.500467,3.747407,7.865665,1.99802,2.55374,2.85302,2.038497,5,5,5,5,4.891517
-1600,2,43.007679,7.850352,10,8,26.991393,21.991393,16.991393,11.991393,3.625062,7.850352,1.98207,2.546276,2.856785,2.699139,5,5,5,5,5.555924

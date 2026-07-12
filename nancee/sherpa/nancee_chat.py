@@ -1378,60 +1378,32 @@ def main():
 
             profile_context = user_profile.format_context()
 
-            effective_profile_context = (
-                profile_context if USER_PROFILE_CONTEXT_ENABLED else ""
+            recall_requested = should_retrieve_recall(user_text)
+            explicit_recall_requested = looks_like_recall_request(
+                user_text
             )
 
-            recall_requested = should_retrieve_recall(user_text)
-            explicit_recall_requested = looks_like_recall_request(user_text)
-
-            profile_direct_answer = ""
-
-            if recall_requested:
-                profile_direct_answer = user_profile.direct_answer(user_text)
-
-            if profile_direct_answer:
-                print_memory_status(
-                    recent_prompt_memory,
-                    recall_memory,
-                    "before_request",
+            # Profile facts remain deterministic data, but the LLM
+            # phrases the spoken response. Supply profile context for
+            # profile/recall questions even when the always-on profile
+            # overlay is disabled.
+            effective_profile_context = (
+                profile_context
+                if (
+                    USER_PROFILE_CONTEXT_ENABLED
+                    or recall_requested
                 )
+                else ""
+            )
 
+            if memory_debug_enabled():
                 print(
-                    f"\nNancee: {profile_direct_answer}",
+                    "[USER PROFILE ROUTING] "
+                    "direct_answer=false "
+                    f"context_characters="
+                    f"{len(effective_profile_context)}",
                     flush=True,
                 )
-
-                enqueue_tts_text(profile_direct_answer)
-
-                recent_prompt_memory.add_turn(
-                    user_text=user_text,
-                    assistant_text=profile_direct_answer,
-                )
-
-                text_queue.join()
-                wait_for_audio_to_drain()
-
-                if memory_debug_enabled():
-                    print(
-                        "[USER PROFILE DIRECT] answered_without_llm=true",
-                        flush=True,
-                    )
-
-                print_memory_status(
-                    recent_prompt_memory,
-                    recall_memory,
-                    "after_turn",
-                )
-
-                total = time.time() - global_start
-
-                print(
-                    f"\n[TURN DONE] total={total:.3f}s",
-                    flush=True,
-                )
-
-                continue
 
             if recall_requested:
                 retrieved_context = retrieve_session_context(
