@@ -64,20 +64,6 @@ STOPWORDS = {
 
 FILLER_ONLY = {"ok", "okay", "yes", "no", "sure", "thanks", "thank you", "bye"}
 
-QUERY_TOKEN_EXPANSIONS = {
-    "buy": ("buy", "bought", "purchase", "purchased"),
-    "bought": ("buy", "bought", "purchase", "purchased"),
-    "purchase": ("buy", "bought", "purchase", "purchased"),
-    "purchased": ("buy", "bought", "purchase", "purchased"),
-    "drive": ("drive", "drove", "driving"),
-    "drove": ("drive", "drove", "driving"),
-    "driving": ("drive", "drove", "driving"),
-    "eat": ("eat", "ate"),
-    "ate": ("eat", "ate"),
-    "go": ("go", "went"),
-    "went": ("go", "went"),
-}
-
 
 @dataclass
 class MemoryHit:
@@ -102,30 +88,15 @@ def normalize_for_search(text: str) -> str:
 
 def make_fts_query(text: str) -> str:
     tokens = tokenize(text)
-
     if not tokens:
         return ""
-
     safe = []
     seen = set()
-
-    for token in tokens:
-        candidates = QUERY_TOKEN_EXPANSIONS.get(
-            token,
-            (token,),
-        )
-
-        for candidate in candidates:
-            clean_candidate = re.sub(
-                r"[^a-z0-9]",
-                "",
-                candidate,
-            )
-
-            if clean_candidate and clean_candidate not in seen:
-                seen.add(clean_candidate)
-                safe.append(clean_candidate)
-
+    for tok in tokens:
+        tok = re.sub(r"[^a-z0-9]", "", tok)
+        if tok and tok not in seen:
+            seen.add(tok)
+            safe.append(tok)
     return " OR ".join(safe)
 
 

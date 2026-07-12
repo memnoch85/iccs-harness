@@ -1,4 +1,3 @@
-import itertools
 import json
 import os
 import queue
@@ -16,9 +15,8 @@ import sounddevice as sd
 from config import (
     BLOCKSIZE,
     LATENCY_BRIDGE_ENABLED,
-    LATENCY_BRIDGE_NORMAL_SECONDS,
-    LATENCY_BRIDGE_PHRASES,
-    LATENCY_BRIDGE_RECALL_SECONDS,
+    LATENCY_BRIDGE_PHRASE,
+    LATENCY_BRIDGE_SECONDS,
     LLM_MODEL,
     MEMORY_DEBUG_ENABLED,
     MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
@@ -685,15 +683,11 @@ def output_callback(
                 written = frames
 
 
-def enqueue_tts_text(
-    text,
-    first_audio_callback=None,
-):
+def enqueue_tts_text(text):
     request = build_tts_request(
         text=text,
         normal_speed=SPEED,
         emphasis_speed=TTS_EMPHASIS_SPEED,
-        first_audio_callback=first_audio_callback,
     )
 
     if request is not None:
@@ -749,9 +743,7 @@ def tts_worker(tts):
                 callback_count += 1
                 now = time.time()
 
-                first_audio_for_request = first_callback is None
-
-                if first_audio_for_request:
+                if first_callback is None:
                     first_callback = now
 
                     print(
@@ -768,9 +760,6 @@ def tts_worker(tts):
                     tts.sample_rate,
                 )
 
-                if first_audio_for_request and request.first_audio_callback is not None:
-                    request.first_audio_callback()
-
                 return 1
 
             audio = tts.generate(
@@ -783,15 +772,9 @@ def tts_worker(tts):
             # without invoking the streaming callback.
             if callback_count == 0:
                 enqueue_audio(
-                    np.asarray(
-                        audio.samples,
-                        dtype=np.float32,
-                    ),
+                    audio.samples,
                     audio.sample_rate,
                 )
-
-                if request.first_audio_callback is not None:
-                    request.first_audio_callback()
 
             elapsed = time.time() - start
             duration = len(audio.samples) / audio.sample_rate
@@ -817,28 +800,21 @@ def tts_worker(tts):
             text_queue.task_done()
 
 
-def stream_text_to_tts(text_iter, first_audio_callback=None):
+def stream_text_to_tts(text_iter, first_token_callback=None):
     buffer = ""
     full_response = []
     is_first = True
     first_token_time = None
     pending_fillers = []
     start = time.time()
-    pending_first_audio_callback = first_audio_callback
 
     def queue_meaningful_chunk(
         chunk,
         opening_chunk,
     ):
         nonlocal pending_fillers
-        nonlocal pending_first_audio_callback
 
         cleaned_chunk = chunk.strip()
-        cleaned_chunk = re.sub(
-            r"^[.!?,;:]+\s*",
-            "",
-            cleaned_chunk,
-        )
 
         if not cleaned_chunk:
             return
@@ -848,11 +824,7 @@ def stream_text_to_tts(text_iter, first_audio_callback=None):
 
         # Speak the first generated phrase immediately.
         if opening_chunk:
-            enqueue_tts_text(
-                cleaned_chunk,
-                first_audio_callback=pending_first_audio_callback,
-            )
-            pending_first_audio_callback = None
+            enqueue_tts_text(cleaned_chunk)
             return
 
         # Hold filler-only fragments that appear later so the
@@ -873,6 +845,9 @@ def stream_text_to_tts(text_iter, first_audio_callback=None):
 
         if first_token_time is None:
             first_token_time = time.time()
+
+            if first_token_callback is not None:
+                first_token_callback()
 
             print(
                 f"\n[LLM FIRST TOKEN] {first_token_time - start:.3f}s\n",
@@ -973,7 +948,7 @@ def generate_bridge_audio(tts, phrase):
     )
 
 
-def collect_text_response(text_iter):
+def collect_text_response(text_iter, first_token_callback=None):
     """Collect a short recall answer so it can be checked before speech."""
     started = time.time()
     first_token_seen = False
@@ -982,6 +957,8 @@ def collect_text_response(text_iter):
     for token in text_iter:
         if not first_token_seen:
             first_token_seen = True
+            if first_token_callback is not None:
+                first_token_callback()
             print(
                 f"\n[LLM FIRST TOKEN] {time.time() - started:.3f}s\n",
                 flush=True,
@@ -996,36 +973,19 @@ def collect_text_response(text_iter):
     return "".join(tokens).strip()
 
 
-def enqueue_complete_response(
-    text,
-    first_audio_callback=None,
-):
+def enqueue_complete_response(text):
     """Chunk a validated complete response through existing TTS rules."""
     buffer = str(text).strip()
     is_first = True
-    pending_first_audio_callback = first_audio_callback
 
     while buffer:
-        extracted = extract_tts_chunk(
-            buffer,
-            is_first,
-        )
-
+        extracted = extract_tts_chunk(buffer, is_first)
         if extracted is None:
-            enqueue_tts_text(
-                buffer,
-                first_audio_callback=pending_first_audio_callback,
-            )
+            enqueue_tts_text(buffer)
             break
 
         chunk, buffer = extracted
-
-        enqueue_tts_text(
-            chunk,
-            first_audio_callback=pending_first_audio_callback,
-        )
-
-        pending_first_audio_callback = None
+        enqueue_tts_text(chunk)
         is_first = False
 
 
@@ -1081,26 +1041,16 @@ def main():
     )
 
     tts = build_tts()
-    bridge_audio_options = [
-        (
-            phrase,
-            *generate_bridge_audio(
-                tts,
-                phrase,
-            ),
-        )
-        for phrase in LATENCY_BRIDGE_PHRASES
-    ]
-
-    bridge_audio_cycle = itertools.cycle(
-        bridge_audio_options
+    bridge_samples, bridge_sample_rate = generate_bridge_audio(
+        tts,
+        LATENCY_BRIDGE_PHRASE,
     )
 
     print(
         "[LATENCY BRIDGE] "
         f"enabled={LATENCY_BRIDGE_ENABLED} "
-        f"normal_threshold={LATENCY_BRIDGE_NORMAL_SECONDS:.3f}s "
-        f"recall_threshold={LATENCY_BRIDGE_RECALL_SECONDS:.3f}s",
+        f"threshold={LATENCY_BRIDGE_SECONDS:.3f}s "
+        f"phrase={LATENCY_BRIDGE_PHRASE!r}",
         flush=True,
     )
 
@@ -1219,12 +1169,7 @@ def main():
 
             profile_context = user_profile.format_context()
 
-            effective_profile_context = (
-                profile_context if USER_PROFILE_CONTEXT_ENABLED else ""
-            )
-
             recall_requested = should_retrieve_recall(user_text)
-            explicit_recall_requested = looks_like_recall_request(user_text)
 
             profile_direct_answer = ""
 
@@ -1280,12 +1225,9 @@ def main():
                     user_text,
                 )
 
-                memory_context_found = bool(str(retrieved_context).strip())
-
                 if (
-                    explicit_recall_requested
-                    and not memory_context_found
-                    and not str(effective_profile_context).strip()
+                    not str(retrieved_context).strip()
+                    and not str(profile_context).strip()
                 ):
                     direct_answer = "I do not remember that yet."
 
@@ -1332,7 +1274,6 @@ def main():
                     continue
             else:
                 retrieved_context = ""
-                memory_context_found = False
 
                 if memory_debug_enabled():
                     print(
@@ -1353,15 +1294,9 @@ def main():
             )
             bridge = None
 
-            (
-                bridge_phrase,
-                bridge_samples,
-                bridge_sample_rate,
-            ) = next(bridge_audio_cycle)
-
             def play_latency_bridge():
                 print(
-                    f"\n[LATENCY BRIDGE] fired phrase={bridge_phrase!r}",
+                    f"\n[LATENCY BRIDGE] fired phrase={LATENCY_BRIDGE_PHRASE!r}",
                     flush=True,
                 )
 
@@ -1371,22 +1306,16 @@ def main():
                 )
 
             try:
-                if memory_context_found:
-                    bridge_delay_seconds = LATENCY_BRIDGE_RECALL_SECONDS
-                else:
-                    bridge_delay_seconds = LATENCY_BRIDGE_NORMAL_SECONDS
-
                 bridge = LatencyBridge(
-                    delay_seconds=bridge_delay_seconds,
+                    delay_seconds=LATENCY_BRIDGE_SECONDS,
                     enabled=LATENCY_BRIDGE_ENABLED,
                     on_fire=play_latency_bridge,
                 )
-
                 bridge.start()
 
                 if looks_like_perspective_correction(user_text):
                     request_history = recent_prompt_memory.get_messages()
-                elif memory_context_found:
+                elif recall_requested:
                     request_history = []
                 else:
                     request_history = recent_prompt_memory.get_messages()
@@ -1394,13 +1323,16 @@ def main():
                 response = stream_ollama_response(
                     user_text=user_text,
                     history=request_history,
-                    memory_context=effective_profile_context,
+                    memory_context=profile_context
+                    if USER_PROFILE_CONTEXT_ENABLED
+                    else "",
                     retrieved_context=retrieved_context,
                 )
 
-                if memory_context_found:
+                if recall_requested and str(retrieved_context).strip():
                     assistant_text = collect_text_response(
                         response,
+                        first_token_callback=bridge.resolve,
                     )
 
                     assistant_text, repaired = repair_recall_perspective(
@@ -1413,14 +1345,11 @@ def main():
                             flush=True,
                         )
 
-                    enqueue_complete_response(
-                        assistant_text,
-                        first_audio_callback=bridge.resolve,
-                    )
+                    enqueue_complete_response(assistant_text)
                 else:
                     assistant_text = stream_text_to_tts(
                         response,
-                        first_audio_callback=bridge.resolve,
+                        first_token_callback=bridge.resolve,
                     )
 
             except (

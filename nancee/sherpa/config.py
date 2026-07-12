@@ -242,7 +242,7 @@ LLM_NUM_THREADS = int(
 LLM_NUM_PREDICT = int(
     os.environ.get(
         "NANCEE_LLM_NUM_PREDICT",
-        "65",
+        "120",
     )
 )
 
@@ -282,20 +282,34 @@ LATENCY_BRIDGE_ENABLED = (
     == "true"
 )
 
-LATENCY_BRIDGE_SECONDS = float(
+LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
-        "NANCEE_LATENCY_BRIDGE_SECONDS",
+        "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
+        "4.0",
+    )
+)
+
+LATENCY_BRIDGE_RECALL_SECONDS = float(
+    os.getenv(
+        "NANCEE_LATENCY_BRIDGE_RECALL_SECONDS",
         "3.0",
     )
 )
 
-LATENCY_BRIDGE_PHRASE = os.getenv(
-    "NANCEE_LATENCY_BRIDGE_PHRASE",
+if LATENCY_BRIDGE_NORMAL_SECONDS <= 0:
+    raise ValueError("LATENCY_BRIDGE_NORMAL_SECONDS must be greater than zero.")
+
+if LATENCY_BRIDGE_RECALL_SECONDS <= 0:
+    raise ValueError("LATENCY_BRIDGE_RECALL_SECONDS must be greater than zero.")
+
+LATENCY_BRIDGE_PHRASES = (
     "Let me check that.",
-).strip()
+    "Give me one moment.",
+    "Let me think briefly.",
+    "Checking that for you.",
+    "Hang on one moment.",
+)
 
-if LATENCY_BRIDGE_SECONDS <= 0:
-    raise ValueError("LATENCY_BRIDGE_SECONDS must be greater than zero.")
-
-if len(LATENCY_BRIDGE_PHRASE.split()) != 4:
-    raise ValueError("LATENCY_BRIDGE_PHRASE must contain exactly four words.")
+for phrase in LATENCY_BRIDGE_PHRASES:
+    if len(phrase.split()) != 4:
+        raise ValueError(f"Latency bridge phrase must contain four words: {phrase!r}")
