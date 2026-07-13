@@ -3,9 +3,17 @@ from __future__ import annotations
 import re
 
 
-_LEADING_DISCOURSE = re.compile(
-    r"^(?:(?:so|well|okay|ok|hey|hello|hi|also|and)\s+)*"
-    r"(?:(?:nancy|nancee)[,\s]+)?",
+_LEADING_PREFACE = re.compile(
+    r"^(?:(?:good morning|good afternoon|good evening|"
+    r"so|well|okay|ok|also|and|hello|hi|hey|nancy|nancee)"
+    r"\b[\s,!.:;\-]*)+",
+    flags=re.IGNORECASE,
+)
+
+_TEMPORAL_PREFACE = re.compile(
+    r"^(?:(?:today|yesterday|recently|earlier|last night|"
+    r"this morning|this afternoon|this evening|tonight)"
+    r"\b[\s,!.:;\-]*)+",
     flags=re.IGNORECASE,
 )
 
@@ -45,57 +53,6 @@ _COMMAND_PREFIXES = (
     "please ",
 )
 
-_I_FACT_VERBS = (
-    "am",
-    "have",
-    "own",
-    "drive",
-    "bought",
-    "purchased",
-    "got",
-    "keep",
-    "kept",
-    "left",
-    "put",
-    "parked",
-    "live",
-    "work",
-    "like",
-    "love",
-    "prefer",
-    "use",
-    "need",
-    "want",
-    "went",
-    "ordered",
-    "ate",
-    "met",
-    "saw",
-    "called",
-    "found",
-    "lost",
-)
-
-_WE_FACT_VERBS = (
-    "are",
-    "have",
-    "own",
-    "drive",
-    "bought",
-    "purchased",
-    "got",
-    "keep",
-    "left",
-    "live",
-    "work",
-    "like",
-    "love",
-    "prefer",
-    "use",
-    "need",
-    "want",
-)
-
 _POSSESSIVE_ASSIGNMENT_VERBS = (
     "is",
     "are",
@@ -107,13 +64,34 @@ _POSSESSIVE_ASSIGNMENT_VERBS = (
     "includes",
 )
 
+_LOW_VALUE_FIRST_PERSON = re.compile(
+    r"^(?:"
+    r"i\s+(?:think|guess|mean|wonder|hope)\b|"
+    r"i(?:'m| am)\s+not\s+sure\b|"
+    r"i\s+(?:do not|don't)\s+know\b|"
+    r"i\s+(?:need|want)\s+you\s+to\b"
+    r")",
+    flags=re.IGNORECASE,
+)
+
+_IMPLIED_I_ACTION = re.compile(
+    r"^(?:bought|purchased|got|finished|completed|wired|installed|"
+    r"built|made|found|lost|parked|left|put|ordered|ate|drank|"
+    r"went|met|saw|called|received|returned|submitted|applied)\b",
+    flags=re.IGNORECASE,
+)
+
 
 def normalize_memory_candidate(text: str) -> str:
-    normalized = str(text).strip()
-    normalized = normalized.replace("’", "'")
-    normalized = _LEADING_DISCOURSE.sub("", normalized)
+    normalized = str(text).strip().replace("’", "'")
+    normalized = re.sub(r"\s+", " ", normalized)
+    normalized = _LEADING_PREFACE.sub("", normalized)
     normalized = re.sub(r"\s+", " ", normalized)
     return normalized.strip()
+
+
+def _without_temporal_preface(text: str) -> str:
+    return _TEMPORAL_PREFACE.sub("", text).strip()
 
 
 def _word_count(text: str) -> int:
@@ -165,7 +143,7 @@ def looks_like_question_or_command(text: str) -> bool:
 
 
 def is_complete_memory_statement(text: str) -> bool:
-    """Conservative gate for raw FTS5 session-memory storage."""
+    """Conservative raw-memory gate without a large verb whitelist."""
     normalized = normalize_memory_candidate(text)
     lowered = normalized.lower().rstrip(".!,;:")
 
@@ -178,31 +156,39 @@ def is_complete_memory_statement(text: str) -> bool:
     if _word_count(lowered) < 3:
         return False
 
-    if re.match(r"^i(?:'m| am)\s+\S+", lowered):
+    subject_text = _without_temporal_preface(lowered)
+
+    if _LOW_VALUE_FIRST_PERSON.match(subject_text):
+        return False
+
+    # A first-person clause with at least a subject, action/state, and value.
+    # We store the raw utterance; FTS5 decides later whether it is relevant.
+    if re.match(r"^i(?:'m| am)\s+\S+", subject_text):
         return True
 
-    if any(
-        re.match(rf"^i\s+{re.escape(verb)}\s+\S+", lowered)
-        for verb in _I_FACT_VERBS
-        if verb != "am"
-    ):
+    if re.match(r"^i\s+\S+\s+\S+", subject_text):
         return True
 
-    if any(
-        re.match(rf"^we\s+{re.escape(verb)}\s+\S+", lowered)
-        for verb in _WE_FACT_VERBS
-    ):
+    if re.match(r"^we(?:'re| are)\s+\S+", subject_text):
         return True
 
-    if lowered.startswith(("my ", "our ")):
+    if re.match(r"^we\s+\S+\s+\S+", subject_text):
+        return True
+
+    if subject_text.startswith(("my ", "our ")):
         for verb in _POSSESSIVE_ASSIGNMENT_VERBS:
             match = re.search(
                 rf"\b{re.escape(verb)}\b\s+(.+)$",
-                lowered,
+                subject_text,
             )
 
             if match and _word_count(match.group(1)) >= 1:
                 return True
+
+    # Whisper sometimes drops the leading "I" but preserves an unmistakable
+    # completed-action statement: "Bought a blue backpack at Macy's."
+    if _IMPLIED_I_ACTION.match(subject_text) and _word_count(subject_text) >= 4:
+        return True
 
     return False
 
@@ -222,4 +208,8 @@ def memory_storage_skip_reason(text: str) -> str:
     if _word_count(normalized) < 3:
         return "too_short"
 
+    if _LOW_VALUE_FIRST_PERSON.match(_without_temporal_preface(normalized)):
+        return "low_value_first_person"
+
     return "incomplete_statement"
+

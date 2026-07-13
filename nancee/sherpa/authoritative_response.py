@@ -9,11 +9,41 @@ class ProfileHitLike(Protocol):
     value: str
 
 
-_WORD = re.compile(r"[a-z0-9]+")
+_WORD = re.compile(r"[a-z0-9']+")
 _MEMORY_MISS_PATTERN = re.compile(
     r"\b(?:do not|don't|cannot|can't)\s+(?:remember|recall)\b",
     flags=re.IGNORECASE,
 )
+_MEMORY_QUOTE_PATTERN = re.compile(
+    r'-\s*User said:\s*"([^"]+)"',
+    flags=re.IGNORECASE,
+)
+
+_STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "been", "but", "by",
+    "did", "do", "does", "for", "from", "had", "has", "have", "he",
+    "her", "hers", "him", "his", "i", "in", "is", "it", "its", "me",
+    "my", "of", "on", "or", "our", "ours", "she", "that", "the",
+    "their", "theirs", "them", "they", "this", "to", "was", "we",
+    "were", "what", "when", "where", "which", "who", "why", "with",
+    "you", "your", "yours", "said", "user", "human", "memory", "s",
+}
+
+_CANONICAL = {
+    "bought": "buy",
+    "buying": "buy",
+    "purchased": "buy",
+    "purchase": "buy",
+    "purchasing": "buy",
+    "got": "get",
+    "getting": "get",
+    "drove": "drive",
+    "driving": "drive",
+    "finished": "finish",
+    "completed": "finish",
+    "wiring": "wire",
+    "wired": "wire",
+}
 
 
 def first_sentence_only(text: str) -> str:
@@ -44,6 +74,46 @@ def _contains_phrase(answer: str, value: str) -> bool:
     answer_text = " ".join(answer_words)
     value_text = " ".join(value_words)
     return value_text in answer_text
+
+
+def _content_tokens(text: str) -> set[str]:
+    tokens = set()
+
+    for token in _normalized_words(text):
+        token = token.strip("'")
+        token = _CANONICAL.get(token, token)
+
+        if len(token) < 3 or token in _STOPWORDS:
+            continue
+
+        tokens.add(token)
+
+    return tokens
+
+
+def _memory_source_text(retrieved_context: str) -> str:
+    quoted = _MEMORY_QUOTE_PATTERN.findall(str(retrieved_context))
+
+    if quoted:
+        return " ".join(quoted)
+
+    return str(retrieved_context)
+
+
+def session_memory_response_is_grounded(
+    answer: str,
+    retrieved_context: str,
+) -> bool:
+    if not str(retrieved_context).strip():
+        return True
+
+    answer_tokens = _content_tokens(answer)
+    memory_tokens = _content_tokens(_memory_source_text(retrieved_context))
+
+    if not answer_tokens or not memory_tokens:
+        return False
+
+    return bool(answer_tokens & memory_tokens)
 
 
 def profile_response_matches(
@@ -106,8 +176,9 @@ def prepare_authoritative_response(
     *,
     profile_hits: Iterable[ProfileHitLike],
     fact_miss: bool,
+    retrieved_context: str = "",
 ) -> tuple[str, str]:
-    """Trim and validate an answer before authoritative speech or history storage."""
+    """Trim and validate a fact-backed answer before TTS or history storage."""
     cleaned = first_sentence_only(text)
     hits = list(profile_hits)
 
@@ -120,4 +191,14 @@ def prepare_authoritative_response(
     if hits and not profile_response_matches(cleaned, hits):
         return profile_fallback(hits), "profile_fallback"
 
+    if retrieved_context and not session_memory_response_is_grounded(
+        cleaned,
+        retrieved_context,
+    ):
+        return (
+            "I don't remember that clearly enough.",
+            "memory_grounding_fallback",
+        )
+
     return cleaned, "accepted"
+

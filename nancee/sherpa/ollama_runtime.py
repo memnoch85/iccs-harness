@@ -125,21 +125,20 @@ def build_ollama_messages(
         response_instruction
     ).strip()
 
+    clean_user_text = str(user_text).strip()
+
     if clean_response_instruction:
-        messages.append(
-            {
-                "role": "system",
-                "content": (
-                    "RESPONSE MODE FOR THIS TURN:\n"
-                    f"{clean_response_instruction}"
-                ),
-            }
+        clean_user_text = (
+            "TURN RESPONSE CONSTRAINT:\n"
+            f"{clean_response_instruction}\n\n"
+            "USER MESSAGE:\n"
+            f"{clean_user_text}"
         )
 
     messages.append(
         {
             "role": "user",
-            "content": str(user_text).strip(),
+            "content": clean_user_text,
         }
     )
     return messages

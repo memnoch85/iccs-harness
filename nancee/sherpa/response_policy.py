@@ -26,9 +26,15 @@ class ResponsePolicy:
     drop_history: bool = False
 
 
-_GREETING_PATTERN = re.compile(
-    r"^(?:(?:nancy|nancee)[,\s]+)?"
-    r"(?:hello|hi|hey|good morning|good afternoon|good evening)\b",
+_LEADING_GREETING_TOKEN = re.compile(
+    r"^(?:good morning|good afternoon|good evening|"
+    r"hello|hi|hey|nancy|nancee)\b[\s,!.:;\-]*",
+    flags=re.IGNORECASE,
+)
+
+_GREETING_CHECKIN_PATTERN = re.compile(
+    r"^(?:how are you|how's it going|how is it going|"
+    r"what's up|what is up|you there)\??[.! ]*$",
     flags=re.IGNORECASE,
 )
 
@@ -48,18 +54,21 @@ _DETAILED_PATTERN = re.compile(
 )
 
 _COMMAND_PATTERN = re.compile(
-    r"^(?:(?:nancy|nancee)[,\s]+)?(?:"
-    r"tell me|show me|give me|help me|please|can you|could you|would you|"
-    r"remind me|set|start|stop|open|close|play|pause|call|send"
-    r")\b",
+    r"^(?:tell me|show me|give me|help me|please|can you|could you|would you|"
+    r"remind me|set|start|stop|open|close|play|pause|call|send)\b",
     flags=re.IGNORECASE,
 )
 
 _PERSONAL_UPDATE_START_PATTERN = re.compile(
-    r"^(?:(?:nancy|nancee)[,\s]+)?(?:"
-    r"i\b|i'm\b|i’ve\b|i've\b|i just\b|my\b|we\b|we're\b|we've\b|"
-    r"today\b|this morning\b|this afternoon\b|tonight\b"
-    r")",
+    r"^(?:i\b|i'm\b|i’ve\b|i've\b|i just\b|my\b|we\b|we're\b|we've\b|"
+    r"today\b|yesterday\b|this morning\b|this afternoon\b|tonight\b)",
+    flags=re.IGNORECASE,
+)
+
+_IMPLIED_I_ACTION_PATTERN = re.compile(
+    r"^(?:bought|purchased|got|finished|completed|wired|installed|built|"
+    r"made|found|lost|parked|left|put|ordered|ate|drank|went|met|saw|"
+    r"called|received|returned|submitted|applied)\b",
     flags=re.IGNORECASE,
 )
 
@@ -69,49 +78,65 @@ _DECLARATIVE_VERB_PATTERN = re.compile(
     r"need|want|bought|buy|got|went|saw|finished|started|made|found|ordered|"
     r"picked|feel|felt|think|believe|plan|submitted|applied|installed|built|"
     r"lost|won|called|met|watched|ate|drank|parked|winding|sucked|hurt|"
-    r"arrived|left|returned|received"
+    r"arrived|left|returned|received|completed|wired"
     r")\b",
     flags=re.IGNORECASE,
 )
 
 
 def _normalize(text):
-    return re.sub(
-        r"\s+",
-        " ",
-        str(text).strip(),
-    )
+    return re.sub(r"\s+", " ", str(text).strip())
 
 
 def _word_count(text):
-    return len(
-        re.findall(
-            r"\b[\w']+\b",
-            str(text),
-        )
-    )
+    return len(re.findall(r"\b[\w']+\b", str(text)))
+
+
+def _strip_leading_greeting_preface(text):
+    remaining = _normalize(text)
+    removed = False
+
+    while remaining:
+        match = _LEADING_GREETING_TOKEN.match(remaining)
+
+        if match is None:
+            break
+
+        removed = True
+        remaining = remaining[match.end():].lstrip()
+
+    return remaining, removed
+
+
+def _classification_text(user_text):
+    substantive, _ = _strip_leading_greeting_preface(user_text)
+    return substantive or _normalize(user_text)
 
 
 def looks_like_greeting_or_backchannel(user_text):
     text = _normalize(user_text)
 
-    return bool(
-        _GREETING_PATTERN.search(text)
-        or _BACKCHANNEL_PATTERN.fullmatch(text)
+    if _BACKCHANNEL_PATTERN.fullmatch(text):
+        return True
+
+    substantive, had_greeting = _strip_leading_greeting_preface(text)
+
+    if not had_greeting:
+        return False
+
+    return (
+        not substantive
+        or bool(_GREETING_CHECKIN_PATTERN.fullmatch(substantive))
     )
 
 
 def looks_like_detailed_request(user_text):
-    text = _normalize(user_text)
-
-    return bool(
-        _DETAILED_PATTERN.search(text)
-        or _word_count(text) >= 24
-    )
+    text = _classification_text(user_text)
+    return bool(_DETAILED_PATTERN.search(text) or _word_count(text) >= 24)
 
 
 def looks_like_simple_personal_update(user_text):
-    text = _normalize(user_text)
+    text = _classification_text(user_text)
 
     if not text or "?" in text:
         return False
@@ -125,34 +150,31 @@ def looks_like_simple_personal_update(user_text):
     if _DETAILED_PATTERN.search(text):
         return False
 
+    if _IMPLIED_I_ACTION_PATTERN.search(text):
+        return True
+
     if not _PERSONAL_UPDATE_START_PATTERN.search(text):
         return False
 
-    return bool(
-        _DECLARATIVE_VERB_PATTERN.search(text)
-    )
+    return bool(_DECLARATIVE_VERB_PATTERN.search(text))
 
 
 def looks_like_ambiguous_fragment(user_text):
-    text = _normalize(user_text)
+    text = _classification_text(user_text)
 
     if not text or "?" in text:
         return False
 
-    if looks_like_greeting_or_backchannel(text):
+    if looks_like_greeting_or_backchannel(user_text):
         return False
 
-    if looks_like_simple_personal_update(text):
+    if looks_like_simple_personal_update(user_text):
         return False
 
     return _word_count(text) <= 4
 
 
-def select_response_policy(
-    user_text,
-    *,
-    authoritative_context_found=False,
-):
+def select_response_policy(user_text, *, authoritative_context_found=False):
     if authoritative_context_found:
         return ResponsePolicy(
             name="recall",
@@ -160,8 +182,9 @@ def select_response_policy(
             num_predict=RESPONSE_RECALL_NUM_PREDICT,
             instruction=(
                 "Answer only the requested user fact in one short sentence. "
-                "Do not add a follow-up question, commentary, apology, advice, "
-                "or customer-service closing."
+                "Use only the retrieved or confirmed fact. Never infer, embellish, "
+                "or add a second fact. Do not add a follow-up question, commentary, "
+                "apology, advice, or customer-service closing."
             ),
             drop_history=True,
         )
@@ -231,3 +254,4 @@ def select_response_policy(
         ),
         drop_history=False,
     )
+

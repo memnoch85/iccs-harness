@@ -1605,6 +1605,7 @@ def main():
                             assistant_text,
                             profile_hits=profile_hits,
                             fact_miss=fact_miss,
+                            retrieved_context=retrieved_context,
                         )
                     )
 
