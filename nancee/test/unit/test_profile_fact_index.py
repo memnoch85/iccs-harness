@@ -94,9 +94,35 @@ class ProfileRoutingSourceContractTests(unittest.TestCase):
 
     def test_authoritative_fact_answers_drop_chat_history(self):
         self.assertIn(
-            "elif authoritative_context_found:",
+            "authoritative_context_found = (",
             self.source,
         )
+
+        # Authoritative profile or recall context must discard
+        # potentially contaminating recent chat history. The
+        # response policy may independently request the same behavior.
+        self.assertRegex(
+            self.source,
+            (
+                r"elif\s*\(\s*"
+                r"authoritative_context_found"
+                r"\s+or\s+"
+                r"response_policy\.drop_history"
+                r"\s*\)\s*:"
+            ),
+        )
+
+        self.assertRegex(
+            self.source,
+            (
+                r"authoritative_context_found"
+                r"[\s\S]*?"
+                r"response_policy\.drop_history"
+                r"[\s\S]*?"
+                r"request_history\s*=\s*\[\]"
+            ),
+        )
+
 
 
 if __name__ == "__main__":

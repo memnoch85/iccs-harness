@@ -63,6 +63,7 @@ from recall_policy import (
     looks_like_perspective_correction,
     repair_recall_perspective,
 )
+from response_policy import select_response_policy
 from session_archive import SessionArchive
 from short_term_memory import ShortTermMemory
 from tts_chunking import (
@@ -1486,6 +1487,22 @@ def main():
                 or bool(effective_profile_context.strip())
             )
 
+            response_policy = select_response_policy(
+                user_text,
+                authoritative_context_found=(
+                    authoritative_context_found
+                ),
+            )
+
+            print(
+                "[RESPONSE POLICY] "
+                f"name={response_policy.name} "
+                f"temperature={response_policy.temperature:.2f} "
+                f"num_predict={response_policy.num_predict} "
+                f"drop_history={response_policy.drop_history}",
+                flush=True,
+            )
+
             print_memory_status(
                 recent_prompt_memory,
                 recall_memory,
@@ -1532,7 +1549,10 @@ def main():
 
                 if looks_like_perspective_correction(user_text):
                     request_history = recent_prompt_memory.get_messages()
-                elif authoritative_context_found:
+                elif (
+                    authoritative_context_found
+                    or response_policy.drop_history
+                ):
                     # Retrieved facts are authoritative. Dropping the
                     # one-turn chat history keeps the prompt smaller and
                     # prevents a prior verbose answer from contaminating
@@ -1546,6 +1566,11 @@ def main():
                     history=request_history,
                     memory_context=effective_profile_context,
                     retrieved_context=retrieved_context,
+                    response_instruction=(
+                        response_policy.instruction
+                    ),
+                    temperature=response_policy.temperature,
+                    num_predict=response_policy.num_predict,
                 )
 
                 if authoritative_context_found:

@@ -100,6 +100,7 @@ def build_ollama_messages(
     history=None,
     memory_context="",
     retrieved_context="",
+    response_instruction="",
 ):
     messages = build_ollama_prefix_messages(
         history=history,
@@ -116,6 +117,21 @@ def build_ollama_messages(
                     "In memory lines, I, me, and my refer to the human user, not Nancee. "
                     "Do not guess.\n\n"
                     f"{clean_retrieved_context}"
+                ),
+            }
+        )
+
+    clean_response_instruction = str(
+        response_instruction
+    ).strip()
+
+    if clean_response_instruction:
+        messages.append(
+            {
+                "role": "system",
+                "content": (
+                    "RESPONSE MODE FOR THIS TURN:\n"
+                    f"{clean_response_instruction}"
                 ),
             }
         )
@@ -455,12 +471,16 @@ def stream_ollama_response(
     history=None,
     memory_context="",
     retrieved_context="",
+    response_instruction="",
+    temperature=None,
+    num_predict=None,
 ):
     messages = build_ollama_messages(
         user_text=user_text,
         history=history,
         memory_context=memory_context,
         retrieved_context=retrieved_context,
+        response_instruction=response_instruction,
     )
 
     identity = log_prompt_identity(
@@ -498,15 +518,40 @@ def stream_ollama_response(
             flush=True,
         )
 
+    effective_temperature = (
+        LLM_TEMPERATURE
+        if temperature is None
+        else float(temperature)
+    )
+
+    effective_num_predict = (
+        LLM_NUM_PREDICT
+        if num_predict is None
+        else int(num_predict)
+    )
+
+    if effective_temperature < 0:
+        raise ValueError("temperature cannot be negative.")
+
+    if effective_num_predict <= 0:
+        raise ValueError("num_predict must be positive.")
+
+    print(
+        "[LLM REQUEST OPTIONS] "
+        f"temperature={effective_temperature:.2f} "
+        f"num_predict={effective_num_predict}",
+        flush=True,
+    )
+
     payload = {
         "model": LLM_MODEL,
         "stream": True,
         "keep_alive": -1,
         "messages": messages,
         "options": {
-            "temperature": LLM_TEMPERATURE,
+            "temperature": effective_temperature,
             "num_thread": LLM_NUM_THREADS,
-            "num_predict": LLM_NUM_PREDICT,
+            "num_predict": effective_num_predict,
         },
     }
 

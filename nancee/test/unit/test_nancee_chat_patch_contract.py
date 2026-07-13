@@ -36,10 +36,47 @@ class NanceeChatPatchContractTests(unittest.TestCase):
             SOURCE,
         )
 
-        self.assertIn(
-            "elif authoritative_context_found:",
+        # Authoritative context must be supplied to the
+        # per-turn response-policy selector. Allow optional
+        # parentheses and arbitrary source formatting.
+        self.assertRegex(
             SOURCE,
+            (
+                r"response_policy\s*=\s*"
+                r"select_response_policy\("
+                r"[\s\S]*?"
+                r"authoritative_context_found\s*=\s*"
+                r"\(\s*"
+                r"authoritative_context_found"
+                r"\s*\)"
+                r"[\s\S]*?"
+                r"\)"
+            ),
         )
+
+        # History is discarded for either authoritative
+        # retrieved context or a response mode whose policy
+        # explicitly requests history removal.
+        self.assertRegex(
+            SOURCE,
+            (
+                r"elif\s*\(\s*"
+                r"authoritative_context_found"
+                r"\s+or\s+"
+                r"response_policy\.drop_history"
+                r"\s*\)\s*:"
+            ),
+        )
+
+        self.assertRegex(
+            SOURCE,
+            (
+                r"response_policy\.drop_history"
+                r"[\s\S]*?"
+                r"request_history\s*=\s*\[\]"
+            ),
+        )
+
 
     def test_effective_profile_context_is_used(self):
         self.assertIn(
