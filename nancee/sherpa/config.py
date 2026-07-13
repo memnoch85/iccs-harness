@@ -316,14 +316,14 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
-        "4.6",
+        "4.8",
     )
 )
 
 LATENCY_BRIDGE_RECALL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_RECALL_SECONDS",
-        "3.0",
+        "4.3",
     )
 )
 
