@@ -101,54 +101,14 @@ def _split_at_word_count(
     if len(word_matches) < split_word_count:
         return None
 
-    boundary = word_matches[
-        split_word_count - 1
-    ].end()
+    boundary = word_matches[split_word_count - 1].end()
 
     trailing_punctuation = set(
         ".,!?;:'\")]}",
     )
 
-    while (
-        boundary < len(buffer)
-        and buffer[boundary]
-        in trailing_punctuation
-    ):
+    while boundary < len(buffer) and buffer[boundary] in trailing_punctuation:
         boundary += 1
-
-    trimmed_buffer = buffer.rstrip()
-
-    boundary_is_visible_end = (
-        boundary >= len(trimmed_buffer)
-    )
-
-    has_trailing_whitespace = (
-        bool(buffer)
-        and buffer[-1].isspace()
-    )
-
-    # Remove closing quotes or brackets before checking
-    # whether punctuation confirmed the final word.
-    punctuation_probe = trimmed_buffer.rstrip(
-        "\"')]}",
-    )
-
-    has_terminal_punctuation = (
-        bool(punctuation_probe)
-        and punctuation_probe[-1]
-        in ".,!?;:"
-    )
-
-    # The end of a streamed buffer does not prove the final
-    # visible word is complete. For example, the current
-    # buffer may contain "Your name is N" while the next
-    # token completes it as "Nancee".
-    if (
-        boundary_is_visible_end
-        and not has_trailing_whitespace
-        and not has_terminal_punctuation
-    ):
-        return None
 
     chunk = buffer[:boundary].strip()
     remainder = buffer[boundary:].lstrip()

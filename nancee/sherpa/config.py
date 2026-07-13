@@ -358,10 +358,10 @@ if not (
 TTS_GAP_FILLER_ENABLED = (
     os.getenv("NANCEE_TTS_GAP_FILLER_ENABLED", "true").lower() == "true"
 )
-TTS_GAP_FILLER_COOLDOWN_SECONDS = 8.5
+TTS_GAP_FILLER_COOLDOWN_SECONDS = 8.0
 TTS_GAP_FILLER_SECONDS = float(os.getenv("NANCEE_TTS_GAP_FILLER_SECONDS", "3.50"))
 TTS_GAP_FILLER_MAX_PER_TURN = int(os.getenv("NANCEE_TTS_GAP_FILLER_MAX_PER_TURN", "5"))
-TTS_GAP_FILLER_PHRASES = ("hum,", "Uh,", "Um,", "That is,")
+TTS_GAP_FILLER_PHRASES = ("humm,", "Uh,", "Um,")
 
 if TTS_GAP_FILLER_SECONDS <= 0:
     raise ValueError("TTS_GAP_FILLER_SECONDS must be positive")

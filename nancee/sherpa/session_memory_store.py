@@ -143,22 +143,25 @@ def should_store_memory(raw_text: str) -> bool:
 
 
 def format_memory_overlay(
-    hits: List[MemoryHit], max_characters: Optional[int] = None
+    hits: List[MemoryHit],
+    max_characters: Optional[int] = None,
 ) -> str:
     if not hits:
         return ""
 
     lines = [
-        "MEMORY SPEAKER: human user",
-        "PERSPECTIVE: quoted I/me/my means the user; answer as you/your.",
-        "USER MEMORY:",
+        "Confirmed user memory. In quotes, I/me/my means the human user; "
+        "answer as you/your.",
     ]
 
     seen = set()
+
     for hit in hits:
         raw = str(hit.raw_text).strip()
+
         if not raw or raw.lower() in seen:
             continue
+
         seen.add(raw.lower())
         escaped = raw.replace('"', "'")
         lines.append(f'- User said: "{escaped}"')
@@ -167,8 +170,8 @@ def format_memory_overlay(
 
     if max_characters and len(text) > max_characters:
         text = text[:max_characters].rstrip()
-    return text
 
+    return text
 
 class SessionMemoryStore:
     def __init__(self, max_memories: int = 384, db_path: Optional[str] = None):

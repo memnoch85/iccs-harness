@@ -46,7 +46,13 @@ from config import (
     USER_PROFILE_RETRIEVAL_LIMIT,
     VOICE_ID,
 )
+from authoritative_response import prepare_authoritative_response
 from latency_bridge import LatencyBridge
+from memory_policy import (
+    is_complete_memory_statement,
+    looks_like_personal_fact_fragment,
+    memory_storage_skip_reason,
+)
 from profile_fact_index import ProfileFactIndex
 from ollama_runtime import (
     ensure_ollama_model_loaded,
@@ -1200,17 +1206,18 @@ def extract_recall_user_text(user_text):
 
 
 def has_declarative_memory_content(user_text):
-    text = normalize_user_text_for_memory(user_text)
-    return bool(text) and not looks_like_question_text(text)
+    return is_complete_memory_statement(user_text)
 
 
 def should_store_recall_turn(user_text):
-    text = normalize_user_text_for_memory(user_text)
-    return bool(text) and not looks_like_question_text(text)
+    return is_complete_memory_statement(user_text)
 
 
 def should_retrieve_recall(user_text):
-    return looks_like_question_text(user_text)
+    return (
+        looks_like_question_text(user_text)
+        or looks_like_personal_fact_fragment(user_text)
+    )
 
 
 # NANCEE FTS5 ONLY MEMORY MODE END
@@ -1377,9 +1384,13 @@ def main():
                 gap_fillers_used = 0
                 last_gap_filler_time = 0.0
 
+            personal_fact_fragment = (
+                looks_like_personal_fact_fragment(user_text)
+            )
             recall_requested = should_retrieve_recall(user_text)
-            explicit_recall_requested = looks_like_recall_request(
-                user_text
+            explicit_recall_requested = (
+                looks_like_recall_request(user_text)
+                or personal_fact_fragment
             )
 
             profile_started = time.perf_counter()
@@ -1416,13 +1427,28 @@ def main():
                     flush=True,
                 )
 
-            if recall_requested:
+            if profile_context_found:
+                # A matching profile fact is confirmed and authoritative.
+                # Do not add a weaker raw-session FTS5 hit to the same prompt.
+                retrieved_context = ""
+                memory_context_found = False
+
+                if memory_debug_enabled():
+                    print(
+                        "[MEMORY RECALL] skipped=true "
+                        "reason=authoritative_profile_hit",
+                        flush=True,
+                    )
+
+            elif recall_requested:
                 retrieved_context = retrieve_session_context(
                     recall_memory,
                     user_text,
                 )
 
-                memory_context_found = bool(str(retrieved_context).strip())
+                memory_context_found = bool(
+                    str(retrieved_context).strip()
+                )
 
             else:
                 retrieved_context = ""
@@ -1430,7 +1456,8 @@ def main():
 
                 if memory_debug_enabled():
                     print(
-                        "[MEMORY RECALL] skipped=true reason=not_recall_request",
+                        "[MEMORY RECALL] skipped=true "
+                        "reason=not_recall_request",
                         flush=True,
                     )
 
@@ -1521,18 +1548,46 @@ def main():
                     retrieved_context=retrieved_context,
                 )
 
-                if memory_context_found:
+                if authoritative_context_found:
+                    # Fact-backed answers are collected before speech so a
+                    # small-model contradiction cannot enter TTS or history.
                     assistant_text = collect_text_response(
                         response,
                     )
 
-                    assistant_text, repaired = repair_recall_perspective(
-                        assistant_text,
+                    if memory_context_found:
+                        assistant_text, repaired = (
+                            repair_recall_perspective(
+                                assistant_text,
+                            )
+                        )
+
+                        if repaired:
+                            print(
+                                "[MEMORY PERSPECTIVE REPAIR] "
+                                f"output={assistant_text!r}",
+                                flush=True,
+                            )
+
+                    fact_miss = (
+                        explicit_recall_requested
+                        and not memory_context_found
+                        and not profile_context_found
                     )
 
-                    if repaired:
+                    assistant_text, guard_action = (
+                        prepare_authoritative_response(
+                            assistant_text,
+                            profile_hits=profile_hits,
+                            fact_miss=fact_miss,
+                        )
+                    )
+
+                    if memory_debug_enabled():
                         print(
-                            f"[MEMORY PERSPECTIVE REPAIR] output={assistant_text!r}",
+                            "[AUTHORITATIVE RESPONSE GUARD] "
+                            f"action={guard_action} "
+                            f"output={assistant_text!r}",
                             flush=True,
                         )
 
@@ -1577,9 +1632,9 @@ def main():
             memory_assistant_text = assistant_text
 
             # FTS5 raw utterance recall archive.
-            # Store only non-recall user turns. Do not extract facts here.
-            # SessionMemoryStore rejects low-signal filler.
-            if not looks_like_question_text(user_text):
+            # Store only complete user statements. Questions, commands,
+            # fragments, and likely ASR debris are deliberately rejected.
+            if should_store_recall_turn(user_text):
                 added_memory_id = recall_memory.add_turn(
                     user_text=user_text,
                     assistant_text=memory_assistant_text,
@@ -1588,17 +1643,21 @@ def main():
                 if memory_debug_enabled():
                     if added_memory_id is not None:
                         print(
-                            f"[MEMORY RAW ADD] id={added_memory_id} stored={user_text!r}",
+                            f"[MEMORY RAW ADD] id={added_memory_id} "
+                            f"stored={user_text!r}",
                             flush=True,
                         )
                     else:
                         print(
-                            "[MEMORY RAW SKIP] not stored (filler/low-signal)",
+                            "[MEMORY RAW SKIP] "
+                            "backend_rejected=true",
                             flush=True,
                         )
             elif memory_debug_enabled():
                 print(
-                    "[MEMORY RAW SKIP] question/recall query not stored",
+                    "[MEMORY RAW SKIP] "
+                    f"reason={memory_storage_skip_reason(user_text)} "
+                    f"text={user_text!r}",
                     flush=True,
                 )
 

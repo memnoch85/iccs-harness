@@ -16,7 +16,7 @@ class MemoryOverlayPerspectiveTests(unittest.TestCase):
             )
         ])
 
-        self.assertIn("MEMORY SPEAKER: human user", overlay)
+        self.assertIn("Confirmed user memory.", overlay)
         self.assertIn("answer as you/your", overlay)
         self.assertIn("I bought hot sauce", overlay)
 
