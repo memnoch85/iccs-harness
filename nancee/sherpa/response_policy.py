@@ -28,7 +28,9 @@ class ResponsePolicy:
 
 _LEADING_GREETING_TOKEN = re.compile(
     r"^(?:good morning|good afternoon|good evening|"
-    r"hello|hi|hey|nancy|nancee)\b[\s,!.:;\-]*",
+    r"hello|hi|hey|nancy|nancee|"
+    r"so|well|okay|ok|and|yeah|yep|yup|uh|um|hmm|"
+    r"man|dude|bruh)\b[\s,!.:;\-]*",
     flags=re.IGNORECASE,
 )
 

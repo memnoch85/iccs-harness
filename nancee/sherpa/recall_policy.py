@@ -3,14 +3,63 @@ from __future__ import annotations
 import re
 
 
-_USER_ACTIONS = (
-    "bought|purchased|got|ordered|picked|found|drove|went|visited|"
-    "ate|drank|saw|owned|used|installed|made|told|said"
+_TEMPORAL_PREFIX = (
+    r"(?:actually[, ]+|today[, ]+|yesterday[, ]+)?"
 )
 
 
-def looks_like_perspective_correction(user_text: str) -> bool:
-    text = re.sub(r"\s+", " ", str(user_text).strip().lower())
+_NANCEE_FIRST_PERSON_PREFIX = re.compile(
+    rf"""
+    ^\s*
+    {_TEMPORAL_PREFIX}
+    (?:
+        I\s+
+        (?:
+            remember
+            |recall
+            |think
+            |believe
+            |know
+            |understand
+        )\b
+
+        |
+
+        I\s+
+        (?:
+            do\ not
+            |don't
+            |cannot
+            |can't
+        )
+        \s+
+        (?:
+            remember
+            |recall
+            |verify
+        )\b
+
+        |
+
+        I(?:'m|\ am)\s+
+        (?:
+            not\ sure
+            |unable
+        )\b
+    )
+    """,
+    flags=re.IGNORECASE | re.VERBOSE,
+)
+
+
+def looks_like_perspective_correction(
+    user_text: str,
+) -> bool:
+    text = re.sub(
+        r"\s+",
+        " ",
+        str(user_text).strip().lower(),
+    )
 
     patterns = (
         r"\b(?:you|nancee|nancy)\b.+\bor\b.+\bi\b",
@@ -20,35 +69,143 @@ def looks_like_perspective_correction(user_text: str) -> bool:
         r"\bdid i .+ or did you\b",
     )
 
-    return any(re.search(pattern, text) for pattern in patterns)
+    return any(
+        re.search(pattern, text)
+        for pattern in patterns
+    )
 
 
-def repair_recall_perspective(response_text: str) -> tuple[str, bool]:
-    """Repair narrow self-attribution errors in a memory-grounded answer."""
-    text = str(response_text).strip()
+def _subject_word(
+    prefix: str,
+    capitalized: str,
+    lowercase: str,
+) -> str:
+    if prefix.strip():
+        return lowercase
+
+    return capitalized
+
+
+def repair_recall_perspective(
+    response_text: str,
+) -> tuple[str, bool]:
+    """
+    Convert a retrieved human-user fact from first person
+    into second person before TTS and recent history.
+
+    Preserve legitimate Nancee statements such as:
+      I remember...
+      I don't recall...
+      I'm not sure...
+    """
+    text = (
+        str(response_text)
+        .strip()
+        .replace("’", "'")
+    )
+
     original = text
 
+    if not text:
+        return text, False
+
+    if _NANCEE_FIRST_PERSON_PREFIX.match(text):
+        return text, False
+
+    # "Actually, it was me who bought..."
     text = re.sub(
-        rf"^(\s*(?:actually[, ]+|today[, ]+|yesterday[, ]+)?)I\s+({_USER_ACTIONS})\b",
+        r"\bit was me who\b",
+        "it was you who",
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Handle first-person forms whose verb changes
+    # when converted to second person.
+    text = re.sub(
+        rf"^(\s*{_TEMPORAL_PREFIX})I\s+am\b",
         lambda match: (
             f"{match.group(1)}"
-            f"{'You' if not match.group(1).strip() else 'you'} "
-            f"{match.group(2)}"
+            f"{_subject_word(match.group(1), 'You', 'you')} "
+            "are"
         ),
         text,
         flags=re.IGNORECASE,
     )
 
     text = re.sub(
-        rf"\bit was me who\s+({_USER_ACTIONS})\b",
-        lambda match: f"it was you who {match.group(1)}",
+        rf"^(\s*{_TEMPORAL_PREFIX})I'm\b",
+        lambda match: (
+            match.group(1)
+            + _subject_word(
+                match.group(1),
+                "You're",
+                "you're",
+            )
+        ),
+        text,
+        flags=re.IGNORECASE,
+    )
+
+
+    text = re.sub(
+        rf"^(\s*{_TEMPORAL_PREFIX})I\s+was\b",
+        lambda match: (
+            f"{match.group(1)}"
+            f"{_subject_word(match.group(1), 'You', 'you')} "
+            "were"
+        ),
         text,
         flags=re.IGNORECASE,
     )
 
     text = re.sub(
-        rf"\bI was the one who\s+({_USER_ACTIONS})\b",
-        lambda match: f"you were the one who {match.group(1)}",
+        rf"^(\s*{_TEMPORAL_PREFIX})I've\b",
+        lambda match: (
+            match.group(1)
+            + _subject_word(
+                match.group(1),
+                "You've",
+                "you've",
+            )
+        ),
+        text,
+        flags=re.IGNORECASE,
+    )
+
+
+    # Other verbs keep the same form:
+    # I wired -> You wired
+    # I bought -> You bought
+    # I have -> You have
+    text = re.sub(
+        rf"^(\s*{_TEMPORAL_PREFIX})I\b",
+        lambda match: (
+            f"{match.group(1)}"
+            f"{_subject_word(match.group(1), 'You', 'you')}"
+        ),
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # My car -> Your car
+    text = re.sub(
+        rf"^(\s*{_TEMPORAL_PREFIX})My\b",
+        lambda match: (
+            f"{match.group(1)}"
+            f"{_subject_word(match.group(1), 'Your', 'your')}"
+        ),
+        text,
+        flags=re.IGNORECASE,
+    )
+
+    # Mine -> Yours
+    text = re.sub(
+        rf"^(\s*{_TEMPORAL_PREFIX})Mine\b",
+        lambda match: (
+            f"{match.group(1)}"
+            f"{_subject_word(match.group(1), 'Yours', 'yours')}"
+        ),
         text,
         flags=re.IGNORECASE,
     )

@@ -5,7 +5,8 @@ import re
 
 _LEADING_PREFACE = re.compile(
     r"^(?:(?:good morning|good afternoon|good evening|"
-    r"so|well|okay|ok|also|and|hello|hi|hey|nancy|nancee)"
+    r"so|well|okay|ok|also|and|yeah|yep|yup|uh|um|hmm|"
+    r"hello|hi|hey|man|dude|bruh|nancy|nancee)"
     r"\b[\s,!.:;\-]*)+",
     flags=re.IGNORECASE,
 )
