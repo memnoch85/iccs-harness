@@ -1,0 +1,16 @@
+Loading Sherpa Kokoro...
+[LATENCY BRIDGE] enabled=False normal_threshold=6.300s recall_threshold=5.200s
+Loaded. sample_rate=24000 threads=3 voice_id=3
+[PROMPT ID] kind=startup prefix_messages=1 system_sha256=8aecf4c2c64d3b12626abc69054f39caf2126f079a1585e3ada6e250ae07b251 prefix_sha256=c54e29509a460479d2a191154e4fd5bf8a5a9d04fadf116f706671fa42ca6d81 full_sha256=c54e29509a460479d2a191154e4fd5bf8a5a9d04fadf116f706671fa42ca6d81
+[WARMUP STATE] match=true model=phi4-mini:3.8b system_sha256=8aecf4c2c64d3b12626abc69054f39caf2126f079a1585e3ada6e250ae07b251 full_sha256=b7b5d7cd9715ad43a7a2b3ab03a44ec1ff6895e206420e4ae9ee0cd0e40b99de
+[LLM READY] 'phi4-mini:3.8b' is loaded and the current prompt is warmed.
+[PROMPT ID] kind=prime prefix_messages=1 system_sha256=8aecf4c2c64d3b12626abc69054f39caf2126f079a1585e3ada6e250ae07b251 prefix_sha256=c54e29509a460479d2a191154e4fd5bf8a5a9d04fadf116f706671fa42ca6d81 full_sha256=b4d1df85efef0f8d5753bb73b92e1af69189e0dd15343e793e6bf2147d94ef86
+[LLM CONTEXT PRIME] elapsed=1.372s load=0.473s prompt_eval=0.888s generation=0.000s prompt_tokens=508 response_tokens=1 system_sha256=8aecf4c2c64d3b12626abc69054f39caf2126f079a1585e3ada6e250ae07b251 prefix_sha256=c54e29509a460479d2a191154e4fd5bf8a5a9d04fadf116f706671fa42ca6d81
+[USER PROFILE INDEX] loaded=True facts=3
+Opening persistent audio stream...
+[ASR] Loading Whisper once: openai/whisper-tiny.en
+Loading Whisper model: openai/whisper-tiny.en
+Whisper loaded.
+[ASR] Persistent worker ready.
+
+Press Enter to begin speaking...
