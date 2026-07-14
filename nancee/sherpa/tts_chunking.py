@@ -47,6 +47,36 @@ _WEAK_CHUNK_ENDINGS = {
     "with",
 }
 
+# Expressions that should be spoken as one semantic unit.
+# Forced word-count splitting must not divide these pairs.
+_PROTECTED_SPLIT_PAIRS = {
+    ("check", "out"),
+    ("figure", "out"),
+    ("find", "out"),
+    ("log", "in"),
+    ("mix", "up"),
+    ("power", "up"),
+    ("set", "up"),
+    ("shut", "down"),
+    ("sign", "in"),
+    ("turn", "off"),
+    ("turn", "on"),
+}
+
+_PROTECTED_PAIR_PREFIXES = {
+    left_word
+    for left_word, _right_word
+    in _PROTECTED_SPLIT_PAIRS
+}
+
+
+def _normalize_boundary_word(text):
+    return re.sub(
+        r"[^a-z0-9']",
+        "",
+        str(text).lower(),
+    )
+
 
 def is_punctuation_only(text):
     stripped = str(text).strip()
@@ -100,6 +130,66 @@ def _split_at_word_count(
 
     if len(word_matches) < split_word_count:
         return None
+
+    # Protect two-word expressions from forced chunk boundaries.
+    #
+    # Example:
+    #   "Apologies for that mix up"
+    #
+    # becomes:
+    #   "Apologies for that"
+    #   "mix up"
+    while (
+        split_word_count > 1
+        and split_word_count < len(word_matches)
+    ):
+        left_word = _normalize_boundary_word(
+            word_matches[
+                split_word_count - 1
+            ].group(0)
+        )
+
+        right_word = _normalize_boundary_word(
+            word_matches[
+                split_word_count
+            ].group(0)
+        )
+
+        if (
+            left_word,
+            right_word,
+        ) not in _PROTECTED_SPLIT_PAIRS:
+            break
+
+        split_word_count -= 1
+
+    # A streamed buffer may temporarily end after "mix ".
+    # Wait for the next word before deciding whether this is
+    # the protected phrase "mix up".
+    if split_word_count == len(word_matches):
+        final_word = _normalize_boundary_word(
+            word_matches[
+                split_word_count - 1
+            ].group(0)
+        )
+
+        trimmed_buffer = buffer.rstrip()
+
+        punctuation_probe = trimmed_buffer.rstrip(
+            "\"')]}",
+        )
+
+        has_terminal_punctuation = (
+            bool(punctuation_probe)
+            and punctuation_probe[-1]
+            in ".,!?;:"
+        )
+
+        if (
+            final_word in _PROTECTED_PAIR_PREFIXES
+            and not has_terminal_punctuation
+        ):
+            return None
 
     boundary = word_matches[
         split_word_count - 1

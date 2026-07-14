@@ -7,6 +7,29 @@ from tts_chunking import (
 
 
 class TestTtsChunking(unittest.TestCase):
+    def test_first_chunk_does_not_split_mix_up(self):
+        self.assertEqual(
+            extract_tts_chunk(
+                (
+                    "Apologies for that mix up; "
+                    "you were right. "
+                ),
+                is_first=True,
+            ),
+            (
+                "Apologies for that",
+                "mix up; you were right. ",
+            ),
+        )
+
+    def test_stream_waits_when_buffer_ends_at_mix(self):
+        self.assertIsNone(
+            extract_tts_chunk(
+                "Apologies for that mix ",
+                is_first=True,
+            )
+        )
+
     def test_first_chunk_emits_at_one_word_punctuation(self):
         self.assertEqual(
             extract_tts_chunk(
