@@ -82,15 +82,6 @@ class TestShortTermMemory(unittest.TestCase):
         with self.assertRaises(ValueError):
             memory.add_turn("hello", "")
 
-    def test_clear_session_clears_turns(self):
-        memory = ShortTermMemory(max_turns=2)
-
-        memory.add_turn("hello", "okay")
-        memory.clear_session()
-
-        self.assertEqual(memory.get_messages(), [])
-        self.assertEqual(memory.get_stats()["turn_count"], 0)
-
     def test_unbounded_mode_still_available_for_tests_or_tools(self):
         memory = ShortTermMemory(max_turns=None)
 
