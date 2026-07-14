@@ -142,6 +142,65 @@ def _word_count(text: str) -> int:
     return len(re.findall(r"[A-Za-z0-9']+", text))
 
 
+_PERSONAL_FACT_QUESTION_PATTERNS = (
+    re.compile(
+        (
+            r"^(?:what|which)\s+"
+            r"(?:"
+            r"color|colour|name|make|model|brand|"
+            r"type|kind|size|year|age|version"
+            r")\s+"
+            r"(?:is|are)\s+"
+            r"(?:my|our)\b"
+        ),
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        (
+            r"^what(?:'s| is)\s+the\s+"
+            r"(?:"
+            r"color|colour|name|make|model|brand|"
+            r"type|kind|size|year|age|version"
+            r")\s+"
+            r"of\s+(?:my|our)\b"
+        ),
+        flags=re.IGNORECASE,
+    ),
+)
+
+
+def looks_like_personal_fact_question(
+    text: str,
+) -> bool:
+    """
+    Return True for narrow questions about stable personal facts.
+
+    Examples:
+        What color is my helicopter?
+        What model is my phone?
+        What is the make of my car?
+
+    Diagnostic questions intentionally remain outside this policy.
+    """
+    normalized = normalize_memory_candidate(
+        text
+    )
+
+    lowered = re.sub(
+        r"\s+",
+        " ",
+        normalized.lower(),
+    ).strip()
+
+    if not lowered:
+        return False
+
+    return any(
+        pattern.search(lowered)
+        for pattern in _PERSONAL_FACT_QUESTION_PATTERNS
+    )
+
+
 def looks_like_personal_fact_fragment(text: str) -> bool:
     """Return True for short fact-shaped fragments such as 'My wife's name.'"""
     normalized = normalize_memory_candidate(text)

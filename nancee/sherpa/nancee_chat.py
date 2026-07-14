@@ -55,6 +55,7 @@ from memory_policy import (
     extract_simple_fact_correction,
     is_complete_memory_statement,
     looks_like_personal_fact_fragment,
+    looks_like_personal_fact_question,
     memory_storage_skip_reason,
 )
 from ollama_runtime import (
@@ -174,6 +175,9 @@ def looks_like_recall_request(user_text):
         return False
 
     if looks_like_perspective_correction(lowered):
+        return True
+
+    if looks_like_personal_fact_question(lowered):
         return True
 
     return any(

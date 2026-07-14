@@ -14,8 +14,27 @@ _TERMINAL_END_PATTERN = re.compile(
 
 _PROMPT_ROLE_LEAK_PATTERN = re.compile(
     r"(?im)(?:^|\n)[ \t]*"
+    r"(?:"
     r"(?:USER MESSAGE|ASSISTANT|SYSTEM|TURN RESPONSE CONSTRAINT)"
-    r"[ \t]*:",
+    r"[ \t]*:"
+    r"|REMEMBER[ \t]*:[ \t\r\n]*"
+    r"(?:"
+    r"KEEP RESPONSES"
+    r"|ANSWER ONLY WHAT THE USER ASKED"
+    r"|DO NOT ADD STORIES"
+    r"|NEVER OUTPUT PARENTHETICAL"
+    r"|MATCH THE RESPONSE SIZE"
+    r"|SPEAK ONLY TO THE CURRENT USER"
+    r"|ASK A FOLLOW-UP ONLY"
+    r"|BEGIN WITH ONE NATURAL"
+    r")"
+    r"|KEEP RESPONSES[ \t]+CONCISE\b"
+    r"|ANSWER ONLY WHAT THE USER ASKED\b"
+    r"|DO NOT ADD STORIES\b"
+    r"|NEVER OUTPUT PARENTHETICAL\b"
+    r"|MATCH THE RESPONSE SIZE\b"
+    r"|SPEAK ONLY TO THE CURRENT USER\b"
+    r")",
 )
 
 
