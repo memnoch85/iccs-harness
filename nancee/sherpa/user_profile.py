@@ -66,15 +66,9 @@ class UserProfile:
             return str(value)
 
         if isinstance(value, list):
-            parts = [
-                UserProfile._format_value(item)
-                for item in value
-            ]
+            parts = [UserProfile._format_value(item) for item in value]
 
-            return ", ".join(
-                part for part in parts
-                if part
-            )
+            return ", ".join(part for part in parts if part)
 
         if isinstance(value, dict):
             parts = []
@@ -99,6 +93,7 @@ class UserProfile:
             )
         }
 
+    # this method has been marked as potentially not having a caller
     def direct_answer(self, user_text: str) -> str:
         """
         Deterministic answers for explicit profile facts.
@@ -110,25 +105,14 @@ class UserProfile:
 
         tokens = self._question_tokens(user_text)
 
-        name = self._format_value(
-            self.facts.get("name")
-        )
+        name = self._format_value(self.facts.get("name"))
 
-        vehicle = self._format_value(
-            self.facts.get("vehicle")
-        )
+        vehicle = self._format_value(self.facts.get("vehicle"))
 
-        project = self._format_value(
-            self.facts.get("project")
-        )
+        project = self._format_value(self.facts.get("project"))
 
         if name and (
-            "name" in tokens
-            or (
-                "who" in tokens
-                and "am" in tokens
-                and "i" in tokens
-            )
+            "name" in tokens or ("who" in tokens and "am" in tokens and "i" in tokens)
         ):
             return f"Your name is {name}."
 
@@ -140,14 +124,12 @@ class UserProfile:
         ):
             return f"You drive a {vehicle}."
 
-        if project and (
-            "project" in tokens
-            or "nancee" in tokens
-        ):
+        if project and ("project" in tokens or "nancee" in tokens):
             return f"Your project is {project}."
 
         return ""
 
+    # this has been marked as potentially not having a caller
     def format_context(
         self,
         max_characters: int | None = None,

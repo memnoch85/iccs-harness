@@ -40,6 +40,7 @@ def duration_seconds(
     return data.get(field, 0) / 1_000_000_000
 
 
+# This method doesn't appear to have a caller  we may need to validate this before removal
 def build_retrieved_user_text(
     user_text,
     retrieved_context="",
@@ -92,8 +93,6 @@ def build_ollama_prefix_messages(
     return messages
 
 
-
-
 def build_ollama_messages(
     *,
     user_text,
@@ -121,9 +120,7 @@ def build_ollama_messages(
             }
         )
 
-    clean_response_instruction = str(
-        response_instruction
-    ).strip()
+    clean_response_instruction = str(response_instruction).strip()
 
     clean_user_text = str(user_text).strip()
 
@@ -142,6 +139,7 @@ def build_ollama_messages(
         }
     )
     return messages
+
 
 def is_ollama_model_loaded(
     model_name,
@@ -360,7 +358,6 @@ def ensure_ollama_model_loaded(
     )
 
 
-
 def prime_ollama_context(
     *,
     history=None,
@@ -464,7 +461,6 @@ def prime_ollama_context(
     return result
 
 
-
 def stream_ollama_response(
     user_text,
     history=None,
@@ -526,16 +522,10 @@ def stream_ollama_response(
         )
 
     effective_temperature = (
-        LLM_TEMPERATURE
-        if temperature is None
-        else float(temperature)
+        LLM_TEMPERATURE if temperature is None else float(temperature)
     )
 
-    effective_num_predict = (
-        LLM_NUM_PREDICT
-        if num_predict is None
-        else int(num_predict)
-    )
+    effective_num_predict = LLM_NUM_PREDICT if num_predict is None else int(num_predict)
 
     if effective_temperature < 0:
         raise ValueError("temperature cannot be negative.")

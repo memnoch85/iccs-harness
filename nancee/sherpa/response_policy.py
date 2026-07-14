@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 import re
+from dataclasses import dataclass
 
 from config import (
     RESPONSE_ACK_NUM_PREDICT,
@@ -119,7 +119,7 @@ def _strip_leading_greeting_preface(text):
             break
 
         removed = True
-        remaining = remaining[match.end():].lstrip()
+        remaining = remaining[match.end() :].lstrip()
 
     return remaining, removed
 
@@ -140,10 +140,7 @@ def looks_like_greeting_or_backchannel(user_text):
     if not had_greeting:
         return False
 
-    return (
-        not substantive
-        or bool(_GREETING_CHECKIN_PATTERN.fullmatch(substantive))
-    )
+    return not substantive or bool(_GREETING_CHECKIN_PATTERN.fullmatch(substantive))
 
 
 def looks_like_detailed_request(user_text):
@@ -158,10 +155,7 @@ def looks_like_detailed_request(user_text):
     if _EXACT_SENTENCE_COUNT_PATTERN.search(text):
         return True
 
-    if (
-        _word_count(text) >= 8
-        and _MULTI_PART_QUESTION_PATTERN.search(text)
-    ):
+    if _word_count(text) >= 8 and _MULTI_PART_QUESTION_PATTERN.search(text):
         return True
 
     return _word_count(text) >= 24
@@ -238,7 +232,7 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
                 "mention listeners, an audience, users, customers, or clients. "
                 "Do not use a customer-service closing."
             ),
-            drop_history=False,
+            drop_history=True,
         )
 
     if looks_like_simple_personal_update(user_text):
@@ -294,4 +288,3 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
         ),
         drop_history=False,
     )
-

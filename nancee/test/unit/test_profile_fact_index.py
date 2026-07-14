@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 from profile_fact_index import ProfileFactIndex
@@ -93,37 +94,47 @@ class ProfileRoutingSourceContractTests(unittest.TestCase):
         )
 
     def test_authoritative_fact_answers_drop_chat_history(self):
-        self.assertIn(
-            "authoritative_context_found = (",
+        assignment_match = re.search(
+            (
+                r"authoritative_context_found\s*=\s*"
+                r"memory_context_found\s+or\s+"
+                r"bool\(\s*"
+                r"effective_profile_context\.strip\(\)"
+                r"\s*\)"
+            ),
             self.source,
         )
 
-        # Authoritative profile or recall context must discard
-        # potentially contaminating recent chat history. The
-        # response policy may independently request the same behavior.
-        self.assertRegex(
-            self.source,
+        self.assertIsNotNone(
+            assignment_match,
             (
-                r"elif\s*\(\s*"
+                "authoritative_context_found must combine "
+                "memory and profile context"
+            ),
+        )
+
+        history_drop_match = re.search(
+            (
+                r"elif\s+"
+                r"(?:\(\s*)?"
                 r"authoritative_context_found"
                 r"\s+or\s+"
                 r"response_policy\.drop_history"
-                r"\s*\)\s*:"
-            ),
-        )
-
-        self.assertRegex(
-            self.source,
-            (
-                r"authoritative_context_found"
-                r"[\s\S]*?"
-                r"response_policy\.drop_history"
+                r"(?:\s*\))?"
+                r"\s*:"
                 r"[\s\S]*?"
                 r"request_history\s*=\s*\[\]"
             ),
+            self.source,
         )
 
-
+        self.assertIsNotNone(
+            history_drop_match,
+            (
+                "authoritative context or drop_history "
+                "must discard recent chat history"
+            ),
+        )
 
 if __name__ == "__main__":
     unittest.main()

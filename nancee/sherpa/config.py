@@ -31,27 +31,12 @@ MEMORY_RECALL_LIMIT = int(
     )
 )
 
-MEMORY_RECALL_MIN_SCORE = float(
-    os.getenv(
-        "NANCEE_MEMORY_RECALL_MIN_SCORE",
-        "2.0",
-    )
-)
-
 MEMORY_RECALL_CONTEXT_MAX_CHARACTERS = int(
     os.getenv(
         "NANCEE_MEMORY_RECALL_CONTEXT_MAX_CHARACTERS",
         "650",
     )
 )
-
-MEMORY_RECALL_SNIPPET_WORDS = int(
-    os.getenv(
-        "NANCEE_MEMORY_RECALL_SNIPPET_WORDS",
-        "18",
-    )
-)
-
 
 if MEMORY_RECALL_TURN_LIMIT <= 0:
     raise ValueError("MEMORY_RECALL_TURN_LIMIT must be positive.")
@@ -62,28 +47,14 @@ if MEMORY_RECENT_PROMPT_TURNS < 0:
 if MEMORY_RECALL_LIMIT <= 0:
     raise ValueError("MEMORY_RECALL_LIMIT must be positive.")
 
-if MEMORY_RECALL_MIN_SCORE < 0:
-    raise ValueError("MEMORY_RECALL_MIN_SCORE cannot be negative.")
-
 if MEMORY_RECALL_CONTEXT_MAX_CHARACTERS <= 0:
     raise ValueError("MEMORY_RECALL_CONTEXT_MAX_CHARACTERS must be positive.")
-
-if MEMORY_RECALL_SNIPPET_WORDS <= 0:
-    raise ValueError("MEMORY_RECALL_SNIPPET_WORDS must be positive.")
 
 # Stable user profile configuration.
 # This is not FTS5 recall. It is a small, explicit profile overlay.
 USER_PROFILE_FILE = os.getenv(
     "NANCEE_USER_PROFILE_FILE",
     "/home/memnoch/Nancee/nancee/sherpa/user_profile.json",
-)
-
-USER_PROFILE_CONTEXT_ENABLED = (
-    os.getenv(
-        "NANCEE_USER_PROFILE_CONTEXT_ENABLED",
-        "false",
-    ).lower()
-    == "true"
 )
 
 
@@ -198,13 +169,6 @@ FIRST_CHUNK_MIN_WORDS = int(
     )
 )
 
-TARGET_CHUNK_WORDS = int(
-    os.environ.get(
-        "TARGET_CHUNK_WORDS",
-        "4",
-    )
-)
-
 
 FIRST_CHUNK_MAX_WORDS = int(
     os.environ.get(
@@ -213,22 +177,9 @@ FIRST_CHUNK_MAX_WORDS = int(
     )
 )
 
-MAX_CHUNK_WORDS = int(
-    os.environ.get(
-        "MAX_CHUNK_WORDS",
-        "8",
-    )
-)
 
 if FIRST_CHUNK_MIN_WORDS <= 0:
     raise ValueError("FIRST_CHUNK_MIN_WORDS must be positive.")
-
-if TARGET_CHUNK_WORDS <= 0:
-    raise ValueError("TARGET_CHUNK_WORDS must be positive.")
-
-if MAX_CHUNK_WORDS <= 0:
-    raise ValueError("MAX_CHUNK_WORDS must be positive.")
-
 
 # Ollama configuration
 OLLAMA_URL = os.environ.get(
@@ -316,14 +267,14 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
-        "4.9",
+        "6.2",
     )
 )
 
 LATENCY_BRIDGE_RECALL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_RECALL_SECONDS",
-        "4.0",
+        "4.5",
     )
 )
 
@@ -372,10 +323,10 @@ if TTS_GAP_FILLER_MAX_PER_TURN < 0:
 # These are per-request generation limits. The global LLM_NUM_PREDICT
 # remains the fallback for callers that do not select a response policy.
 RESPONSE_GREETING_NUM_PREDICT = int(
-    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "18")
+    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "14")
 )
 RESPONSE_GREETING_TEMPERATURE = float(
-    os.getenv("NANCEE_RESPONSE_GREETING_TEMPERATURE", "0.30")
+    os.getenv("NANCEE_RESPONSE_GREETING_TEMPERATURE", "0.25")
 )
 
 RESPONSE_ACK_NUM_PREDICT = int(os.getenv("NANCEE_RESPONSE_ACK_NUM_PREDICT", "18"))

@@ -52,8 +52,7 @@ class ShortTermMemory:
 
     def get_stats(self):
         history_characters = sum(
-            len(turn["user"]) + len(turn["assistant"])
-            for turn in self._turns
+            len(turn["user"]) + len(turn["assistant"]) for turn in self._turns
         )
         return {
             "max_turns": self._max_turns,
@@ -62,11 +61,14 @@ class ShortTermMemory:
             "history_characters": history_characters,
         }
 
+    # this method as been marked as potentially not having a caller
     def snapshot(self):
         return {"max_turns": self._max_turns, "turns": self.get_turns_snapshot()}
 
+    # this method has been marked as potentially not having-caller
     def clear(self):
         self._turns.clear()
 
+    # this method has been marked ak potentially not having a caller
     def clear_session(self):
         self.clear()

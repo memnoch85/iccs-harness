@@ -1,6 +1,5 @@
 import itertools
 import json
-import os
 import queue
 import re
 import subprocess
@@ -13,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import sherpa_onnx
 import sounddevice as sd
+from authoritative_response import prepare_authoritative_response
 from config import (
     BLOCKSIZE,
     LATENCY_BRIDGE_ENABLED,
@@ -24,8 +24,6 @@ from config import (
     MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
     MEMORY_RECALL_ENABLED,
     MEMORY_RECALL_LIMIT,
-    MEMORY_RECALL_MIN_SCORE,
-    MEMORY_RECALL_SNIPPET_WORDS,
     MEMORY_RECALL_TURN_LIMIT,
     MEMORY_RECENT_PROMPT_TURNS,
     MODEL_DIR,
@@ -46,7 +44,6 @@ from config import (
     USER_PROFILE_RETRIEVAL_LIMIT,
     VOICE_ID,
 )
-from authoritative_response import prepare_authoritative_response
 from generation_completion import (
     final_fragment_is_safe,
     prepare_clarification_response,
@@ -60,12 +57,12 @@ from memory_policy import (
     looks_like_personal_fact_fragment,
     memory_storage_skip_reason,
 )
-from profile_fact_index import ProfileFactIndex
 from ollama_runtime import (
     ensure_ollama_model_loaded,
     prime_ollama_context,
     stream_ollama_response,
 )
+from profile_fact_index import ProfileFactIndex
 from recall_policy import (
     looks_like_perspective_correction,
     repair_recall_perspective,
@@ -155,15 +152,6 @@ _RECALL_QUERY_PATTERNS = (
     r"\bi told you .* earlier\b",
 )
 
-_DECLARATIVE_MEMORY_PATTERNS = (
-    r"\bmy\s+[^?.!,]{1,60}\s+(?:is|are|was|were)\b",
-    r"\bthis is\s+[a-z][a-z' -]{1,50}\b",
-    r"\bi\s+(?:am|have|own|drive|like|prefer|use|work|live|need|want)\b",
-    r"\bi[' ]?m\s+[a-z][a-z' -]{1,50}\b",
-    r"\bwe\s+(?:are|have|own|use|work|live|need|want)\b",
-    r"\bour\s+[^?.!,]{1,60}\s+(?:is|are|was|were)\b",
-)
-
 
 def normalize_user_text_for_memory(user_text):
     lowered = re.sub(
@@ -177,19 +165,6 @@ def normalize_user_text_for_memory(user_text):
         "",
         lowered,
     )
-
-
-def memory_sentence_chunks(user_text):
-    text = normalize_user_text_for_memory(user_text)
-
-    return [
-        chunk.strip()
-        for chunk in re.split(
-            r"(?<=[.!?])\s+|[;\n]+",
-            text,
-        )
-        if chunk.strip()
-    ]
 
 
 def looks_like_recall_request(user_text):
@@ -226,206 +201,6 @@ def looks_like_question_text(user_text):
     return looks_like_recall_request(lowered)
 
 
-def has_declarative_memory_content(user_text):
-    for sentence in memory_sentence_chunks(user_text):
-        if looks_like_question_text(sentence):
-            continue
-
-        if any(
-            re.search(
-                pattern,
-                sentence,
-                flags=re.IGNORECASE,
-            )
-            for pattern in _DECLARATIVE_MEMORY_PATTERNS
-        ):
-            return True
-
-    return False
-
-
-_MEMORY_JUNK_PATTERNS = (
-    r"\bhere to test\b",
-    r"\btest your memory\b",
-    r"\btest .* capabilities\b",
-    r"\bplease remember that\b",
-    r"\bremember this\b",
-)
-
-
-def clean_memory_fragment(sentence):
-    cleaned = str(sentence).strip()
-
-    cleaned = re.sub(
-        r"^[,\s.!?]+",
-        "",
-        cleaned,
-    )
-
-    cleaned = re.sub(
-        r"^(hello|hi|hey|okay|ok|so|also|and|great|alright)\s+",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-
-    cleaned = re.sub(
-        r"^(nancy|nancee)[,\s]+",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-
-    cleaned = re.sub(
-        r"^you know\s+",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-
-    cleaned = re.sub(
-        r"\s+",
-        " ",
-        cleaned,
-    ).strip()
-
-    cleaned = cleaned.rstrip(".")
-
-    # Convert "this is Anders" into a more useful memory fact.
-    match = re.fullmatch(
-        r"this is\s+([A-Z][A-Za-z' -]{1,50})",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-
-    if match:
-        name = match.group(1).strip()
-        return f"my name is {name}"
-
-    return cleaned
-
-
-def _clean_extracted_fact(value):
-    cleaned = str(value).strip()
-
-    cleaned = re.sub(
-        r"^(hello|hi|hey|okay|ok|so|also|and|great|alright|nancy|nancee)[,\s]+",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-
-    cleaned = re.sub(
-        r"^you know\s+",
-        "",
-        cleaned,
-        flags=re.IGNORECASE,
-    )
-
-    cleaned = re.split(
-        r"\b(?:how are you|what about|can you|could you|would you|should you|please remember|remember that)\b",
-        cleaned,
-        maxsplit=1,
-        flags=re.IGNORECASE,
-    )[0]
-
-    cleaned = cleaned.strip(" ,.!?")
-
-    return re.sub(r"\s+", " ", cleaned).strip()
-
-
-def extract_recall_user_text(user_text):
-    text = normalize_user_text_for_memory(user_text)
-    remembered = []
-
-    fact_patterns = (
-        (
-            r"\bmy name is\s+([^?.!,]{1,60})",
-            lambda match: f"the user name is {_clean_extracted_fact(match.group(1))}",
-        ),
-        (
-            r"\bthis is\s+([^?.!,]{1,60})",
-            lambda match: f"the user name is {_clean_extracted_fact(match.group(1))}",
-        ),
-        (
-            r"\bi(?:'m| am)\s+(?!here\b|going\b|trying\b|testing\b|driving\b|heading\b|tired\b|hungry\b)([^?.!,]{1,40})",
-            lambda match: f"the user name is {_clean_extracted_fact(match.group(1))}",
-        ),
-        (
-            r"\bi drive\s+([^?.!,]{1,90})",
-            lambda match: f"the user drives {_clean_extracted_fact(match.group(1))}",
-        ),
-        (
-            r"\bi own\s+([^?.!,]{1,90})",
-            lambda match: f"the user owns {_clean_extracted_fact(match.group(1))}",
-        ),
-        (
-            r"\bmy (?:car|vehicle) is\s+([^?.!,]{1,90})",
-            lambda match: (
-                f"the user vehicle is {_clean_extracted_fact(match.group(1))}"
-            ),
-        ),
-        (
-            r"\bmy favorite band is\s+([^?.!,]{1,90})",
-            lambda match: (
-                f"the user favorite band is {_clean_extracted_fact(match.group(1))}"
-            ),
-        ),
-        (
-            r"\bmy mechanic(?:'s name)? is\s+([^?.!,]{1,60})",
-            lambda match: (
-                f"the user mechanic is {_clean_extracted_fact(match.group(1))}"
-            ),
-        ),
-    )
-
-    for pattern, builder in fact_patterns:
-        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
-            fact = _clean_extracted_fact(builder(match))
-
-            if fact:
-                remembered.append(fact)
-
-    if not remembered:
-        return ""
-
-    deduped = []
-    seen = set()
-
-    for fact in remembered:
-        key = fact.lower()
-
-        if key not in seen:
-            seen.add(key)
-            deduped.append(fact)
-
-    return ". ".join(deduped).strip() + "."
-
-
-def should_retrieve_recall(user_text):
-    if has_declarative_memory_content(user_text):
-        return False
-
-    return looks_like_recall_request(user_text)
-
-
-def should_store_recall_turn(user_text):
-    if has_declarative_memory_content(user_text):
-        return True
-
-    if looks_like_question_text(user_text):
-        return False
-
-    return False
-
-
-if MEMORY_RECALL_TURN_LIMIT <= 0:
-    raise ValueError("MEMORY_RECALL_TURN_LIMIT must be positive.")
-
-if MEMORY_RECENT_PROMPT_TURNS < 0:
-    raise ValueError("MEMORY_RECENT_PROMPT_TURNS cannot be negative.")
-
-
 def retrieve_session_context(recall_memory, user_text):
     started = time.perf_counter()
 
@@ -440,14 +215,11 @@ def retrieve_session_context(recall_memory, user_text):
     retrieved_turns = recall_memory.retrieve(
         user_text,
         limit=MEMORY_RECALL_LIMIT,
-        min_score=MEMORY_RECALL_MIN_SCORE,
-        snippet_words=MEMORY_RECALL_SNIPPET_WORDS,
     )
 
-    explicit_memory_request = (
-        looks_like_recall_request(user_text)
-        or looks_like_personal_fact_fragment(user_text)
-    )
+    explicit_memory_request = looks_like_recall_request(
+        user_text
+    ) or looks_like_personal_fact_fragment(user_text)
 
     unfiltered_count = len(retrieved_turns)
     retrieved_turns = filter_memory_hits_by_overlap(
@@ -499,9 +271,7 @@ def print_memory_status(recent_prompt_memory, recall_memory, phase):
     recent_stats = recent_prompt_memory.get_stats()
     recall_stats = recall_memory.get_stats()
 
-    # Old SessionArchive used:
-    #   turn_count, max_turns, archive_characters
-    # New FTS5-backed store may use:
+    # FTS5-backed store may use:
     #   count, max_memories
     recall_turns = recall_stats.get(
         "turn_count",
@@ -847,9 +617,7 @@ def tts_worker(tts):
                         return
 
                     with audio_lock:
-                        answer_audio_waiting = bool(
-                            audio_chunks
-                        )
+                        answer_audio_waiting = bool(audio_chunks)
 
                     if answer_audio_waiting:
                         return
@@ -860,10 +628,7 @@ def tts_worker(tts):
                         if real_audio_started.is_set():
                             return
 
-                        if (
-                            gap_fillers_used
-                            >= TTS_GAP_FILLER_MAX_PER_TURN
-                        ):
+                        if gap_fillers_used >= TTS_GAP_FILLER_MAX_PER_TURN:
                             return
 
                         if gap_filler_audio_cycle is None:
@@ -873,19 +638,12 @@ def tts_worker(tts):
 
                         if (
                             last_gap_filler_time > 0.0
-                            and (
-                                now
-                                - last_gap_filler_time
-                            )
+                            and (now - last_gap_filler_time)
                             < TTS_GAP_FILLER_COOLDOWN_SECONDS
                         ):
                             if memory_debug_enabled():
-                                remaining = (
-                                    TTS_GAP_FILLER_COOLDOWN_SECONDS
-                                    - (
-                                        now
-                                        - last_gap_filler_time
-                                    )
+                                remaining = TTS_GAP_FILLER_COOLDOWN_SECONDS - (
+                                    now - last_gap_filler_time
                                 )
 
                                 print(
@@ -901,9 +659,7 @@ def tts_worker(tts):
                             phrase,
                             filler_samples,
                             filler_sample_rate,
-                        ) = next(
-                            gap_filler_audio_cycle
-                        )
+                        ) = next(gap_filler_audio_cycle)
 
                         # One final race check before consuming the
                         # budget and placing filler audio in the queue.
@@ -915,9 +671,7 @@ def tts_worker(tts):
                         count = gap_fillers_used
 
                         print(
-                            "\n[TTS GAP FILLER] "
-                            f"phrase={phrase!r} "
-                            f"count={count}",
+                            f"\n[TTS GAP FILLER] phrase={phrase!r} count={count}",
                             flush=True,
                         )
 
@@ -1072,8 +826,7 @@ def stream_text_to_tts(
         if role_leak_found:
             prompt_role_leak_stopped = True
             print(
-                "\n[LLM STREAM GUARD] "
-                "stopped=true reason=prompt_role_leak",
+                "\n[LLM STREAM GUARD] stopped=true reason=prompt_role_leak",
                 flush=True,
             )
 
@@ -1120,9 +873,7 @@ def stream_text_to_tts(
             )
         else:
             print(
-                "\n[TTS SKIP] "
-                "Dropped incomplete token-limit tail: "
-                f"{final!r}",
+                f"\n[TTS SKIP] Dropped incomplete token-limit tail: {final!r}",
                 flush=True,
             )
 
@@ -1133,16 +884,13 @@ def stream_text_to_tts(
 
     if history_role_leak_trimmed:
         print(
-            "[LLM STREAM GUARD] "
-            "Removed prompt-role continuation from recent history.",
+            "[LLM STREAM GUARD] Removed prompt-role continuation from recent history.",
             flush=True,
         )
 
-    full_text, history_tail_trimmed = (
-        trim_incomplete_length_tail(
-            full_text,
-            completion_state,
-        )
+    full_text, history_tail_trimmed = trim_incomplete_length_tail(
+        full_text,
+        completion_state,
     )
 
     if history_tail_trimmed:
@@ -1273,21 +1021,6 @@ def wait_for_audio_to_drain():
     time.sleep(0.25)
 
 
-# NANCEE FTS5 ONLY MEMORY MODE START
-#
-# Temporary test mode:
-# - Store raw non-question user utterances.
-# - Retrieve from FTS5 for any question.
-# - Do not extract facts.
-# - Do not use aliases.
-# - Do not use regex fact memory.
-#
-# Question detection is intentionally broad because FTS5 should decide
-# whether anything useful exists.
-def extract_recall_user_text(user_text):
-    return ""
-
-
 def has_declarative_memory_content(user_text):
     return is_complete_memory_statement(user_text)
 
@@ -1297,13 +1030,9 @@ def should_store_recall_turn(user_text):
 
 
 def should_retrieve_recall(user_text):
-    return (
-        looks_like_question_text(user_text)
-        or looks_like_personal_fact_fragment(user_text)
+    return looks_like_question_text(user_text) or looks_like_personal_fact_fragment(
+        user_text
     )
-
-
-# NANCEE FTS5 ONLY MEMORY MODE END
 
 
 def main():
@@ -1467,13 +1196,10 @@ def main():
                 gap_fillers_used = 0
                 last_gap_filler_time = 0.0
 
-            personal_fact_fragment = (
-                looks_like_personal_fact_fragment(user_text)
-            )
+            personal_fact_fragment = looks_like_personal_fact_fragment(user_text)
             recall_requested = should_retrieve_recall(user_text)
             explicit_recall_requested = (
-                looks_like_recall_request(user_text)
-                or personal_fact_fragment
+                looks_like_recall_request(user_text) or personal_fact_fragment
             )
 
             profile_started = time.perf_counter()
@@ -1487,18 +1213,11 @@ def main():
                 ) = profile_index.retrieve_context(
                     user_text,
                     limit=USER_PROFILE_RETRIEVAL_LIMIT,
-                    max_characters=(
-                        USER_PROFILE_CONTEXT_MAX_CHARACTERS
-                    ),
+                    max_characters=(USER_PROFILE_CONTEXT_MAX_CHARACTERS),
                 )
 
-            profile_context_found = bool(
-                effective_profile_context.strip()
-            )
-            profile_elapsed = (
-                time.perf_counter()
-                - profile_started
-            )
+            profile_context_found = bool(effective_profile_context.strip())
+            profile_elapsed = time.perf_counter() - profile_started
 
             if memory_debug_enabled():
                 print(
@@ -1518,8 +1237,7 @@ def main():
 
                 if memory_debug_enabled():
                     print(
-                        "[MEMORY RECALL] skipped=true "
-                        "reason=authoritative_profile_hit",
+                        "[MEMORY RECALL] skipped=true reason=authoritative_profile_hit",
                         flush=True,
                     )
 
@@ -1529,9 +1247,7 @@ def main():
                     user_text,
                 )
 
-                memory_context_found = bool(
-                    str(retrieved_context).strip()
-                )
+                memory_context_found = bool(str(retrieved_context).strip())
 
             else:
                 retrieved_context = ""
@@ -1539,8 +1255,7 @@ def main():
 
                 if memory_debug_enabled():
                     print(
-                        "[MEMORY RECALL] skipped=true "
-                        "reason=not_recall_request",
+                        "[MEMORY RECALL] skipped=true reason=not_recall_request",
                         flush=True,
                     )
 
@@ -1564,16 +1279,13 @@ def main():
                         flush=True,
                     )
 
-            authoritative_context_found = (
-                memory_context_found
-                or bool(effective_profile_context.strip())
+            authoritative_context_found = memory_context_found or bool(
+                effective_profile_context.strip()
             )
 
             response_policy = select_response_policy(
                 user_text,
-                authoritative_context_found=(
-                    authoritative_context_found
-                ),
+                authoritative_context_found=(authoritative_context_found),
             )
 
             print(
@@ -1631,10 +1343,7 @@ def main():
 
                 if looks_like_perspective_correction(user_text):
                     request_history = recent_prompt_memory.get_messages()
-                elif (
-                    authoritative_context_found
-                    or response_policy.drop_history
-                ):
+                elif authoritative_context_found or response_policy.drop_history:
                     # Retrieved facts are authoritative. Dropping the
                     # one-turn chat history keeps the prompt smaller and
                     # prevents a prior verbose answer from contaminating
@@ -1650,9 +1359,7 @@ def main():
                     history=request_history,
                     memory_context=effective_profile_context,
                     retrieved_context=retrieved_context,
-                    response_instruction=(
-                        response_policy.instruction
-                    ),
+                    response_instruction=(response_policy.instruction),
                     temperature=response_policy.temperature,
                     num_predict=response_policy.num_predict,
                     completion_state=completion_state,
@@ -1692,15 +1399,11 @@ def main():
                         )
 
                     if not assistant_text:
-                        assistant_text = (
-                            "I don't remember that clearly enough."
-                        )
+                        assistant_text = "I don't remember that clearly enough."
 
                     if memory_context_found:
-                        assistant_text, repaired = (
-                            repair_recall_perspective(
-                                assistant_text,
-                            )
+                        assistant_text, repaired = repair_recall_perspective(
+                            assistant_text,
                         )
 
                         if repaired:
@@ -1716,13 +1419,11 @@ def main():
                         and not profile_context_found
                     )
 
-                    assistant_text, guard_action = (
-                        prepare_authoritative_response(
-                            assistant_text,
-                            profile_hits=profile_hits,
-                            fact_miss=fact_miss,
-                            retrieved_context=retrieved_context,
-                        )
+                    assistant_text, guard_action = prepare_authoritative_response(
+                        assistant_text,
+                        profile_hits=profile_hits,
+                        fact_miss=fact_miss,
+                        retrieved_context=retrieved_context,
                     )
 
                     if memory_debug_enabled():
@@ -1806,11 +1507,9 @@ def main():
 
             if correction is not None:
                 new_value, old_value = correction
-                corrected_memory_id = (
-                    recall_memory.apply_simple_correction(
-                        new_value=new_value,
-                        old_value=old_value,
-                    )
+                corrected_memory_id = recall_memory.apply_simple_correction(
+                    new_value=new_value,
+                    old_value=old_value,
                 )
 
                 if memory_debug_enabled():
@@ -1842,8 +1541,7 @@ def main():
                         )
                     else:
                         print(
-                            "[MEMORY RAW SKIP] "
-                            "backend_rejected=true",
+                            "[MEMORY RAW SKIP] backend_rejected=true",
                             flush=True,
                         )
             elif memory_debug_enabled():

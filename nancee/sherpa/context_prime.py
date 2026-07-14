@@ -13,6 +13,7 @@ from copy import deepcopy
 from typing import Any, Callable
 
 
+# this class has been marked as potentially not having a caller we may need to clean this up
 class ContextPrimeCoordinator:
     """
     Run an Ollama context prime in one background worker.

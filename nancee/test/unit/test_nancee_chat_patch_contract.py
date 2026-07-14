@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 import unittest
 
 
@@ -21,62 +22,67 @@ class NanceeChatPatchContractTests(unittest.TestCase):
         )
 
     def test_history_routing_uses_authoritative_context_not_every_question(self):
-        self.assertIn(
-            "authoritative_context_found = (",
-            SOURCE,
-        )
-
-        self.assertIn(
-            "memory_context_found",
-            SOURCE,
-        )
-
-        self.assertIn(
-            "profile_context_found",
-            SOURCE,
-        )
-
-        # Authoritative context must be supplied to the
-        # per-turn response-policy selector. Allow optional
-        # parentheses and arbitrary source formatting.
-        self.assertRegex(
-            SOURCE,
+        assignment_match = re.search(
             (
-                r"response_policy\s*=\s*"
+                r"authoritative_context_found\s*=\s*"
+                r"memory_context_found\s+or\s+"
+                r"bool\(\s*"
+                r"effective_profile_context\.strip\(\)"
+                r"\s*\)"
+            ),
+            SOURCE,
+        )
+
+        self.assertIsNotNone(
+            assignment_match,
+            (
+                "authoritative_context_found must combine "
+                "memory and profile context"
+            ),
+        )
+
+        policy_match = re.search(
+            (
                 r"select_response_policy\("
                 r"[\s\S]*?"
                 r"authoritative_context_found\s*=\s*"
-                r"\(\s*"
+                r"(?:\(\s*)?"
                 r"authoritative_context_found"
-                r"\s*\)"
-                r"[\s\S]*?"
-                r"\)"
+                r"(?:\s*\))?"
+            ),
+            SOURCE,
+        )
+
+        self.assertIsNotNone(
+            policy_match,
+            (
+                "select_response_policy must receive "
+                "authoritative_context_found"
             ),
         )
 
-        # History is discarded for either authoritative
-        # retrieved context or a response mode whose policy
-        # explicitly requests history removal.
-        self.assertRegex(
-            SOURCE,
+        history_drop_match = re.search(
             (
-                r"elif\s*\(\s*"
+                r"elif\s+"
+                r"(?:\(\s*)?"
                 r"authoritative_context_found"
                 r"\s+or\s+"
                 r"response_policy\.drop_history"
-                r"\s*\)\s*:"
-            ),
-        )
-
-        self.assertRegex(
-            SOURCE,
-            (
-                r"response_policy\.drop_history"
+                r"(?:\s*\))?"
+                r"\s*:"
                 r"[\s\S]*?"
                 r"request_history\s*=\s*\[\]"
             ),
+            SOURCE,
         )
 
+        self.assertIsNotNone(
+            history_drop_match,
+            (
+                "authoritative context or drop_history "
+                "must discard recent chat history"
+            ),
+        )
 
     def test_effective_profile_context_is_used(self):
         self.assertIn(
