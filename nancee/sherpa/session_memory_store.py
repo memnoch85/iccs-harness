@@ -65,6 +65,21 @@ STOPWORDS = {
 
 FILLER_ONLY = {"ok", "okay", "yes", "no", "sure", "thanks", "thank you", "bye"}
 
+OVERLAP_TOKEN_CANONICAL = {
+    "bought": "buy",
+    "buying": "buy",
+    "completed": "complete",
+    "completing": "complete",
+    "drove": "drive",
+    "driving": "drive",
+    "finished": "finish",
+    "finishing": "finish",
+    "purchased": "buy",
+    "purchasing": "buy",
+    "wired": "wire",
+    "wiring": "wire",
+}
+
 QUERY_TOKEN_EXPANSIONS = {
     "buy": ("buy", "bought", "purchase", "purchased"),
     "bought": ("buy", "bought", "purchase", "purchased"),
@@ -98,6 +113,61 @@ def tokenize(text: str) -> List[str]:
         for tok in text.split()
         if len(tok) >= 2 and tok not in STOPWORDS
     ]
+
+
+def _overlap_tokens(text: str) -> set[str]:
+    return {
+        OVERLAP_TOKEN_CANONICAL.get(token, token)
+        for token in tokenize(text)
+    }
+
+
+def meaningful_token_overlap_count(
+    query_text: str,
+    memory_text: str,
+) -> int:
+    query_tokens = _overlap_tokens(query_text)
+    memory_tokens = _overlap_tokens(memory_text)
+    return len(query_tokens & memory_tokens)
+
+
+def filter_memory_hits_by_overlap(
+    query_text: str,
+    hits,
+    minimum_overlap: int = 2,
+    allow_weak_match: bool = False,
+):
+    if minimum_overlap <= 0:
+        raise ValueError("minimum_overlap must be positive")
+
+    hit_list = list(hits or [])
+
+    if allow_weak_match:
+        return hit_list
+
+    filtered = []
+
+    for hit in hit_list:
+        if isinstance(hit, dict):
+            memory_text = (
+                hit.get("search_text")
+                or hit.get("user")
+                or hit.get("user_text")
+                or ""
+            )
+        else:
+            memory_text = (
+                getattr(hit, "search_text", "")
+                or getattr(hit, "raw_text", "")
+            )
+
+        if meaningful_token_overlap_count(
+            query_text,
+            memory_text,
+        ) >= minimum_overlap:
+            filtered.append(hit)
+
+    return filtered
 
 
 def normalize_for_search(text: str) -> str:

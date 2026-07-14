@@ -12,6 +12,12 @@ _TERMINAL_END_PATTERN = re.compile(
     r"""[.!?](?:["')\]]+)?\s*$""",
 )
 
+_PROMPT_ROLE_LEAK_PATTERN = re.compile(
+    r"(?im)(?:^|\n)[ \t]*"
+    r"(?:USER MESSAGE|ASSISTANT|SYSTEM|TURN RESPONSE CONSTRAINT)"
+    r"[ \t]*:",
+)
+
 
 def done_reason(completion_state: Mapping | None) -> str:
     if not completion_state:
@@ -71,3 +77,45 @@ def trim_incomplete_length_tail(
 
     boundary = endings[-1].end()
     return cleaned[:boundary].strip(), boundary < len(cleaned)
+
+
+def trim_prompt_role_leak(
+    text: str,
+) -> tuple[str, bool]:
+    """Remove a generated prompt-role continuation before it reaches TTS."""
+    raw = str(text)
+    match = _PROMPT_ROLE_LEAK_PATTERN.search(raw)
+
+    if match is None:
+        return raw, False
+
+    return raw[: match.start()].rstrip(), True
+
+
+def prepare_clarification_response(
+    text: str,
+    completion_state: Mapping | None,
+) -> tuple[str, str]:
+    """Return one complete clarification sentence or a deterministic fallback."""
+    cleaned, role_leak_trimmed = trim_prompt_role_leak(text)
+    cleaned, length_tail_trimmed = trim_incomplete_length_tail(
+        cleaned,
+        completion_state,
+    )
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+
+    if not cleaned:
+        return "Could you repeat that?", "fallback"
+
+    first_ending = _SENTENCE_END_PATTERN.search(cleaned)
+
+    if first_ending is not None:
+        cleaned = cleaned[: first_ending.end()].strip()
+
+    if role_leak_trimmed:
+        return cleaned, "prompt_role_leak_trimmed"
+
+    if length_tail_trimmed:
+        return cleaned, "length_tail_trimmed"
+
+    return cleaned, "accepted"

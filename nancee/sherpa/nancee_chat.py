@@ -49,7 +49,9 @@ from config import (
 from authoritative_response import prepare_authoritative_response
 from generation_completion import (
     final_fragment_is_safe,
+    prepare_clarification_response,
     trim_incomplete_length_tail,
+    trim_prompt_role_leak,
 )
 from latency_bridge import LatencyBridge
 from memory_policy import (
@@ -70,6 +72,7 @@ from recall_policy import (
 )
 from response_policy import select_response_policy
 from session_archive import SessionArchive
+from session_memory_store import filter_memory_hits_by_overlap
 from short_term_memory import ShortTermMemory
 from tts_chunking import (
     extract_tts_chunk,
@@ -440,6 +443,27 @@ def retrieve_session_context(recall_memory, user_text):
         min_score=MEMORY_RECALL_MIN_SCORE,
         snippet_words=MEMORY_RECALL_SNIPPET_WORDS,
     )
+
+    explicit_memory_request = (
+        looks_like_recall_request(user_text)
+        or looks_like_personal_fact_fragment(user_text)
+    )
+
+    unfiltered_count = len(retrieved_turns)
+    retrieved_turns = filter_memory_hits_by_overlap(
+        user_text,
+        retrieved_turns,
+        minimum_overlap=2,
+        allow_weak_match=explicit_memory_request,
+    )
+
+    if memory_debug_enabled() and len(retrieved_turns) != unfiltered_count:
+        print(
+            "[MEMORY RECALL FILTER] "
+            f"removed={unfiltered_count - len(retrieved_turns)} "
+            "reason=weak_overlap minimum=2",
+            flush=True,
+        )
 
     retrieved_context = recall_memory.format_related_context(
         retrieved_turns,
@@ -974,6 +998,7 @@ def stream_text_to_tts(
     pending_fillers = []
     start = time.time()
     pending_first_audio_callback = first_audio_callback
+    prompt_role_leak_stopped = False
 
     def queue_meaningful_chunk(
         chunk,
@@ -1024,6 +1049,9 @@ def stream_text_to_tts(
     for token in text_iter:
         full_response.append(token)
 
+        if prompt_role_leak_stopped:
+            continue
+
         if first_token_time is None:
             first_token_time = time.time()
 
@@ -1039,6 +1067,15 @@ def stream_text_to_tts(
         )
 
         buffer += token
+        buffer, role_leak_found = trim_prompt_role_leak(buffer)
+
+        if role_leak_found:
+            prompt_role_leak_stopped = True
+            print(
+                "\n[LLM STREAM GUARD] "
+                "stopped=true reason=prompt_role_leak",
+                flush=True,
+            )
 
         while True:
             extracted = extract_tts_chunk(
@@ -1090,6 +1127,17 @@ def stream_text_to_tts(
             )
 
     full_text = "".join(full_response).strip()
+    full_text, history_role_leak_trimmed = trim_prompt_role_leak(
+        full_text,
+    )
+
+    if history_role_leak_trimmed:
+        print(
+            "[LLM STREAM GUARD] "
+            "Removed prompt-role continuation from recent history.",
+            flush=True,
+        )
+
     full_text, history_tail_trimmed = (
         trim_incomplete_length_tail(
             full_text,
@@ -1616,6 +1664,17 @@ def main():
                     assistant_text = collect_text_response(
                         response,
                     )
+                    assistant_text, authoritative_role_leak_trimmed = (
+                        trim_prompt_role_leak(assistant_text)
+                    )
+
+                    if authoritative_role_leak_trimmed:
+                        print(
+                            "[LLM STREAM GUARD] "
+                            "Removed prompt-role continuation "
+                            "before authoritative validation.",
+                            flush=True,
+                        )
 
                     assistant_text, authoritative_tail_trimmed = (
                         trim_incomplete_length_tail(
@@ -1673,6 +1732,28 @@ def main():
                             f"output={assistant_text!r}",
                             flush=True,
                         )
+
+                    enqueue_complete_response(
+                        assistant_text,
+                        first_audio_callback=bridge.resolve,
+                    )
+                elif response_policy.name == "clarify":
+                    collected_clarification = collect_text_response(
+                        response,
+                    )
+                    assistant_text, clarify_guard_action = (
+                        prepare_clarification_response(
+                            collected_clarification,
+                            completion_state,
+                        )
+                    )
+
+                    print(
+                        "[CLARIFY RESPONSE GUARD] "
+                        f"action={clarify_guard_action} "
+                        f"output={assistant_text!r}",
+                        flush=True,
+                    )
 
                     enqueue_complete_response(
                         assistant_text,
