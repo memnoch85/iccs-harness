@@ -83,6 +83,49 @@ _IMPLIED_I_ACTION = re.compile(
 )
 
 
+_SIMPLE_FACT_CORRECTION = re.compile(
+    r"\b(?:actually\s+)?it\s+was\s+"
+    r"(?P<new_value>[^,.!?]{1,80}?)"
+    r"\s*,?\s+not\s+"
+    r"(?P<old_value>[^,.!?]{1,80})"
+    r"(?:[.!?]|$)",
+    flags=re.IGNORECASE,
+)
+
+
+def extract_simple_fact_correction(
+    text: str,
+) -> tuple[str, str] | None:
+    """
+    Return (new_value, old_value) for a narrow correction shape:
+
+        Actually, it was the power board, not the CAN transceiver.
+
+    This intentionally does not attempt broad language understanding.
+    """
+    normalized = str(text).strip().replace("’", "'")
+    normalized = re.sub(r"\s+", " ", normalized)
+
+    match = _SIMPLE_FACT_CORRECTION.search(normalized)
+
+    if match is None:
+        return None
+
+    new_value = match.group("new_value").strip(" ,.!?")
+    old_value = match.group("old_value").strip(" ,.!?")
+
+    if not new_value or not old_value:
+        return None
+
+    if not (1 <= _word_count(new_value) <= 8):
+        return None
+
+    if not (1 <= _word_count(old_value) <= 8):
+        return None
+
+    return new_value, old_value
+
+
 def normalize_memory_candidate(text: str) -> str:
     normalized = str(text).strip().replace("’", "'")
     normalized = re.sub(r"\s+", " ", normalized)

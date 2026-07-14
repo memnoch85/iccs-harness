@@ -473,7 +473,15 @@ def stream_ollama_response(
     response_instruction="",
     temperature=None,
     num_predict=None,
+    completion_state=None,
 ):
+    if completion_state is not None:
+        completion_state.clear()
+        completion_state.update(
+            done_reason="",
+            response_tokens=0,
+        )
+
     messages = build_ollama_messages(
         user_text=user_text,
         history=history,
@@ -593,6 +601,18 @@ def stream_ollama_response(
                     yield token
 
                 if data.get("done"):
+                    if completion_state is not None:
+                        completion_state.update(
+                            done_reason=data.get(
+                                "done_reason",
+                                "unknown",
+                            ),
+                            response_tokens=data.get(
+                                "eval_count",
+                                0,
+                            ),
+                        )
+
                     print(
                         "\n[OLLAMA DONE] "
                         f"reason={data.get('done_reason', 'unknown')} "

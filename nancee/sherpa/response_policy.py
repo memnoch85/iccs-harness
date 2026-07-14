@@ -48,16 +48,30 @@ _BACKCHANNEL_PATTERN = re.compile(
 
 _DETAILED_PATTERN = re.compile(
     r"\b(?:"
-    r"explain|walk me through|step by step|in detail|detailed|deep dive|"
-    r"why does|why do|why is|how does|how do|compare|difference between|"
-    r"what causes|diagnose|troubleshoot|reason through|break down"
+    r"explain|explaining|walk me through|step by step|in detail|detailed|"
+    r"deep dive|why does|why do|why is|how does|how do|compare|"
+    r"difference between|what causes|diagnose|troubleshoot|"
+    r"reason through|break down|relationship to|relationship between"
     r")\b",
+    flags=re.IGNORECASE,
+)
+
+_EXACT_SENTENCE_COUNT_PATTERN = re.compile(
+    r"\bexactly\s+"
+    r"(?:one|two|three|four|five|\d+)\s+"
+    r"(?:complete\s+)?sentences?\b",
+    flags=re.IGNORECASE,
+)
+
+_MULTI_PART_QUESTION_PATTERN = re.compile(
+    r"^(?:who|what|where|when|why|how)\b"
+    r".+\band\s+(?:who|what|where|when|why|how)\b",
     flags=re.IGNORECASE,
 )
 
 _COMMAND_PATTERN = re.compile(
     r"^(?:tell me|show me|give me|help me|please|can you|could you|would you|"
-    r"remind me|set|start|stop|open|close|play|pause|call|send)\b",
+    r"remind me|name|set|start|stop|open|close|play|pause|call|send)\b",
     flags=re.IGNORECASE,
 )
 
@@ -134,7 +148,23 @@ def looks_like_greeting_or_backchannel(user_text):
 
 def looks_like_detailed_request(user_text):
     text = _classification_text(user_text)
-    return bool(_DETAILED_PATTERN.search(text) or _word_count(text) >= 24)
+
+    if not text:
+        return False
+
+    if _DETAILED_PATTERN.search(text):
+        return True
+
+    if _EXACT_SENTENCE_COUNT_PATTERN.search(text):
+        return True
+
+    if (
+        _word_count(text) >= 8
+        and _MULTI_PART_QUESTION_PATTERN.search(text)
+    ):
+        return True
+
+    return _word_count(text) >= 24
 
 
 def looks_like_simple_personal_update(user_text):
@@ -171,6 +201,12 @@ def looks_like_ambiguous_fragment(user_text):
         return False
 
     if looks_like_simple_personal_update(user_text):
+        return False
+
+    if _COMMAND_PATTERN.search(text):
+        return False
+
+    if looks_like_detailed_request(user_text):
         return False
 
     return _word_count(text) <= 4
@@ -219,6 +255,21 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
             drop_history=True,
         )
 
+    if looks_like_detailed_request(user_text):
+        return ResponsePolicy(
+            name="detailed",
+            temperature=RESPONSE_DETAILED_TEMPERATURE,
+            num_predict=RESPONSE_DETAILED_NUM_PREDICT,
+            instruction=(
+                "Follow any exact sentence-count request from the user. Otherwise, "
+                "give a concise but complete explanation in two to four short "
+                "sentences. Use the extra space only for information needed to "
+                "answer the question. Do not add a follow-up question or "
+                "customer-service closing."
+            ),
+            drop_history=False,
+        )
+
     if looks_like_ambiguous_fragment(user_text):
         return ResponsePolicy(
             name="clarify",
@@ -230,19 +281,6 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
                 "means and do not discuss unrelated driving topics."
             ),
             drop_history=True,
-        )
-
-    if looks_like_detailed_request(user_text):
-        return ResponsePolicy(
-            name="detailed",
-            temperature=RESPONSE_DETAILED_TEMPERATURE,
-            num_predict=RESPONSE_DETAILED_NUM_PREDICT,
-            instruction=(
-                "Give a concise but complete explanation in two to four short "
-                "sentences. Use the extra space only for information needed to "
-                "answer the question. Do not add a customer-service closing."
-            ),
-            drop_history=False,
         )
 
     return ResponsePolicy(

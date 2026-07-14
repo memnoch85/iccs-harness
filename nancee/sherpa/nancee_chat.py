@@ -47,8 +47,13 @@ from config import (
     VOICE_ID,
 )
 from authoritative_response import prepare_authoritative_response
+from generation_completion import (
+    final_fragment_is_safe,
+    trim_incomplete_length_tail,
+)
 from latency_bridge import LatencyBridge
 from memory_policy import (
+    extract_simple_fact_correction,
     is_complete_memory_statement,
     looks_like_personal_fact_fragment,
     memory_storage_skip_reason,
@@ -957,7 +962,11 @@ def tts_worker(tts):
             text_queue.task_done()
 
 
-def stream_text_to_tts(text_iter, first_audio_callback=None):
+def stream_text_to_tts(
+    text_iter,
+    first_audio_callback=None,
+    completion_state=None,
+):
     buffer = ""
     full_response = []
     is_first = True
@@ -1057,19 +1066,44 @@ def stream_text_to_tts(text_iter, first_audio_callback=None):
     final = buffer.strip()
 
     if final and not is_punctuation_only(final):
-        print()
-
-        print(
-            f"[TEXT -> TTS FINAL] {final!r}",
-            flush=True,
-        )
-
-        queue_meaningful_chunk(
+        if final_fragment_is_safe(
             final,
-            opening_chunk=is_first,
-        )
+            completion_state,
+        ):
+            print()
+
+            print(
+                f"[TEXT -> TTS FINAL] {final!r}",
+                flush=True,
+            )
+
+            queue_meaningful_chunk(
+                final,
+                opening_chunk=is_first,
+            )
+        else:
+            print(
+                "\n[TTS SKIP] "
+                "Dropped incomplete token-limit tail: "
+                f"{final!r}",
+                flush=True,
+            )
 
     full_text = "".join(full_response).strip()
+    full_text, history_tail_trimmed = (
+        trim_incomplete_length_tail(
+            full_text,
+            completion_state,
+        )
+    )
+
+    if history_tail_trimmed:
+        print(
+            "[LLM COMPLETION GUARD] "
+            "Removed incomplete token-limit tail "
+            "from recent history.",
+            flush=True,
+        )
 
     if pending_fillers:
         print(
@@ -1561,6 +1595,8 @@ def main():
                 else:
                     request_history = recent_prompt_memory.get_messages()
 
+                completion_state = {}
+
                 response = stream_ollama_response(
                     user_text=user_text,
                     history=request_history,
@@ -1571,6 +1607,7 @@ def main():
                     ),
                     temperature=response_policy.temperature,
                     num_predict=response_policy.num_predict,
+                    completion_state=completion_state,
                 )
 
                 if authoritative_context_found:
@@ -1579,6 +1616,26 @@ def main():
                     assistant_text = collect_text_response(
                         response,
                     )
+
+                    assistant_text, authoritative_tail_trimmed = (
+                        trim_incomplete_length_tail(
+                            assistant_text,
+                            completion_state,
+                        )
+                    )
+
+                    if authoritative_tail_trimmed:
+                        print(
+                            "[LLM COMPLETION GUARD] "
+                            "Removed incomplete token-limit tail "
+                            "before authoritative validation.",
+                            flush=True,
+                        )
+
+                    if not assistant_text:
+                        assistant_text = (
+                            "I don't remember that clearly enough."
+                        )
 
                     if memory_context_found:
                         assistant_text, repaired = (
@@ -1625,6 +1682,7 @@ def main():
                     assistant_text = stream_text_to_tts(
                         response,
                         first_audio_callback=bridge.resolve,
+                        completion_state=completion_state,
                     )
 
             except (
@@ -1657,10 +1715,38 @@ def main():
             # FTS5 still stores only the raw user utterance.
             memory_assistant_text = assistant_text
 
+            # Apply narrow "it was NEW, not OLD" corrections to the newest
+            # matching raw memory. Rewriting the original sentence preserves
+            # its action words for later FTS5 recall.
+            correction = extract_simple_fact_correction(
+                user_text,
+            )
+            corrected_memory_id = None
+
+            if correction is not None:
+                new_value, old_value = correction
+                corrected_memory_id = (
+                    recall_memory.apply_simple_correction(
+                        new_value=new_value,
+                        old_value=old_value,
+                    )
+                )
+
+                if memory_debug_enabled():
+                    print(
+                        "[MEMORY RAW CORRECT] "
+                        f"id={corrected_memory_id} "
+                        f"new={new_value!r} "
+                        f"old={old_value!r}",
+                        flush=True,
+                    )
+
             # FTS5 raw utterance recall archive.
             # Store only complete user statements. Questions, commands,
             # fragments, and likely ASR debris are deliberately rejected.
-            if should_store_recall_turn(user_text):
+            if corrected_memory_id is not None:
+                pass
+            elif should_store_recall_turn(user_text):
                 added_memory_id = recall_memory.add_turn(
                     user_text=user_text,
                     assistant_text=memory_assistant_text,

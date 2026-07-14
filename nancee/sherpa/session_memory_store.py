@@ -1,5 +1,6 @@
 import re
 import sqlite3
+from difflib import SequenceMatcher
 import time
 from dataclasses import dataclass
 from typing import List, Optional
@@ -173,6 +174,75 @@ def format_memory_overlay(
 
     return text
 
+def _best_fuzzy_word_span(
+    raw_text: str,
+    target_text: str,
+) -> tuple[int, int, float] | None:
+    raw = str(raw_text)
+    target = re.sub(
+        r"\s+",
+        " ",
+        str(target_text).strip().lower(),
+    )
+
+    if not raw or not target:
+        return None
+
+    word_matches = list(
+        re.finditer(
+            r"[A-Za-z0-9']+",
+            raw,
+        )
+    )
+    target_words = re.findall(
+        r"[a-z0-9']+",
+        target,
+    )
+
+    if not word_matches or not target_words:
+        return None
+
+    target_count = len(target_words)
+    minimum_window = max(
+        1,
+        target_count - 1,
+    )
+    maximum_window = min(
+        len(word_matches),
+        target_count + 1,
+    )
+
+    best = None
+
+    for window_size in range(
+        minimum_window,
+        maximum_window + 1,
+    ):
+        for start_index in range(
+            0,
+            len(word_matches) - window_size + 1,
+        ):
+            end_index = start_index + window_size - 1
+            start = word_matches[start_index].start()
+            end = word_matches[end_index].end()
+            candidate = raw[start:end].lower()
+
+            score = SequenceMatcher(
+                None,
+                target,
+                candidate,
+            ).ratio()
+
+            if best is None or score > best[2]:
+                best = (
+                    start,
+                    end,
+                    score,
+                )
+
+    return best
+
+
 class SessionMemoryStore:
     def __init__(self, max_memories: int = 384, db_path: Optional[str] = None):
         self.max_memories = int(max_memories)
@@ -261,6 +331,115 @@ class SessionMemoryStore:
                 )
             )
         return hits
+
+    def apply_simple_correction(
+        self,
+        *,
+        new_value: str,
+        old_value: str,
+    ) -> Optional[int]:
+        """
+        Rewrite the newest matching raw memory in place.
+
+        The original sentence structure is preserved so later FTS5 queries
+        still match its action words, while the corrected value replaces the
+        stale value.
+        """
+        clean_new = re.sub(
+            r"\s+",
+            " ",
+            str(new_value).strip(),
+        )
+        clean_old = re.sub(
+            r"\s+",
+            " ",
+            str(old_value).strip(),
+        )
+
+        if not clean_new or not clean_old:
+            return None
+
+        candidates = self.search_memory(
+            clean_old,
+            limit=5,
+        )
+
+        best_match = None
+
+        for hit in candidates:
+            span = _best_fuzzy_word_span(
+                hit.raw_text,
+                clean_old,
+            )
+
+            if span is None:
+                continue
+
+            start, end, score = span
+
+            candidate = (
+                score,
+                hit.created_ts,
+                hit.id,
+                hit.raw_text,
+                start,
+                end,
+            )
+
+            if best_match is None or candidate[:2] > best_match[:2]:
+                best_match = candidate
+
+        if best_match is None:
+            return None
+
+        (
+            score,
+            _created_ts,
+            memory_id,
+            raw_text,
+            start,
+            end,
+        ) = best_match
+
+        if score < 0.60:
+            return None
+
+        corrected = (
+            raw_text[:start]
+            + clean_new
+            + raw_text[end:]
+        )
+        corrected = re.sub(
+            r"\s+",
+            " ",
+            corrected,
+        ).strip()
+
+        search_text = normalize_for_search(
+            corrected,
+        )
+
+        if not search_text:
+            return None
+
+        self.conn.execute(
+            """
+            UPDATE memory_fts
+            SET raw_text = ?,
+                search_text = ?,
+                created_ts = ?
+            WHERE rowid = ?
+            """,
+            (
+                corrected,
+                search_text,
+                time.time(),
+                int(memory_id),
+            ),
+        )
+        self.conn.commit()
+
+        return int(memory_id)
 
     def count(self) -> int:
         return int(

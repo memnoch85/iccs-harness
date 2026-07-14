@@ -14,6 +14,12 @@ class SessionArchive:
         self._next_turn_id += 1
         return memory_id
 
+    def apply_simple_correction(self, *, new_value, old_value):
+        return self.store.apply_simple_correction(
+            new_value=new_value,
+            old_value=old_value,
+        )
+
     def retrieve(self, query, limit=1, min_score=None, snippet_words=None, **kwargs):
         hits = self.store.search_memory(query, limit=limit)
         return [{
