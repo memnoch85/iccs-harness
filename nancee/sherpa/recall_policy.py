@@ -210,4 +210,45 @@ def repair_recall_perspective(
         flags=re.IGNORECASE,
     )
 
+    # A model may repair the subject correctly while retaining
+    # a first-person possessive:
+    #
+    #     You finished wiring my CAN transceiver.
+    #
+    # Rewrite the possessive only when this answer has already been
+    # identified as describing the human user. Do not globally rewrite
+    # legitimate Nancee statements such as "That's my understanding."
+    user_attributed_answer = (
+        text != original
+        or re.match(
+            rf"^\s*{_TEMPORAL_PREFIX}you\b",
+            text,
+            flags=re.IGNORECASE,
+        )
+        is not None
+    )
+
+    if user_attributed_answer:
+        text = re.sub(
+            r"\bmy\b",
+            lambda match: (
+                "Your"
+                if match.group(0)[:1].isupper()
+                else "your"
+            ),
+            text,
+            flags=re.IGNORECASE,
+        )
+
+        text = re.sub(
+            r"\bmine\b",
+            lambda match: (
+                "Yours"
+                if match.group(0)[:1].isupper()
+                else "yours"
+            ),
+            text,
+            flags=re.IGNORECASE,
+        )
+
     return text, text != original
