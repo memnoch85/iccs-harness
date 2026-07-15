@@ -115,10 +115,21 @@ SPEED = float(
     )
 )
 
+TTS_GREETING_BRIDGE_SPEED = float(
+    os.getenv(
+        "NANCEE_TTS_GREETING_BRIDGE_SPEED",
+        "1.0",
+    )
+)
+
+if TTS_GREETING_BRIDGE_SPEED <= 0:
+    raise ValueError("TTS_GREETING_BRIDGE_SPEED must be greater than zero.")
+
+
 TTS_FILLER_SPEED = float(
     os.getenv(
         "NANCEE_TTS_FILLER_SPEED",
-        "1.1",
+        "1.0",
     )
 )
 
@@ -264,10 +275,17 @@ LATENCY_BRIDGE_ENABLED = (
     == "true"
 )
 
+LATENCY_BRIDGE_GREETING_SECONDS = float(
+    os.getenv(
+        "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
+        "3.0",
+    )
+)
+
 LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
-        "6.2",
+        "6.3",
     )
 )
 
@@ -277,6 +295,9 @@ LATENCY_BRIDGE_RECALL_SECONDS = float(
         "4.5",
     )
 )
+
+if LATENCY_BRIDGE_GREETING_SECONDS <= 0:
+    raise ValueError("LATENCY_BRIDGE_GREETING_SECONDS must be greater than zero.")
 
 if LATENCY_BRIDGE_NORMAL_SECONDS <= 0:
     raise ValueError("LATENCY_BRIDGE_NORMAL_SECONDS must be greater than zero.")
@@ -291,6 +312,28 @@ LATENCY_BRIDGE_PHRASES = (
     "Checking that for you,",
     "Hang on one moment,",
 )
+
+LATENCY_BRIDGE_GREETING_PHRASES = (
+    "Oh hey, umm...",
+    "What's up, humm...",
+    "Oh hi, umm...",
+    "Hey there, umm...",
+    "Hi, umm...",
+    "Hey, humm...",
+    "Oh hey...",
+    "Oh hi there...",
+    "Umm...",
+    "Humm...",
+)
+
+for phrase in LATENCY_BRIDGE_GREETING_PHRASES:
+    word_total = len(phrase.split())
+
+    if not 1 <= word_total <= 4:
+        raise ValueError(
+            f"Greeting latency bridge phrase must contain one to four words: {phrase!r}"
+        )
+
 
 for phrase in LATENCY_BRIDGE_PHRASES:
     if len(phrase.split()) != 4:
@@ -323,17 +366,17 @@ if TTS_GAP_FILLER_MAX_PER_TURN < 0:
 # These are per-request generation limits. The global LLM_NUM_PREDICT
 # remains the fallback for callers that do not select a response policy.
 RESPONSE_GREETING_NUM_PREDICT = int(
-    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "14")
+    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "12")
 )
 RESPONSE_GREETING_TEMPERATURE = float(
-    os.getenv("NANCEE_RESPONSE_GREETING_TEMPERATURE", "0.25")
+    os.getenv("NANCEE_RESPONSE_GREETING_TEMPERATURE", "0.15")
 )
 
 RESPONSE_ACK_NUM_PREDICT = int(os.getenv("NANCEE_RESPONSE_ACK_NUM_PREDICT", "18"))
 RESPONSE_ACK_TEMPERATURE = float(os.getenv("NANCEE_RESPONSE_ACK_TEMPERATURE", "0.25"))
 
 RESPONSE_CLARIFY_NUM_PREDICT = int(
-    os.getenv("NANCEE_RESPONSE_CLARIFY_NUM_PREDICT", "14")
+    os.getenv("NANCEE_RESPONSE_CLARIFY_NUM_PREDICT", "18")
 )
 RESPONSE_CLARIFY_TEMPERATURE = float(
     os.getenv("NANCEE_RESPONSE_CLARIFY_TEMPERATURE", "0.20")

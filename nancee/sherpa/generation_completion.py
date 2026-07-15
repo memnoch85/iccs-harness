@@ -131,6 +131,29 @@ def prepare_clarification_response(
     if first_ending is not None:
         cleaned = cleaned[: first_ending.end()].strip()
 
+    if length_tail_trimmed:
+        meaningful_words = re.findall(
+            r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?",
+            cleaned,
+        )
+
+        # A token-limit trim can leave behind a technically complete
+        # but useless interjection such as "Ah!". Never send that to
+        # TTS or preserve it as the conversational answer.
+        low_information = (
+            not meaningful_words
+            or (
+                len(meaningful_words) == 1
+                and len(meaningful_words[0]) < 4
+            )
+        )
+
+        if low_information:
+            return (
+                "Could you repeat that?",
+                "fallback_low_information",
+            )
+
     if role_leak_trimmed:
         return cleaned, "prompt_role_leak_trimmed"
 

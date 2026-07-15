@@ -43,6 +43,58 @@ class ClarificationGuardTests(unittest.TestCase):
         self.assertEqual(answer, "Could you repeat that?")
         self.assertEqual(action, "length_tail_trimmed")
 
+    def test_length_cutoff_rejects_interjection_only_sentence(self):
+        answer, action = prepare_clarification_response(
+            (
+                "Ah! Apologies for misunderstanding; "
+                "I meant to say"
+            ),
+            {"done_reason": "length"},
+        )
+
+        self.assertEqual(
+            answer,
+            "Could you repeat that?",
+        )
+        self.assertEqual(
+            action,
+            "fallback_low_information",
+        )
+
+    def test_length_cutoff_keeps_meaningful_one_word_response(self):
+        answer, action = prepare_clarification_response(
+            (
+                "Great! Is there anything else you'd like "
+                "to check or set up on"
+            ),
+            {"done_reason": "length"},
+        )
+
+        self.assertEqual(
+            answer,
+            "Great!",
+        )
+
+        self.assertEqual(
+            action,
+            "length_tail_trimmed",
+        )
+
+    def test_length_cutoff_keeps_two_word_acknowledgment(self):
+        answer, action = prepare_clarification_response(
+            "Got it! I was going to add",
+            {"done_reason": "length"},
+        )
+
+        self.assertEqual(
+            answer,
+            "Got it!",
+        )
+        self.assertEqual(
+            action,
+            "length_tail_trimmed",
+        )
+
     def test_length_cutoff_without_sentence_uses_fallback(self):
         answer, action = prepare_clarification_response(
             'Did you mean "Drive',

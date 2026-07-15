@@ -16,6 +16,8 @@ from authoritative_response import prepare_authoritative_response
 from config import (
     BLOCKSIZE,
     LATENCY_BRIDGE_ENABLED,
+    LATENCY_BRIDGE_GREETING_PHRASES,
+    LATENCY_BRIDGE_GREETING_SECONDS,
     LATENCY_BRIDGE_NORMAL_SECONDS,
     LATENCY_BRIDGE_PHRASES,
     LATENCY_BRIDGE_RECALL_SECONDS,
@@ -32,6 +34,7 @@ from config import (
     SPEED,
     TTS_EMPHASIS_SPEED,
     TTS_FILLER_SPEED,
+    TTS_GREETING_BRIDGE_SPEED,
     TTS_GAP_FILLER_COOLDOWN_SECONDS,
     TTS_GAP_FILLER_ENABLED,
     TTS_GAP_FILLER_MAX_PER_TURN,
@@ -44,6 +47,7 @@ from config import (
     USER_PROFILE_RETRIEVAL_LIMIT,
     VOICE_ID,
 )
+from directive_perspective import repair_directive_perspective
 from generation_completion import (
     final_fragment_is_safe,
     prepare_clarification_response,
@@ -599,13 +603,16 @@ def tts_worker(tts):
                         flush=True,
                     )
 
+                if (
+                    first_audio_for_request
+                    and request.first_audio_callback is not None
+                ):
+                    request.first_audio_callback()
+
                 enqueue_audio(
                     samples,
                     tts.sample_rate,
                 )
-
-                if first_audio_for_request and request.first_audio_callback is not None:
-                    request.first_audio_callback()
 
                 return 1
 
@@ -709,6 +716,9 @@ def tts_worker(tts):
             if callback_count == 0:
                 real_audio_started.set()
 
+                if request.first_audio_callback is not None:
+                    request.first_audio_callback()
+
                 enqueue_audio(
                     np.asarray(
                         audio.samples,
@@ -716,9 +726,6 @@ def tts_worker(tts):
                     ),
                     audio.sample_rate,
                 )
-
-                if request.first_audio_callback is not None:
-                    request.first_audio_callback()
 
             elapsed = time.time() - start
             duration = len(audio.samples) / audio.sample_rate
@@ -1057,7 +1064,25 @@ def main():
         for phrase in LATENCY_BRIDGE_PHRASES
     ]
 
-    bridge_audio_cycle = itertools.cycle(bridge_audio_options)
+    bridge_audio_cycle = itertools.cycle(
+        bridge_audio_options
+    )
+
+    greeting_bridge_audio_options = [
+        (
+            phrase,
+            *generate_bridge_audio(
+                tts,
+                phrase,
+                speed=TTS_GREETING_BRIDGE_SPEED,
+            ),
+        )
+        for phrase in LATENCY_BRIDGE_GREETING_PHRASES
+    ]
+
+    greeting_bridge_audio_cycle = itertools.cycle(
+        greeting_bridge_audio_options
+    )
 
     global gap_filler_audio_cycle
 
@@ -1077,6 +1102,8 @@ def main():
     print(
         "[LATENCY BRIDGE] "
         f"enabled={LATENCY_BRIDGE_ENABLED} "
+        f"greeting_threshold="
+        f"{LATENCY_BRIDGE_GREETING_SECONDS:.3f}s "
         f"normal_threshold={LATENCY_BRIDGE_NORMAL_SECONDS:.3f}s "
         f"recall_threshold={LATENCY_BRIDGE_RECALL_SECONDS:.3f}s",
         flush=True,
@@ -1314,11 +1341,22 @@ def main():
             )
             bridge = None
 
+            if response_policy.name == "greeting":
+                selected_bridge_audio_cycle = (
+                    greeting_bridge_audio_cycle
+                )
+            else:
+                selected_bridge_audio_cycle = (
+                    bridge_audio_cycle
+                )
+
             (
                 bridge_phrase,
                 bridge_samples,
                 bridge_sample_rate,
-            ) = next(bridge_audio_cycle)
+            ) = next(
+                selected_bridge_audio_cycle
+            )
 
             def play_latency_bridge():
                 print(
@@ -1332,10 +1370,18 @@ def main():
                 )
 
             try:
-                if authoritative_context_found:
-                    bridge_delay_seconds = LATENCY_BRIDGE_RECALL_SECONDS
+                if response_policy.name == "greeting":
+                    bridge_delay_seconds = (
+                        LATENCY_BRIDGE_GREETING_SECONDS
+                    )
+                elif authoritative_context_found:
+                    bridge_delay_seconds = (
+                        LATENCY_BRIDGE_RECALL_SECONDS
+                    )
                 else:
-                    bridge_delay_seconds = LATENCY_BRIDGE_NORMAL_SECONDS
+                    bridge_delay_seconds = (
+                        LATENCY_BRIDGE_NORMAL_SECONDS
+                    )
 
                 bridge = LatencyBridge(
                     delay_seconds=bridge_delay_seconds,
@@ -1434,6 +1480,61 @@ def main():
                         print(
                             "[AUTHORITATIVE RESPONSE GUARD] "
                             f"action={guard_action} "
+                            f"output={assistant_text!r}",
+                            flush=True,
+                        )
+
+                    enqueue_complete_response(
+                        assistant_text,
+                        first_audio_callback=bridge.resolve,
+                    )
+                elif response_policy.name == "directive":
+                    collected_directive = collect_text_response(
+                        response,
+                    )
+
+                    assistant_text, directive_role_leak_trimmed = (
+                        trim_prompt_role_leak(
+                            collected_directive,
+                        )
+                    )
+
+                    if directive_role_leak_trimmed:
+                        print(
+                            "[DIRECTIVE RESPONSE GUARD] "
+                            "action=role_leak_trimmed",
+                            flush=True,
+                        )
+
+                    assistant_text, directive_tail_trimmed = (
+                        trim_incomplete_length_tail(
+                            assistant_text,
+                            completion_state,
+                        )
+                    )
+
+                    if directive_tail_trimmed:
+                        print(
+                            "[DIRECTIVE RESPONSE GUARD] "
+                            "action=length_tail_trimmed",
+                            flush=True,
+                        )
+
+                    if not assistant_text:
+                        assistant_text = (
+                            "Could you repeat that?"
+                        )
+
+                    assistant_text, directive_repaired = (
+                        repair_directive_perspective(
+                            user_text,
+                            assistant_text,
+                        )
+                    )
+
+                    if directive_repaired:
+                        print(
+                            "[DIRECTIVE PERSPECTIVE REPAIR] "
                             f"output={assistant_text!r}",
                             flush=True,
                         )

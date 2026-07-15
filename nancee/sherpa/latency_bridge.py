@@ -61,6 +61,11 @@ class LatencyBridge:
         with self._lock:
             if self._resolved or self._fired:
                 return
+
             self._fired = True
 
-        self._on_fire()
+            # Keep bridge audio insertion serialized with
+            # resolve(). If the bridge wins the deadline race,
+            # its audio must enter the queue before real answer
+            # audio is allowed to follow it.
+            self._on_fire()

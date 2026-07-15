@@ -70,8 +70,9 @@ _MULTI_PART_QUESTION_PATTERN = re.compile(
 )
 
 _COMMAND_PATTERN = re.compile(
-    r"^(?:tell me|show me|give me|help me|please|can you|could you|would you|"
-    r"remind me|name|set|start|stop|open|close|play|pause|call|send)\b",
+    r"^(?:ask(?: me)?|tell me|show me|give me|help me|ask|please|can you|could you|would you|"
+    r"remind me|name|set|start|stop|open|close|play|pause|call|send|"
+    r"i want you to|i need you to|i would like you to|i'd like you to)\b",
     flags=re.IGNORECASE,
 )
 
@@ -161,6 +162,27 @@ def looks_like_detailed_request(user_text):
     return _word_count(text) >= 24
 
 
+_DIRECTED_REQUEST_PATTERN = re.compile(
+    r"\b(?:you|nancee|nancy)\s+to\s+[a-z][a-z'\-]*\b",
+    flags=re.IGNORECASE,
+)
+
+
+def looks_like_directive(user_text):
+    text = _classification_text(user_text)
+
+    if not text:
+        return False
+
+    if looks_like_detailed_request(user_text):
+        return False
+
+    return bool(
+        _COMMAND_PATTERN.search(text)
+        or _DIRECTED_REQUEST_PATTERN.search(text)
+    )
+
+
 def looks_like_simple_personal_update(user_text):
     text = _classification_text(user_text)
 
@@ -171,6 +193,9 @@ def looks_like_simple_personal_update(user_text):
         return False
 
     if _COMMAND_PATTERN.search(text):
+        return False
+
+    if _DIRECTED_REQUEST_PATTERN.search(text):
         return False
 
     if _DETAILED_PATTERN.search(text):
@@ -218,7 +243,7 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
                 "or add a second fact. Do not add a follow-up question, commentary, "
                 "apology, advice, or customer-service closing."
             ),
-            drop_history=True,
+            drop_history=False,
         )
 
     if looks_like_greeting_or_backchannel(user_text):
@@ -232,7 +257,20 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
                 "mention listeners, an audience, users, customers, or clients. "
                 "Do not use a customer-service closing."
             ),
-            drop_history=True,
+            drop_history=False,
+        )
+
+    if looks_like_directive(user_text):
+        return ResponsePolicy(
+            name="directive",
+            temperature=RESPONSE_CLARIFY_TEMPERATURE,
+            num_predict=RESPONSE_ACK_NUM_PREDICT,
+            instruction=(
+                "Execute the command. For ask-me commands, output only "
+                "the question. Preserve nouns, articles, and ownership; "
+                "change only speaker pronouns."
+            ),
+            drop_history=False,
         )
 
     if looks_like_simple_personal_update(user_text):
@@ -246,7 +284,7 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
                 "you were there, do not invent shared history, do not repeat the "
                 "whole update, do not give advice, and do not ask a follow-up."
             ),
-            drop_history=True,
+            drop_history=False,
         )
 
     if looks_like_detailed_request(user_text):
@@ -270,11 +308,10 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
             temperature=RESPONSE_CLARIFY_TEMPERATURE,
             num_predict=RESPONSE_CLARIFY_NUM_PREDICT,
             instruction=(
-                "The message may be incomplete or mistranscribed. Ask the user to "
-                "repeat or clarify it in one short sentence. Do not guess what it "
-                "means and do not discuss unrelated driving topics."
+                "Use the previous exchange. If this answers your last question, "
+                "reply briefly and stop. Otherwise ask one brief clarification."
             ),
-            drop_history=True,
+            drop_history=False,
         )
 
     return ResponsePolicy(
@@ -282,9 +319,8 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
         temperature=RESPONSE_NORMAL_TEMPERATURE,
         num_predict=RESPONSE_NORMAL_NUM_PREDICT,
         instruction=(
-            "Answer directly in one to three short sentences. Match the amount of "
-            "detail to the question. Do not automatically ask a follow-up and do "
-            "not add a customer-service closing."
+            "Follow direct requests exactly. "
+            "Use the previous exchange when relevant. Be brief."
         ),
         drop_history=False,
     )

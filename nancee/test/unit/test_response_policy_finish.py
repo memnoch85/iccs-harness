@@ -28,10 +28,10 @@ class ResponsePolicyFinishTests(unittest.TestCase):
             "detailed",
         )
 
-    def test_name_command_routes_normal(self):
+    def test_name_command_routes_directive(self):
         self.assert_policy(
             "Name France's capital.",
-            "normal",
+            "directive",
         )
 
     def test_hardly_drive_still_routes_clarify(self):

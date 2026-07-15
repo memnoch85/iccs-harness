@@ -17,7 +17,7 @@ class ResponsePolicyTests(unittest.TestCase):
         self.assertEqual("acknowledge", policy.name)
         self.assertEqual(18, policy.num_predict)
         self.assertAlmostEqual(0.25, policy.temperature)
-        self.assertTrue(policy.drop_history)
+        self.assertFalse(policy.drop_history)
 
     def test_name_preface_does_not_hide_detailed_request(self):
         policy = select_response_policy(
