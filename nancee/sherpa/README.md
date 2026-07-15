@@ -206,9 +206,9 @@ python3 nancee_chat.py
 Current recommended timeout order:
 
 ```text
-Warmup helper:   75 seconds
-Python caller:   80 seconds
-systemd service: 90 seconds
+Warmup helper:   120 seconds
+Python caller:   125 seconds
+systemd service: 115 seconds
 Normal response: 120 seconds
 ```
 
@@ -220,4 +220,3 @@ sudo cp nancee-llm-warmup@.service \
 
 sudo systemctl daemon-reload
 ```
-

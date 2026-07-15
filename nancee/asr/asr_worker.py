@@ -2,6 +2,16 @@
 
 from __future__ import annotations
 
+import os
+
+# NANCEE runs Whisper from the local HF cache.
+# Do not contact Hugging Face Hub during startup.
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+
+
 import json
 import sys
 import time

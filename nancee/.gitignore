@@ -12,3 +12,11 @@ __pycache__/
 
 # Local secrets/configuration
 .env
+
+
+# Generated NANCEE debug and benchmark output
+test/manual/memory_debug_*.log
+test/manual/results/
+test/benchmark/results/
+test/benchmark/benchmark_logs/
+test/benchmark/*.zip
