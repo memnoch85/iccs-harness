@@ -75,8 +75,14 @@ def _is_single_question(text: str) -> bool:
 def _match_case(
     source: str,
     replacement: str,
+    *,
+    at_sentence_start: bool,
 ) -> str:
-    if source and source[0].isupper():
+    if (
+        at_sentence_start
+        and source
+        and source[0].isupper()
+    ):
         return (
             replacement[0].upper()
             + replacement[1:]
@@ -95,6 +101,11 @@ def _replace(
         lambda match: _match_case(
             match.group(0),
             replacement,
+            at_sentence_start=not bool(
+                match.string[
+                    :match.start()
+                ].strip()
+            ),
         ),
         text,
         flags=re.IGNORECASE,
@@ -257,6 +268,11 @@ def _restore_source_determiners(
                 _match_case(
                     match.group(0),
                     desired_determiner,
+                    at_sentence_start=not bool(
+                        response_text[
+                            :match.start()
+                        ].strip()
+                    ),
                 ),
             )
         )

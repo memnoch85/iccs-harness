@@ -1,6 +1,7 @@
 import itertools
 import json
 import queue
+import random
 import re
 import subprocess
 import threading
@@ -34,12 +35,12 @@ from config import (
     SPEED,
     TTS_EMPHASIS_SPEED,
     TTS_FILLER_SPEED,
-    TTS_GREETING_BRIDGE_SPEED,
     TTS_GAP_FILLER_COOLDOWN_SECONDS,
     TTS_GAP_FILLER_ENABLED,
     TTS_GAP_FILLER_MAX_PER_TURN,
     TTS_GAP_FILLER_PHRASES,
     TTS_GAP_FILLER_SECONDS,
+    TTS_GREETING_BRIDGE_SPEED,
     TTS_MAX_NUM_SENTENCES,
     TTS_SILENCE_SCALE,
     USER_PROFILE_CONTEXT_MAX_CHARACTERS,
@@ -603,10 +604,7 @@ def tts_worker(tts):
                         flush=True,
                     )
 
-                if (
-                    first_audio_for_request
-                    and request.first_audio_callback is not None
-                ):
+                if first_audio_for_request and request.first_audio_callback is not None:
                     request.first_audio_callback()
 
                 enqueue_audio(
@@ -1032,10 +1030,6 @@ def wait_for_audio_to_drain():
     time.sleep(0.25)
 
 
-def has_declarative_memory_content(user_text):
-    return is_complete_memory_statement(user_text)
-
-
 def should_store_recall_turn(user_text):
     return is_complete_memory_statement(user_text)
 
@@ -1064,9 +1058,7 @@ def main():
         for phrase in LATENCY_BRIDGE_PHRASES
     ]
 
-    bridge_audio_cycle = itertools.cycle(
-        bridge_audio_options
-    )
+    bridge_audio_cycle = itertools.cycle(bridge_audio_options)
 
     greeting_bridge_audio_options = [
         (
@@ -1080,10 +1072,12 @@ def main():
         for phrase in LATENCY_BRIDGE_GREETING_PHRASES
     ]
 
+    # Shuffle once per startup, then cycle through all phrases.
+    random.shuffle(greeting_bridge_audio_options)
+
     greeting_bridge_audio_cycle = itertools.cycle(
         greeting_bridge_audio_options
     )
-
     global gap_filler_audio_cycle
 
     gap_filler_audio_options = [
@@ -1342,21 +1336,15 @@ def main():
             bridge = None
 
             if response_policy.name == "greeting":
-                selected_bridge_audio_cycle = (
-                    greeting_bridge_audio_cycle
-                )
+                selected_bridge_audio_cycle = greeting_bridge_audio_cycle
             else:
-                selected_bridge_audio_cycle = (
-                    bridge_audio_cycle
-                )
+                selected_bridge_audio_cycle = bridge_audio_cycle
 
             (
                 bridge_phrase,
                 bridge_samples,
                 bridge_sample_rate,
-            ) = next(
-                selected_bridge_audio_cycle
-            )
+            ) = next(selected_bridge_audio_cycle)
 
             def play_latency_bridge():
                 print(
@@ -1371,17 +1359,11 @@ def main():
 
             try:
                 if response_policy.name == "greeting":
-                    bridge_delay_seconds = (
-                        LATENCY_BRIDGE_GREETING_SECONDS
-                    )
+                    bridge_delay_seconds = LATENCY_BRIDGE_GREETING_SECONDS
                 elif authoritative_context_found:
-                    bridge_delay_seconds = (
-                        LATENCY_BRIDGE_RECALL_SECONDS
-                    )
+                    bridge_delay_seconds = LATENCY_BRIDGE_RECALL_SECONDS
                 else:
-                    bridge_delay_seconds = (
-                        LATENCY_BRIDGE_NORMAL_SECONDS
-                    )
+                    bridge_delay_seconds = LATENCY_BRIDGE_NORMAL_SECONDS
 
                 bridge = LatencyBridge(
                     delay_seconds=bridge_delay_seconds,
@@ -1493,16 +1475,13 @@ def main():
                         response,
                     )
 
-                    assistant_text, directive_role_leak_trimmed = (
-                        trim_prompt_role_leak(
-                            collected_directive,
-                        )
+                    assistant_text, directive_role_leak_trimmed = trim_prompt_role_leak(
+                        collected_directive,
                     )
 
                     if directive_role_leak_trimmed:
                         print(
-                            "[DIRECTIVE RESPONSE GUARD] "
-                            "action=role_leak_trimmed",
+                            "[DIRECTIVE RESPONSE GUARD] action=role_leak_trimmed",
                             flush=True,
                         )
 
@@ -1515,27 +1494,21 @@ def main():
 
                     if directive_tail_trimmed:
                         print(
-                            "[DIRECTIVE RESPONSE GUARD] "
-                            "action=length_tail_trimmed",
+                            "[DIRECTIVE RESPONSE GUARD] action=length_tail_trimmed",
                             flush=True,
                         )
 
                     if not assistant_text:
-                        assistant_text = (
-                            "Could you repeat that?"
-                        )
+                        assistant_text = "Could you repeat that?"
 
-                    assistant_text, directive_repaired = (
-                        repair_directive_perspective(
-                            user_text,
-                            assistant_text,
-                        )
+                    assistant_text, directive_repaired = repair_directive_perspective(
+                        user_text,
+                        assistant_text,
                     )
 
                     if directive_repaired:
                         print(
-                            "[DIRECTIVE PERSPECTIVE REPAIR] "
-                            f"output={assistant_text!r}",
+                            f"[DIRECTIVE PERSPECTIVE REPAIR] output={assistant_text!r}",
                             flush=True,
                         )
 
@@ -1634,7 +1607,6 @@ def main():
             elif should_store_recall_turn(user_text):
                 added_memory_id = recall_memory.add_turn(
                     user_text=user_text,
-                    assistant_text=memory_assistant_text,
                 )
 
                 if memory_debug_enabled():

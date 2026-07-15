@@ -101,11 +101,9 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
             SOURCE,
         )
 
-        self.assertIn(
-            "next(\n"
-            "                selected_bridge_audio_cycle\n"
-            "            )",
+        self.assertRegex(
             SOURCE,
+            r"next\(\s*selected_bridge_audio_cycle\s*\)",
         )
 
     def test_greeting_uses_separate_bridge_threshold(self):
@@ -119,9 +117,13 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
             SOURCE,
         )
 
-        self.assertIn(
-            "bridge_delay_seconds = (",
+        self.assertRegex(
             SOURCE,
+            (
+                r"bridge_delay_seconds\s*=\s*"
+                r"\(?\s*"
+                r"LATENCY_BRIDGE_GREETING_SECONDS"
+            ),
         )
 
 

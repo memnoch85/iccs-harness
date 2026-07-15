@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import threading
 import time
 import unittest
@@ -16,6 +17,82 @@ CHAT_SOURCE = (
     encoding="utf-8",
 )
 
+CHAT_TREE = ast.parse(CHAT_SOURCE)
+
+
+def find_function(
+    root,
+    name,
+):
+    for node in ast.walk(root):
+        if (
+            isinstance(node, ast.FunctionDef)
+            and node.name == name
+        ):
+            return node
+
+    raise AssertionError(
+        f"Function {name!r} was not found."
+    )
+
+
+def is_enqueue_audio_call(node):
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "enqueue_audio"
+    )
+
+
+def is_first_audio_callback_call(node):
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "first_audio_callback"
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "request"
+    )
+
+
+def is_callback_count_zero(node):
+    return (
+        isinstance(node, ast.Compare)
+        and isinstance(node.left, ast.Name)
+        and node.left.id == "callback_count"
+        and len(node.ops) == 1
+        and isinstance(node.ops[0], ast.Eq)
+        and len(node.comparators) == 1
+        and isinstance(
+            node.comparators[0],
+            ast.Constant,
+        )
+        and node.comparators[0].value == 0
+    )
+
+
+def first_matching_call(
+    root,
+    predicate,
+):
+    calls = [
+        node
+        for node in ast.walk(root)
+        if predicate(node)
+    ]
+
+    if not calls:
+        raise AssertionError(
+            "Expected call was not found."
+        )
+
+    return min(
+        calls,
+        key=lambda node: (
+            node.lineno,
+            node.col_offset,
+        ),
+    )
+
 
 class LatencyBridgeSerializationTests(unittest.TestCase):
     def test_resolve_waits_for_in_progress_bridge_enqueue(self):
@@ -26,7 +103,9 @@ class LatencyBridgeSerializationTests(unittest.TestCase):
 
         def on_fire():
             callback_started.set()
-            release_callback.wait(timeout=1.0)
+            release_callback.wait(
+                timeout=1.0,
+            )
 
         bridge = LatencyBridge(
             delay_seconds=0.01,
@@ -36,7 +115,9 @@ class LatencyBridgeSerializationTests(unittest.TestCase):
         bridge.start()
 
         self.assertTrue(
-            callback_started.wait(timeout=0.25)
+            callback_started.wait(
+                timeout=0.25,
+            )
         )
 
         def resolve_bridge():
@@ -61,10 +142,14 @@ class LatencyBridgeSerializationTests(unittest.TestCase):
         release_callback.set()
 
         self.assertTrue(
-            resolve_finished.wait(timeout=0.25)
+            resolve_finished.wait(
+                timeout=0.25,
+            )
         )
 
-        resolver.join(timeout=0.25)
+        resolver.join(
+            timeout=0.25,
+        )
 
         self.assertEqual(
             resolve_results,
@@ -73,51 +158,80 @@ class LatencyBridgeSerializationTests(unittest.TestCase):
 
 
 class FirstAudioOrderingSourceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tts_worker = find_function(
+            CHAT_TREE,
+            "tts_worker",
+        )
+
     def test_streaming_callback_resolves_before_enqueue(self):
-        start_marker = (
-            "if (\n"
-            "                    first_audio_for_request\n"
-            "                    and request.first_audio_callback "
-            "is not None\n"
-            "                ):"
+        callback_function = None
+
+        for node in ast.walk(
+            self.tts_worker
+        ):
+            if (
+                isinstance(
+                    node,
+                    ast.FunctionDef,
+                )
+                and node.name == "callback"
+            ):
+                callback_function = node
+                break
+
+        self.assertIsNotNone(
+            callback_function,
         )
 
-        start = CHAT_SOURCE.index(start_marker)
-        end = CHAT_SOURCE.index(
-            "                return 1",
-            start,
+        callback_call = first_matching_call(
+            callback_function,
+            is_first_audio_callback_call,
         )
 
-        block = CHAT_SOURCE[start:end]
+        enqueue_call = first_matching_call(
+            callback_function,
+            is_enqueue_audio_call,
+        )
 
         self.assertLess(
-            block.index(
-                "request.first_audio_callback()"
-            ),
-            block.index(
-                "enqueue_audio("
-            ),
+            callback_call.lineno,
+            enqueue_call.lineno,
         )
 
     def test_fallback_resolves_before_enqueue(self):
-        start = CHAT_SOURCE.index(
-            "# Some Sherpa configurations return complete audio"
+        fallback_if = None
+
+        for node in ast.walk(
+            self.tts_worker
+        ):
+            if (
+                isinstance(node, ast.If)
+                and is_callback_count_zero(
+                    node.test
+                )
+            ):
+                fallback_if = node
+                break
+
+        self.assertIsNotNone(
+            fallback_if,
         )
 
-        end = CHAT_SOURCE.index(
-            "            elapsed = time.time() - start",
-            start,
+        callback_call = first_matching_call(
+            fallback_if,
+            is_first_audio_callback_call,
         )
 
-        block = CHAT_SOURCE[start:end]
+        enqueue_call = first_matching_call(
+            fallback_if,
+            is_enqueue_audio_call,
+        )
 
         self.assertLess(
-            block.index(
-                "request.first_audio_callback()"
-            ),
-            block.index(
-                "enqueue_audio("
-            ),
+            callback_call.lineno,
+            enqueue_call.lineno,
         )
 
 
