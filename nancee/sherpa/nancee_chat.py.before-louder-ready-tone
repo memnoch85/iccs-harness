@@ -366,82 +366,7 @@ def send_asr_command(command):
     asr_process.stdin.flush()
 
 
-def play_asr_ready_tone(sample_rate):
-    """Play a clear two-tone cue through Nancee's active output stream."""
-    sample_rate = int(sample_rate)
-
-    def make_tone(frequency_hz, duration_seconds):
-        sample_count = int(
-            sample_rate * duration_seconds
-        )
-
-        positions = (
-            np.arange(
-                sample_count,
-                dtype=np.float32,
-            )
-            / float(sample_rate)
-        )
-
-        samples = (
-            0.35
-            * np.sin(
-                2.0
-                * np.pi
-                * frequency_hz
-                * positions
-            )
-        ).astype(
-            np.float32,
-            copy=False,
-        )
-
-        fade_count = min(
-            int(sample_rate * 0.015),
-            sample_count // 2,
-        )
-
-        if fade_count > 0:
-            fade = np.linspace(
-                0.0,
-                1.0,
-                fade_count,
-                dtype=np.float32,
-            )
-
-            samples[:fade_count] *= fade
-            samples[-fade_count:] *= fade[::-1]
-
-        return samples
-
-    gap = np.zeros(
-        int(sample_rate * 0.07),
-        dtype=np.float32,
-    )
-
-    cue = np.concatenate(
-        (
-            make_tone(750.0, 0.18),
-            gap,
-            make_tone(1050.0, 0.18),
-        )
-    )
-
-    print(
-        "[ASR READY TONE] playing=true "
-        f"duration={len(cue) / sample_rate:.3f}s",
-        flush=True,
-    )
-
-    enqueue_audio(
-        cue,
-        sample_rate,
-    )
-
-    wait_for_audio_to_drain()
-
-
-def get_spoken_user_input(output_sample_rate):
+def get_spoken_user_input():
     start_asr_worker()
 
     input("\nPress Enter to begin speaking...")
@@ -456,28 +381,6 @@ def get_spoken_user_input(output_sample_rate):
             flush=True,
         )
         return ""
-
-    # The microphone is confirmed active. Play the cue,
-    # then discard anything recorded while the cue played.
-    play_asr_ready_tone(
-        output_sample_rate,
-    )
-
-    send_asr_command("CLEAR")
-
-    message = read_asr_message()
-
-    if message.get("type") != "cleared":
-        print(
-            f"[ASR ERROR] Could not clear cue audio: {message}",
-            flush=True,
-        )
-        return ""
-
-    print(
-        "[ASR READY TONE] microphone_buffer_cleared=true",
-        flush=True,
-    )
 
     input("Recording... Press Enter to stop.\n")
 
@@ -1271,9 +1174,7 @@ def main():
     ):
         while True:
             try:
-                user_text = get_spoken_user_input(
-                    tts.sample_rate,
-                )
+                user_text = get_spoken_user_input()
 
             except KeyboardInterrupt:
                 print(
