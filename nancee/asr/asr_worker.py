@@ -80,6 +80,13 @@ class PersistentRecorder:
 
         self.stream.start()
 
+    def clear(self) -> None:
+        """Discard audio captured so far without stopping the microphone."""
+        if self.stream is None:
+            raise RuntimeError("Recording is not active.")
+
+        self.audio_blocks.clear()
+
     def stop(self) -> np.ndarray:
         if self.stream is None:
             raise RuntimeError("Recording is not active.")
@@ -159,6 +166,20 @@ def main() -> int:
 
                     send_message(
                         type="started",
+                    )
+
+                except Exception as exc:
+                    send_message(
+                        type="error",
+                        message=str(exc),
+                    )
+
+            elif command == "CLEAR":
+                try:
+                    recorder.clear()
+
+                    send_message(
+                        type="cleared",
                     )
 
                 except Exception as exc:

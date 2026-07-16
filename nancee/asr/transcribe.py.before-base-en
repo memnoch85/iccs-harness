@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 from typing import Optional, Union
@@ -14,10 +13,7 @@ from transformers import pipeline
 from transformers.utils import logging as transformers_logging
 
 
-DEFAULT_MODEL = os.getenv(
-    "NANCEE_ASR_MODEL",
-    "openai/whisper-base.en",
-)
+DEFAULT_MODEL = "openai/whisper-tiny.en"
 DEFAULT_SAMPLE_RATE = 16_000
 
 
