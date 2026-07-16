@@ -6,6 +6,8 @@ from config import (
     RESPONSE_ACK_TEMPERATURE,
     RESPONSE_CLARIFY_NUM_PREDICT,
     RESPONSE_CLARIFY_TEMPERATURE,
+    RESPONSE_DIRECTIVE_NUM_PREDICT,
+    RESPONSE_DIRECTIVE_TEMPERATURE,
     RESPONSE_DETAILED_NUM_PREDICT,
     RESPONSE_DETAILED_TEMPERATURE,
     RESPONSE_GREETING_NUM_PREDICT,
@@ -263,8 +265,8 @@ def select_response_policy(user_text, *, authoritative_context_found=False):
     if looks_like_directive(user_text):
         return ResponsePolicy(
             name="directive",
-            temperature=RESPONSE_CLARIFY_TEMPERATURE,
-            num_predict=RESPONSE_ACK_NUM_PREDICT,
+            temperature=RESPONSE_DIRECTIVE_TEMPERATURE,
+            num_predict=RESPONSE_DIRECTIVE_NUM_PREDICT,
             instruction=(
                 "Execute the command. For ask-me commands, output only "
                 "the question. Preserve nouns, articles, and ownership; "
