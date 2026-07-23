@@ -65,6 +65,23 @@ _POSSESSIVE_ASSIGNMENT_VERBS = (
     "includes",
 )
 
+_POSSESSIVE_RELATION_VERBS = (
+    "lives",
+    "works",
+    "drives",
+    "owns",
+    "likes",
+    "loves",
+    "hates",
+    "prefers",
+    "uses",
+)
+
+_POSSESSIVE_FACT_VERBS = (
+    _POSSESSIVE_ASSIGNMENT_VERBS
+    + _POSSESSIVE_RELATION_VERBS
+)
+
 _LOW_VALUE_FIRST_PERSON = re.compile(
     r"^(?:"
     r"i\s+(?:think|guess|mean|wonder|hope)\b|"
@@ -72,6 +89,12 @@ _LOW_VALUE_FIRST_PERSON = re.compile(
     r"i\s+(?:do not|don't)\s+know\b|"
     r"i\s+(?:need|want)\s+you\s+to\b"
     r")",
+    flags=re.IGNORECASE,
+)
+
+_CONTEXT_DEPENDENT_ANSWER = re.compile(
+    r"^(?:i\s+(?:sure\s+)?(?:did|do)|i\s+(?:did|do)\s+not)"
+    r"[.! ]*$",
     flags=re.IGNORECASE,
 )
 
@@ -91,6 +114,95 @@ _SIMPLE_FACT_CORRECTION = re.compile(
     r"(?:[.!?]|$)",
     flags=re.IGNORECASE,
 )
+
+
+_TRAILING_CONVERSATIONAL_CHECKIN = re.compile(
+    r"(?:,\s*)?(?:okay|ok|right|alright|you know)\s*\?+$",
+    flags=re.IGNORECASE,
+)
+
+_SELF_INTRODUCTION_STATEMENT = re.compile(
+    r"^(?:this is|my name is)\s+[A-Za-z][A-Za-z'\-]{1,39}[.!]?$",
+    flags=re.IGNORECASE,
+)
+
+_THIRD_PERSON_FACT_STATEMENTS = (
+    re.compile(
+        r"^(?:he|she|they)(?:'s|'re|'ll|\s+(?:is|are|was|were|has|have|will|can))"
+        r"\s+.+[.!]?$",
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:his|her|their)\s+.+\s+(?:is|are|was|were|has|have)"
+        r"\s+.+[.!]?$",
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        r"^[A-Z][A-Za-z'\-]{1,39}\s+"
+        r"(?:is|was|has|will|can|likes?|lives?|works?|drives?|owns?|prefers?|uses?|talks?)"
+        r"\s+.+[.!]?$",
+    ),
+)
+
+
+def extract_storable_memory_text(text: str) -> str | None:
+    """
+    Extract declarative memory clauses from a mixed multi-sentence turn.
+
+    This lets a turn such as:
+
+        His name is Daniel. He's going to talk to you, okay?
+
+    preserve the useful facts without storing the trailing check-in as a
+    memory question. The function does not perform route selection.
+    """
+    raw_text = re.sub(r"\s+", " ", str(text).strip())
+
+    if not raw_text:
+        return None
+
+    clauses = re.split(
+        r"(?<=[.!?])\s+",
+        raw_text,
+    )
+
+    accepted: list[str] = []
+
+    for raw_clause in clauses:
+        clause = normalize_memory_candidate(raw_clause)
+
+        if not clause:
+            continue
+
+        clause = _TRAILING_CONVERSATIONAL_CHECKIN.sub(
+            ".",
+            clause,
+        ).strip()
+
+        if not clause:
+            continue
+
+        if clause.endswith("?"):
+            continue
+
+        if is_complete_memory_statement(clause):
+            accepted.append(clause)
+            continue
+
+        if _SELF_INTRODUCTION_STATEMENT.fullmatch(clause):
+            accepted.append(clause)
+            continue
+
+        if any(
+            pattern.fullmatch(clause)
+            for pattern in _THIRD_PERSON_FACT_STATEMENTS
+        ):
+            accepted.append(clause)
+
+    if not accepted:
+        return None
+
+    return " ".join(accepted)
 
 
 def extract_simple_fact_correction(
@@ -219,7 +331,7 @@ def looks_like_personal_fact_fragment(text: str) -> bool:
 
     if any(
         re.search(rf"\b{re.escape(verb)}\b", lowered)
-        for verb in _POSSESSIVE_ASSIGNMENT_VERBS
+        for verb in _POSSESSIVE_FACT_VERBS
     ):
         return False
 
@@ -264,6 +376,9 @@ def is_complete_memory_statement(text: str) -> bool:
     if _LOW_VALUE_FIRST_PERSON.match(subject_text):
         return False
 
+    if _CONTEXT_DEPENDENT_ANSWER.fullmatch(subject_text):
+        return False
+
     # A first-person clause with at least a subject, action/state, and value.
     # We store the raw utterance; FTS5 decides later whether it is relevant.
     if re.match(r"^i(?:'m| am)\s+\S+", subject_text):
@@ -279,7 +394,7 @@ def is_complete_memory_statement(text: str) -> bool:
         return True
 
     if subject_text.startswith(("my ", "our ")):
-        for verb in _POSSESSIVE_ASSIGNMENT_VERBS:
+        for verb in _POSSESSIVE_FACT_VERBS:
             match = re.search(
                 rf"\b{re.escape(verb)}\b\s+(.+)$",
                 subject_text,
@@ -311,8 +426,13 @@ def memory_storage_skip_reason(text: str) -> str:
     if _word_count(normalized) < 3:
         return "too_short"
 
-    if _LOW_VALUE_FIRST_PERSON.match(_without_temporal_preface(normalized)):
+    subject_text = _without_temporal_preface(normalized)
+
+    if _LOW_VALUE_FIRST_PERSON.match(subject_text):
         return "low_value_first_person"
+
+    if _CONTEXT_DEPENDENT_ANSWER.fullmatch(subject_text):
+        return "context_dependent_answer"
 
     return "incomplete_statement"
 

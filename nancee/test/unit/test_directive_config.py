@@ -20,8 +20,8 @@ class DirectiveConfigTests(unittest.TestCase):
                 0.19,
             ),
         ):
-            policy = response_policy.select_response_policy(
-                "Tell me a joke."
+            policy = response_policy.response_policy_for_route(
+                "directive"
             )
 
         self.assertEqual(

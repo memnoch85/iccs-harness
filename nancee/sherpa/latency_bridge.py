@@ -1,7 +1,42 @@
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable
+
+
+MINIMUM_BRIDGE_DELAY_SECONDS = 0.001
+
+
+def calculate_remaining_bridge_delay(
+    target_seconds: float,
+    *,
+    started_at: float | None,
+    now: float | None = None,
+) -> tuple[float, float]:
+    """Return (remaining_delay, elapsed) for one user-visible deadline.
+
+    The bridge target is measured from the moment recording stops, not from
+    the later moment when the LLM request begins. A tiny positive floor keeps
+    LatencyBridge compatible with threading.Timer when the deadline has
+    already passed during ASR or routing.
+    """
+    target = float(target_seconds)
+
+    if target <= 0:
+        raise ValueError("target_seconds must be greater than zero.")
+
+    if started_at is None:
+        return target, 0.0
+
+    current = time.perf_counter() if now is None else float(now)
+    elapsed = max(0.0, current - float(started_at))
+    remaining = max(
+        MINIMUM_BRIDGE_DELAY_SECONDS,
+        target - elapsed,
+    )
+
+    return remaining, elapsed
 
 
 class LatencyBridge:

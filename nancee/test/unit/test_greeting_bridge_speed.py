@@ -35,7 +35,7 @@ class GreetingBridgeSpeedTests(unittest.TestCase):
         )[0]
 
         self.assertIn(
-            '"1.0"',
+            '"1.1"',
             config_block,
         )
 

@@ -94,46 +94,30 @@ class ProfileRoutingSourceContractTests(unittest.TestCase):
         )
 
     def test_authoritative_fact_answers_drop_chat_history(self):
-        assignment_match = re.search(
-            (
-                r"authoritative_context_found\s*=\s*"
-                r"memory_context_found\s+or\s+"
-                r"bool\(\s*"
-                r"effective_profile_context\.strip\(\)"
-                r"\s*\)"
-            ),
+        self.assertIn(
+            "authoritative_response_required",
             self.source,
         )
 
-        self.assertIsNotNone(
-            assignment_match,
-            (
-                "authoritative_context_found must combine "
-                "memory and profile context"
-            ),
-        )
-
-        history_drop_match = re.search(
-            (
-                r"elif\s+"
-                r"(?:\(\s*)?"
-                r"authoritative_context_found"
-                r"\s+or\s+"
-                r"response_policy\.drop_history"
-                r"(?:\s*\))?"
-                r"\s*:"
-                r"[\s\S]*?"
-                r"request_history\s*=\s*\[\]"
-            ),
+        self.assertIn(
+            "elif authoritative_response_required or response_policy.drop_history:",
             self.source,
         )
 
-        self.assertIsNotNone(
-            history_drop_match,
-            (
-                "authoritative context or drop_history "
-                "must discard recent chat history"
-            ),
+        self.assertIn(
+            "request_history = []",
+            self.source,
+        )
+
+    def test_background_session_enrichment_is_not_automatically_authoritative(self):
+        self.assertIn(
+            "input_route.explicit_recall",
+            self.source,
+        )
+
+        self.assertIn(
+            "and memory_context_found",
+            self.source,
         )
 
 if __name__ == "__main__":

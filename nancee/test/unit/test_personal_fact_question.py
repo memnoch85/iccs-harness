@@ -4,6 +4,7 @@ import ast
 import unittest
 from pathlib import Path
 
+from input_router import route_user_input
 from memory_policy import looks_like_personal_fact_question
 
 
@@ -22,9 +23,11 @@ class TestPersonalFactQuestion(unittest.TestCase):
         for question in matching_questions:
             with self.subTest(question=question):
                 self.assertTrue(
-                    looks_like_personal_fact_question(
-                        question
-                    )
+                    looks_like_personal_fact_question(question)
+                )
+                self.assertEqual(
+                    "recall",
+                    route_user_input(question).kind,
                 )
 
     def test_diagnostic_questions_do_not_match(self):
@@ -41,39 +44,32 @@ class TestPersonalFactQuestion(unittest.TestCase):
         for question in nonmatching_questions:
             with self.subTest(question=question):
                 self.assertFalse(
-                    looks_like_personal_fact_question(
-                        question
-                    )
+                    looks_like_personal_fact_question(question)
+                )
+                self.assertFalse(
+                    route_user_input(question).explicit_recall
                 )
 
-    def test_recall_router_calls_personal_question_helper(self):
+    def test_router_calls_personal_question_helper(self):
         root = Path(__file__).resolve().parents[2]
-        source_path = root / "sherpa/nancee_chat.py"
+        source_path = root / "sherpa/input_router.py"
+        tree = ast.parse(source_path.read_text(encoding="utf-8"))
 
-        tree = ast.parse(
-            source_path.read_text(
-                encoding="utf-8",
-            )
-        )
-
-        recall_function = None
+        route_function = None
 
         for node in tree.body:
             if (
                 isinstance(node, ast.FunctionDef)
-                and node.name == "looks_like_recall_request"
+                and node.name == "route_user_input"
             ):
-                recall_function = node
+                route_function = node
                 break
 
-        self.assertIsNotNone(
-            recall_function,
-            "looks_like_recall_request was not found.",
-        )
+        self.assertIsNotNone(route_function)
 
         called_names = {
             call.func.id
-            for call in ast.walk(recall_function)
+            for call in ast.walk(route_function)
             if (
                 isinstance(call, ast.Call)
                 and isinstance(call.func, ast.Name)

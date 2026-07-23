@@ -1,14 +1,14 @@
 import unittest
 
-from response_policy import select_response_policy
+from input_router import route_user_input
+from response_policy import response_policy_for_route
 
 
 class ResponsePolicyFinishTests(unittest.TestCase):
     def assert_policy(self, text, expected):
-        self.assertEqual(
-            select_response_policy(text).name,
-            expected,
-        )
+        route = route_user_input(text)
+        policy = response_policy_for_route(route.kind)
+        self.assertEqual(policy.name, expected)
 
     def test_sauron_relationship_routes_detailed(self):
         self.assert_policy(

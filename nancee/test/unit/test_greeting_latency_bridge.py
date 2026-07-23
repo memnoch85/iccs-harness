@@ -23,10 +23,10 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
         self.assertEqual(
             LATENCY_BRIDGE_GREETING_PHRASES,
             (
-                "So umm...",
+                "umm...",
                 "humm...",
-                "Oh hey...",
-                "Oh hey again..."
+                "So...",
+                "One second..."
             ),
         )
 
@@ -114,10 +114,14 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
         self.assertRegex(
             SOURCE,
             (
-                r"bridge_delay_seconds\s*=\s*"
-                r"\(?\s*"
+                r"bridge_target_seconds\s*=\s*"
                 r"LATENCY_BRIDGE_GREETING_SECONDS"
             ),
+        )
+
+        self.assertIn(
+            "calculate_remaining_bridge_delay(",
+            SOURCE,
         )
 
 

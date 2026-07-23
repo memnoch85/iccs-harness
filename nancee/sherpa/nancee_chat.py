@@ -11,6 +11,7 @@ import numpy as np
 import sherpa_onnx
 import sounddevice as sd
 from collections import deque
+from dataclasses import dataclass
 from pathlib import Path
 from authoritative_response import prepare_authoritative_response
 from config import (
@@ -54,24 +55,19 @@ from generation_completion import (
     trim_incomplete_length_tail,
     trim_prompt_role_leak,
 )
-from latency_bridge import LatencyBridge
-from memory_policy import (
-    extract_simple_fact_correction,
-    is_complete_memory_statement,
-    looks_like_personal_fact_fragment,
-    looks_like_personal_fact_question,
-    memory_storage_skip_reason,
+from input_router import route_user_input
+from latency_bridge import (
+    LatencyBridge,
+    calculate_remaining_bridge_delay,
 )
+from memory_policy import memory_storage_skip_reason
 from ollama_runtime import (
     create_ollama_tpc,
     ensure_ollama_model_loaded,
 )
 from profile_fact_index import ProfileFactIndex
-from recall_policy import (
-    looks_like_perspective_correction,
-    repair_recall_perspective,
-)
-from response_policy import select_response_policy
+from recall_policy import repair_recall_perspective
+from response_policy import response_policy_for_route
 from session_archive import SessionArchive
 from session_memory_store import filter_memory_hits_by_overlap
 from short_term_memory import ShortTermMemory
@@ -103,84 +99,13 @@ ASR_WORKER_SCRIPT = ASR_DIRECTORY / "asr_worker.py"
 asr_process = None
 
 
-_QUESTION_PREFIXES = (
-    "what ",
-    "who ",
-    "where ",
-    "when ",
-    "why ",
-    "how ",
-    "do ",
-    "does ",
-    "did ",
-    "can ",
-    "could ",
-    "would ",
-    "should ",
-    "is ",
-    "are ",
-)
-
-_RECALL_QUERY_PATTERNS = (
-    r"\bdo you remember\b",
-    r"\bcan you remember\b",
-    r"\bdo you recall\b",
-    r"\bcan you recall\b",
-    r"\btell me what my\b",
-    r"\bcan you tell me what my\b",
-    r"\bwhat did i\b",
-    r"\bwhere did i\b",
-    r"\bwhere do i\b",
-    r"\bwhere is\b",
-    r"\bwhat do i\b",
-    r"\bwhat i\s+(?:drive|own|have)\b",
-    r"\bwhat am i driving\b",
-    r"\bwhat car\s+(?:am i driving|do i drive|do i have)\b",
-    r"\bwhat vehicle\s+(?:am i driving|do i drive|do i have)\b",
-    r"\bwhat kind of\s+(?:car|vehicle)\s+do i\s+(?:drive|own|have)\b",
-    r"\bwhat type of\s+(?:car|vehicle)\s+do i\s+(?:drive|own|have)\b",
-    r"\bcan you tell me what i\s+(?:drive|own|have)\b",
-    r"\bcan you tell me what car\s+(?:i drive|i have|i am driving)\b",
-    r"\bcan you tell me what vehicle\s+(?:i drive|i have|i am driving)\b",
-    r"\bwhat is my\b",
-    r"\bwhat's my\b",
-    r"\bwho is my\b",
-    r"\bwho's my\b",
-    r"\bwhere is .* from\b",
-    r"\bwhere .* is from\b",
-    r"\bwhat .* did i mention\b",
-    r"\bwhat .* did i tell you\b",
-    r"\bi told you .* earlier\b",
-)
-
-# Normalize user text, and remove leading mentions of nancy. So the name does not confuse the enrichment.
-def normalize_user_text_for_memory(user_text):
-    lowered = re.sub(r"\s+"," ",str(user_text).strip().lower())
-    return re.sub(r"^(nancy|nancee)[,\s]+","",lowered)
+@dataclass(frozen=True)
+class SpokenUserInput:
+    text: str
+    stopped_at: float | None
 
 
-def looks_like_recall_request(user_text):
-    lowered = normalize_user_text_for_memory(user_text)
-
-    match True:
-        case _ if not lowered:
-            return False
-
-        # Checking for recall
-        case _ if looks_like_perspective_correction(lowered):
-            return True
-
-        case _ if looks_like_personal_fact_question(lowered):
-            return True
-
-        case _:
-            for pattern in _RECALL_QUERY_PATTERNS:
-                if re.search(pattern, lowered, flags=re.IGNORECASE):
-                    return True
-
-            return False
-
-def retrieve_session_context(recall_memory, user_text):
+def retrieve_session_context(recall_memory, user_text, allow_weak_match=False):
     # Timing
     started = time.perf_counter()
 
@@ -196,9 +121,8 @@ def retrieve_session_context(recall_memory, user_text):
 
     # Retrieve and filter memory
     retrieved_turns = recall_memory.retrieve(user_text, limit=MEMORY_RECALL_LIMIT)
-    explicit_memory_request = looks_like_recall_request(user_text) or looks_like_personal_fact_fragment(user_text)
     unfiltered_count = len(retrieved_turns)
-    retrieved_turns = filter_memory_hits_by_overlap(user_text, retrieved_turns, minimum_overlap=2, allow_weak_match=explicit_memory_request)
+    retrieved_turns = filter_memory_hits_by_overlap(user_text, retrieved_turns, minimum_overlap=2, allow_weak_match=allow_weak_match)
 
     # Report filtered memory
     if MEMORY_DEBUG_ENABLED and len(retrieved_turns) != unfiltered_count:
@@ -416,7 +340,7 @@ def get_spoken_user_input(output_sample_rate):
             f"[ASR ERROR] {message}",
             flush=True,
         )
-        return ""
+        return SpokenUserInput("", None)
 
     # The microphone is confirmed active. Play the cue,
     # then discard anything recorded while the cue played.
@@ -433,7 +357,7 @@ def get_spoken_user_input(output_sample_rate):
             f"[ASR ERROR] Could not clear cue audio: {message}",
             flush=True,
         )
-        return ""
+        return SpokenUserInput("", None)
 
     print(
         "[ASR READY TONE] microphone_buffer_cleared=true",
@@ -442,35 +366,47 @@ def get_spoken_user_input(output_sample_rate):
 
     input("Recording... Press Enter to stop.\n")
 
+    stop_requested_at = time.perf_counter()
+
+    print(
+        "[ASR] recording_stopped=true transcribing=true",
+        flush=True,
+    )
+
     send_asr_command("STOP")
 
     message = read_asr_message()
+    stop_to_result_seconds = time.perf_counter() - stop_requested_at
 
     if message.get("type") == "error":
         print(
             f"[ASR ERROR] {message.get('message')}",
             flush=True,
         )
-        return ""
+        return SpokenUserInput("", stop_requested_at)
 
     if message.get("type") != "result":
         print(
             f"[ASR ERROR] Unexpected response: {message}",
             flush=True,
         )
-        return ""
+        return SpokenUserInput("", stop_requested_at)
 
     print(
         f"[ASR] captured="
         f"{message.get('duration', 0.0):.2f}s "
         f"transcription="
         f"{message.get('transcription_seconds', 0.0):.2f}s "
+        f"stop_to_result={stop_to_result_seconds:.2f}s "
         f"peak="
         f"{message.get('peak', 0.0):.4f}",
         flush=True,
     )
 
-    return str(message.get("text", "")).strip()
+    return SpokenUserInput(
+        str(message.get("text", "")).strip(),
+        stop_requested_at,
+    )
 
 
 def stop_asr_worker():
@@ -1088,35 +1024,6 @@ def wait_for_audio_to_drain():
     time.sleep(0.25)
 
 
-def should_store_recall_turn(user_text):
-    return is_complete_memory_statement(user_text)
-
-
-def should_retrieve_recall(user_text):
-    lowered = normalize_user_text_for_memory(user_text)
-
-    match True:
-        case _ if not lowered:
-            return False
-
-        # Checking if question
-        case _ if "?" in lowered:
-            return True
-
-        case _ if lowered.startswith(_QUESTION_PREFIXES):
-            return True
-
-        # Checking for recall
-        case _ if looks_like_recall_request(lowered):
-            return True
-
-        case _ if looks_like_personal_fact_fragment(user_text):
-            return True
-
-        case _:
-            return False
-
-
 def main():
     print(
         "Loading Sherpa Kokoro...",
@@ -1256,9 +1163,11 @@ def main():
         ):
             while True:
                 try:
-                    user_text = get_spoken_user_input(
+                    spoken_input = get_spoken_user_input(
                         tts.sample_rate,
                     )
+                    user_text = spoken_input.text
+                    recording_stopped_at = spoken_input.stopped_at
 
                 except KeyboardInterrupt:
                     print(
@@ -1267,19 +1176,18 @@ def main():
                     )
                     break
 
-                if not user_text:
-                    continue
+                previous_turns = recent_prompt_memory.get_turns_snapshot()
+                previous_turn = previous_turns[-1] if previous_turns else None
 
-                if is_punctuation_only(user_text):
-                    print(
-                        "[ASR] Ignoring punctuation-only transcription.",
-                        flush=True,
-                    )
-                    continue
+                input_route = route_user_input(
+                    user_text,
+                    previous_turn=previous_turn,
+                )
 
-                if len(user_text) > 1000:
+                if input_route.kind == "invalid":
                     print(
-                        "[ASR] Ignoring implausibly long transcription.",
+                        "[INPUT ROUTE] "
+                        f"kind=invalid reason={input_route.reason}",
                         flush=True,
                     )
                     continue
@@ -1289,11 +1197,18 @@ def main():
                     flush=True,
                 )
 
-                if user_text.lower() in {
-                    "q",
-                    "quit",
-                    "exit",
-                }:
+                print(
+                    "[INPUT ROUTE] "
+                    f"kind={input_route.kind} "
+                    f"reason={input_route.reason} "
+                    f"retrieve_recall={input_route.retrieve_recall} "
+                    f"explicit_recall={input_route.explicit_recall} "
+                    f"allow_weak_match={input_route.allow_weak_match} "
+                    f"store_recall={input_route.store_recall}",
+                    flush=True,
+                )
+
+                if input_route.kind == "exit":
                     break
 
                 global_start = time.time()
@@ -1305,11 +1220,8 @@ def main():
                     gap_fillers_used = 0
                     last_gap_filler_time = 0.0
 
-                personal_fact_fragment = looks_like_personal_fact_fragment(user_text)
-                recall_requested = should_retrieve_recall(user_text)
-                explicit_recall_requested = (
-                    looks_like_recall_request(user_text) or personal_fact_fragment
-                )
+                recall_requested = input_route.retrieve_recall
+                explicit_recall_requested = input_route.explicit_recall
 
                 profile_started = time.perf_counter()
                 effective_profile_context = ""
@@ -1354,6 +1266,7 @@ def main():
                     retrieved_context = retrieve_session_context(
                         recall_memory,
                         user_text,
+                        allow_weak_match=input_route.allow_weak_match,
                     )
 
                     memory_context_found = bool(str(retrieved_context).strip())
@@ -1368,14 +1281,16 @@ def main():
                             flush=True,
                         )
 
-                if (
+                fact_miss = (
                     explicit_recall_requested
                     and not memory_context_found
                     and not profile_context_found
-                ):
-                    # Keep a recall miss inside the LLM personality path,
-                    # but give the model a tiny authoritative instruction
-                    # instead of the complete user profile.
+                )
+
+                if fact_miss:
+                    # Only a clear explicit recall request earns an
+                    # authoritative memory-miss answer. Ordinary questions and
+                    # incomplete fragments remain on their normal model route.
                     effective_profile_context = (
                         "No matching confirmed fact about the human user "
                         "was retrieved. Say only that you do not remember "
@@ -1388,13 +1303,23 @@ def main():
                             flush=True,
                         )
 
-                authoritative_context_found = memory_context_found or bool(
-                    effective_profile_context.strip()
+                authoritative_context_found = (
+                    profile_context_found
+                    or (
+                        input_route.explicit_recall
+                        and memory_context_found
+                    )
                 )
 
-                response_policy = select_response_policy(
-                    user_text,
-                    authoritative_context_found=(authoritative_context_found),
+                authoritative_response_required = (
+                    authoritative_context_found
+                    or fact_miss
+                )
+
+                response_policy = response_policy_for_route(
+                    input_route.kind,
+                    authoritative_context_found=authoritative_context_found,
+                    fact_miss=fact_miss,
                 )
 
                 print(
@@ -1443,11 +1368,27 @@ def main():
 
                 try:
                     if response_policy.name == "greeting":
-                        bridge_delay_seconds = LATENCY_BRIDGE_GREETING_SECONDS
-                    elif authoritative_context_found:
-                        bridge_delay_seconds = LATENCY_BRIDGE_RECALL_SECONDS
+                        bridge_target_seconds = LATENCY_BRIDGE_GREETING_SECONDS
+                    elif authoritative_response_required:
+                        bridge_target_seconds = LATENCY_BRIDGE_RECALL_SECONDS
                     else:
-                        bridge_delay_seconds = LATENCY_BRIDGE_NORMAL_SECONDS
+                        bridge_target_seconds = LATENCY_BRIDGE_NORMAL_SECONDS
+
+                    (
+                        bridge_delay_seconds,
+                        bridge_elapsed_seconds,
+                    ) = calculate_remaining_bridge_delay(
+                        bridge_target_seconds,
+                        started_at=recording_stopped_at,
+                    )
+
+                    print(
+                        "[LATENCY BRIDGE DEADLINE] "
+                        f"target={bridge_target_seconds:.3f}s "
+                        f"elapsed_since_stop={bridge_elapsed_seconds:.3f}s "
+                        f"remaining={bridge_delay_seconds:.3f}s",
+                        flush=True,
+                    )
 
                     bridge = LatencyBridge(
                         delay_seconds=bridge_delay_seconds,
@@ -1457,13 +1398,12 @@ def main():
 
                     bridge.start()
 
-                    if looks_like_perspective_correction(user_text):
+                    if input_route.force_keep_history:
                         request_history = recent_prompt_memory.get_messages()
-                    elif authoritative_context_found or response_policy.drop_history:
-                        # Retrieved facts are authoritative. Dropping the
-                        # one-turn chat history keeps the prompt smaller and
-                        # prevents a prior verbose answer from contaminating
-                        # the fact-based response.
+                    elif authoritative_response_required or response_policy.drop_history:
+                        # Explicit fact answers and explicit misses are isolated
+                        # from conversational history. Background enrichment for
+                        # an ordinary question keeps the live one-turn history.
                         request_history = []
                     else:
                         request_history = recent_prompt_memory.get_messages()
@@ -1488,7 +1428,7 @@ def main():
                         completion_state=completion_state,
                     )
 
-                    if authoritative_context_found:
+                    if authoritative_response_required:
                         # Fact-backed answers are collected before speech so a
                         # small-model contradiction cannot enter TTS or history.
                         assistant_text = collect_text_response(
@@ -1535,12 +1475,6 @@ def main():
                                     f"output={assistant_text!r}",
                                     flush=True,
                                 )
-
-                        fact_miss = (
-                            explicit_recall_requested
-                            and not memory_context_found
-                            and not profile_context_found
-                        )
 
                         assistant_text, guard_action = prepare_authoritative_response(
                             assistant_text,
@@ -1678,12 +1612,10 @@ def main():
                 # FTS5 still stores only the raw user utterance.
                 memory_assistant_text = assistant_text
 
-                # Apply narrow "it was NEW, not OLD" corrections to the newest
-                # matching raw memory. Rewriting the original sentence preserves
-                # its action words for later FTS5 recall.
-                correction = extract_simple_fact_correction(
-                    user_text,
-                )
+                # Apply narrow "it was NEW, not OLD" corrections using the
+                # single router decision. Rewriting the original sentence
+                # preserves its action words for later FTS5 recall.
+                correction = input_route.correction
                 corrected_memory_id = None
 
                 if correction is not None:
@@ -1702,21 +1634,27 @@ def main():
                             flush=True,
                         )
 
-                # FTS5 raw utterance recall archive.
-                # Store only complete user statements. Questions, commands,
-                # fragments, and likely ASR debris are deliberately rejected.
+                # FTS5 recall storage is also controlled by the router. A short
+                # contextual answer such as "I sure did" may carry a resolved
+                # statement built from Nancee's previous question.
                 if corrected_memory_id is not None:
                     pass
-                elif should_store_recall_turn(user_text):
+                elif input_route.store_recall:
+                    recall_storage_text = (
+                        input_route.recall_storage_text
+                        or user_text
+                    )
+
                     added_memory_id = recall_memory.add_turn(
-                        user_text=user_text,
+                        user_text=recall_storage_text,
                     )
 
                     if MEMORY_DEBUG_ENABLED:
                         if added_memory_id is not None:
                             print(
                                 f"[MEMORY RAW ADD] id={added_memory_id} "
-                                f"stored={user_text!r}",
+                                f"stored={recall_storage_text!r} "
+                                f"source={user_text!r}",
                                 flush=True,
                             )
                         else:

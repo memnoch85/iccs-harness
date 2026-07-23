@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from response_policy import select_response_policy
+from input_router import route_user_input
+from response_policy import response_policy_for_route
 
 
 class DirectRequestPolicyTests(unittest.TestCase):
@@ -30,41 +31,25 @@ class DirectRequestPolicyTests(unittest.TestCase):
 
         for request in requests:
             with self.subTest(request=request):
-                policy = select_response_policy(request)
+                route = route_user_input(request)
+                policy = response_policy_for_route(route.kind)
 
-                self.assertEqual(
-                    "directive",
-                    policy.name,
-                )
-
-                self.assertFalse(
-                    policy.drop_history,
-                )
-
+                self.assertEqual("directive", route.kind)
+                self.assertEqual("directive", policy.name)
+                self.assertFalse(policy.drop_history)
                 self.assertIn(
                     "Preserve nouns, articles, and ownership",
                     policy.instruction,
                 )
 
     def test_actual_personal_update_still_acknowledges(self):
-        policy = select_response_policy(
-            "I finished wiring the power board today."
-        )
-
-        self.assertEqual(
-            "acknowledge",
-            policy.name,
-        )
+        route = route_user_input("I finished wiring the power board today.")
+        policy = response_policy_for_route(route.kind)
+        self.assertEqual("acknowledge", policy.name)
 
     def test_contextual_answer_is_not_directive(self):
-        policy = select_response_policy(
-            "I sure did."
-        )
-
-        self.assertNotEqual(
-            "directive",
-            policy.name,
-        )
+        route = route_user_input("I sure did.")
+        self.assertNotEqual("directive", route.kind)
 
 
 if __name__ == "__main__":
