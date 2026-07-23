@@ -38,7 +38,11 @@ class ProfileLlmRoutingContractTests(unittest.TestCase):
 
     def test_profile_context_reaches_ollama(self):
         self.assertIn(
-            "memory_context=effective_profile_context",
+            "effective_profile_context,",
+            SOURCE,
+        )
+        self.assertIn(
+            "memory_context=request_memory_context",
             SOURCE,
         )
 

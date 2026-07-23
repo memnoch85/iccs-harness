@@ -44,7 +44,11 @@ class NanceeChatPatchContractTests(unittest.TestCase):
 
     def test_effective_profile_context_is_used(self):
         self.assertIn(
-            "memory_context=effective_profile_context",
+            "effective_profile_context,",
+            SOURCE,
+        )
+        self.assertIn(
+            "memory_context=request_memory_context",
             SOURCE,
         )
 

@@ -71,6 +71,11 @@ from response_policy import response_policy_for_route
 from session_archive import SessionArchive
 from session_memory_store import filter_memory_hits_by_overlap
 from short_term_memory import ShortTermMemory
+from speaker_state import (
+    SpeakerState,
+    direct_speaker_identity_response,
+    direct_speaker_return_response,
+)
 from tts_chunking import (
     extract_tts_chunk,
     is_filler_preface,
@@ -1103,6 +1108,28 @@ def main():
 
     worker.start()
 
+    user_profile = UserProfile.load()
+    profile_index = ProfileFactIndex(
+        user_profile.facts,
+    )
+    speaker_state = SpeakerState(
+        primary_name=user_profile.facts.get("name"),
+    )
+
+    print(
+        "[USER PROFILE INDEX] "
+        f"loaded={not user_profile.is_empty()} "
+        f"facts={profile_index.count()}",
+        flush=True,
+    )
+
+    print(
+        "[SPEAKER STATE] "
+        f"current={speaker_state.current_name!r} "
+        "source=primary_profile",
+        flush=True,
+    )
+
     tpc = create_ollama_tpc()
 
     try:
@@ -1112,7 +1139,7 @@ def main():
 
         tpc.prime_now(
             history=[],
-            memory_context="",
+            memory_context=speaker_state.prompt_context(),
             reason="startup",
         )
 
@@ -1134,18 +1161,6 @@ def main():
 
     recall_memory = SessionArchive(
         max_turns=MEMORY_RECALL_TURN_LIMIT,
-    )
-
-    user_profile = UserProfile.load()
-    profile_index = ProfileFactIndex(
-        user_profile.facts,
-    )
-
-    print(
-        "[USER PROFILE INDEX] "
-        f"loaded={not user_profile.is_empty()} "
-        f"facts={profile_index.count()}",
-        flush=True,
     )
 
     print(
@@ -1175,6 +1190,36 @@ def main():
                         flush=True,
                     )
                     break
+
+                handoff_update = speaker_state.begin_turn()
+
+                if handoff_update.action != "unchanged":
+                    print(
+                        "[SPEAKER STATE] "
+                        f"action={handoff_update.action} "
+                        f"current={speaker_state.current_name!r}",
+                        flush=True,
+                    )
+
+                speaker_context_before_observation = (
+                    speaker_state.prompt_context()
+                )
+                speaker_update = speaker_state.observe(user_text)
+                active_speaker_context = speaker_state.prompt_context()
+                speaker_context_changed_for_request = (
+                    active_speaker_context
+                    != speaker_context_before_observation
+                )
+
+                if speaker_update.action != "unchanged":
+                    print(
+                        "[SPEAKER STATE] "
+                        f"action={speaker_update.action} "
+                        f"name={speaker_update.name!r} "
+                        f"current={speaker_state.current_name!r} "
+                        f"pending={speaker_state.pending_name!r}",
+                        flush=True,
+                    )
 
                 previous_turns = recent_prompt_memory.get_turns_snapshot()
                 previous_turn = previous_turns[-1] if previous_turns else None
@@ -1227,7 +1272,11 @@ def main():
                 effective_profile_context = ""
                 profile_hits = []
 
-                if USER_PROFILE_RETRIEVAL_ENABLED:
+                if (
+                    USER_PROFILE_RETRIEVAL_ENABLED
+                    and input_route.kind != "speaker"
+                    and input_route.kind != "speaker_return"
+                ):
                     (
                         effective_profile_context,
                         profile_hits,
@@ -1302,6 +1351,15 @@ def main():
                             "[USER FACT MISS] llm_answer=true",
                             flush=True,
                         )
+
+                request_memory_context = "\n\n".join(
+                    context
+                    for context in (
+                        active_speaker_context,
+                        effective_profile_context,
+                    )
+                    if str(context).strip()
+                )
 
                 authoritative_context_found = (
                     profile_context_found
@@ -1390,9 +1448,17 @@ def main():
                         flush=True,
                     )
 
+                    direct_speaker_route = response_policy.name in {
+                        "speaker",
+                        "speaker_return",
+                    }
+
                     bridge = LatencyBridge(
                         delay_seconds=bridge_delay_seconds,
-                        enabled=LATENCY_BRIDGE_ENABLED,
+                        enabled=(
+                            LATENCY_BRIDGE_ENABLED
+                            and not direct_speaker_route
+                        ),
                         on_fire=play_latency_bridge,
                     )
 
@@ -1412,23 +1478,62 @@ def main():
                     require_exact_tpc_prefix = (
                         request_history == live_history
                         and not effective_profile_context.strip()
+                        and not speaker_context_changed_for_request
                     )
 
                     completion_state = {}
+                    handled_directly = False
 
-                    response = tpc.stream_response(
-                        user_text=user_text,
-                        history=request_history,
-                        memory_context=effective_profile_context,
-                        require_exact_prefix=require_exact_tpc_prefix,
-                        retrieved_context=retrieved_context,
-                        response_instruction=(response_policy.instruction),
-                        temperature=response_policy.temperature,
-                        num_predict=response_policy.num_predict,
-                        completion_state=completion_state,
-                    )
+                    if response_policy.name == "speaker_return":
+                        assistant_text = direct_speaker_return_response()
+                        handled_directly = True
 
-                    if authoritative_response_required:
+                        print(
+                            "[SPEAKER DIRECT RESPONSE] "
+                            "kind=return "
+                            f"current={speaker_state.current_name!r} "
+                            f"output={assistant_text!r}",
+                            flush=True,
+                        )
+
+                        enqueue_complete_response(
+                            assistant_text,
+                            first_audio_callback=bridge.resolve,
+                        )
+                    elif response_policy.name == "speaker":
+                        assistant_text = direct_speaker_identity_response(
+                            speaker_state.current_name,
+                        )
+                        handled_directly = True
+
+                        print(
+                            "[SPEAKER DIRECT RESPONSE] "
+                            "kind=identity "
+                            f"current={speaker_state.current_name!r} "
+                            f"output={assistant_text!r}",
+                            flush=True,
+                        )
+
+                        enqueue_complete_response(
+                            assistant_text,
+                            first_audio_callback=bridge.resolve,
+                        )
+                    else:
+                        response = tpc.stream_response(
+                            user_text=user_text,
+                            history=request_history,
+                            memory_context=request_memory_context,
+                            require_exact_prefix=require_exact_tpc_prefix,
+                            retrieved_context=retrieved_context,
+                            response_instruction=(response_policy.instruction),
+                            temperature=response_policy.temperature,
+                            num_predict=response_policy.num_predict,
+                            completion_state=completion_state,
+                        )
+
+                    if handled_directly:
+                        pass
+                    elif authoritative_response_required:
                         # Fact-backed answers are collected before speech so a
                         # small-model contradiction cannot enter TTS or history.
                         assistant_text = collect_text_response(
@@ -1583,7 +1688,7 @@ def main():
 
                     tpc.prime_async(
                         history=recent_prompt_memory.get_messages(),
-                        memory_context="",
+                        memory_context=speaker_state.prompt_context(),
                         reason="request_recovery",
                     )
 
@@ -1603,7 +1708,7 @@ def main():
 
                     tpc.prime_async(
                         history=recent_prompt_memory.get_messages(),
-                        memory_context="",
+                        memory_context=speaker_state.prompt_context(),
                         reason="empty_response_recovery",
                     )
                     continue
@@ -1677,9 +1782,16 @@ def main():
 
                 text_queue.join()
 
+                # Direct speaker responses bypass tpc.stream_response(), so the
+                # previous turn's background prime may still be registered even
+                # after its worker has finished. Consume that result before
+                # scheduling the new completed-turn prefix. For ordinary LLM
+                # turns this is a no-op because stream_response() already waited.
+                tpc.wait_until_ready()
+
                 tpc.prime_async(
                     history=recent_prompt_memory.get_messages(),
-                    memory_context="",
+                    memory_context=speaker_state.next_prompt_context(),
                     reason="completed_turn",
                 )
 

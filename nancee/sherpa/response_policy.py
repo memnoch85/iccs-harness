@@ -36,6 +36,32 @@ def response_policy_for_route(
     fact_miss: bool = False,
 ) -> ResponsePolicy:
     """Map one already-selected input route to generation settings."""
+    if route_kind == "speaker_return":
+        return ResponsePolicy(
+            name="speaker_return",
+            temperature=RESPONSE_ACK_TEMPERATURE,
+            num_predict=RESPONSE_ACK_NUM_PREDICT,
+            instruction=(
+                "The primary speaker has returned. Welcome them back naturally "
+                "in one short sentence, then stop. Do not mention memory, prior "
+                "conversation, uncertainty, or ask a question."
+            ),
+            drop_history=False,
+        )
+
+    if route_kind == "speaker":
+        return ResponsePolicy(
+            name="speaker",
+            temperature=RESPONSE_RECALL_TEMPERATURE,
+            num_predict=RESPONSE_RECALL_NUM_PREDICT,
+            instruction=(
+                "Answer who is currently speaking in one short sentence. "
+                "Use only the supplied ACTIVE SPEAKER session state. "
+                "Do not substitute the primary user's profile identity."
+            ),
+            drop_history=False,
+        )
+
     if authoritative_context_found or fact_miss or route_kind == "recall":
         return ResponsePolicy(
             name="recall",
