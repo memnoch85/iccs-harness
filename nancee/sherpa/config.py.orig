@@ -90,85 +90,6 @@ if USER_PROFILE_RETRIEVAL_LIMIT <= 0:
     raise ValueError("USER_PROFILE_RETRIEVAL_LIMIT must be positive.")
 
 
-# NANCEE ASR RUNTIME CONFIG v1 START
-#
-# The benchmark winner is Faster-Whisper Base.en using INT8 on four CPU
-# threads. These values may be overridden with NANCEE_* environment variables.
-ASR_BACKEND = os.getenv(
-    "NANCEE_ASR_BACKEND",
-    "faster_whisper",
-).strip().lower()
-
-if ASR_BACKEND not in {
-    "faster_whisper",
-    "hf_direct",
-}:
-    raise ValueError(
-        "NANCEE_ASR_BACKEND must be "
-        "'faster_whisper' or 'hf_direct'."
-    )
-
-# The two backends use different model identifiers.
-_default_asr_model = (
-    "base.en"
-    if ASR_BACKEND == "faster_whisper"
-    else "openai/whisper-base.en"
-)
-
-ASR_MODEL = os.getenv(
-    "NANCEE_ASR_MODEL",
-    _default_asr_model,
-).strip()
-
-ASR_COMPUTE_TYPE = os.getenv(
-    "NANCEE_ASR_COMPUTE_TYPE",
-    "int8",
-).strip().lower()
-
-ASR_THREADS = int(
-    os.getenv(
-        "NANCEE_ASR_THREADS",
-        "4",
-    )
-)
-
-ASR_BEAM_SIZE = int(
-    os.getenv(
-        "NANCEE_ASR_BEAM_SIZE",
-        "1",
-    )
-)
-
-ASR_VAD_FILTER = (
-    os.getenv(
-        "NANCEE_ASR_VAD_FILTER",
-        "false",
-    ).lower()
-    == "true"
-)
-
-ASR_SAMPLE_RATE = int(
-    os.getenv(
-        "NANCEE_ASR_SAMPLE_RATE",
-        "16000",
-    )
-)
-
-if not ASR_MODEL:
-    raise ValueError("NANCEE_ASR_MODEL cannot be empty.")
-
-if ASR_THREADS <= 0:
-    raise ValueError("NANCEE_ASR_THREADS must be positive.")
-
-if ASR_BEAM_SIZE <= 0:
-    raise ValueError("NANCEE_ASR_BEAM_SIZE must be positive.")
-
-if ASR_SAMPLE_RATE <= 0:
-    raise ValueError("NANCEE_ASR_SAMPLE_RATE must be positive.")
-
-# NANCEE ASR RUNTIME CONFIG v1 END
-
-
 # Sherpa/Kokoro configuration
 SHERPA_DIRECTORY = Path(__file__).resolve().parent
 
@@ -354,34 +275,10 @@ LATENCY_BRIDGE_ENABLED = (
     == "true"
 )
 
-LATENCY_BRIDGE_ASR_SECONDS = float(
-    os.getenv(
-        "NANCEE_LATENCY_BRIDGE_ASR_SECONDS",
-        "7.0",
-    )
-)
-
-LATENCY_BRIDGE_ASR_PHRASES = tuple(
-    phrase.strip()
-    for phrase in os.getenv(
-        "NANCEE_LATENCY_BRIDGE_ASR_PHRASES",
-        "Umm, one moment please...|So, just one second...",
-    ).split("|")
-    if phrase.strip()
-)
-
-LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN = (
-    os.getenv(
-        "NANCEE_LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN",
-        "true",
-    ).lower()
-    == "true"
-)
-
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
-        "4.5",
+        "4.7",
     )
 )
 
@@ -399,12 +296,6 @@ LATENCY_BRIDGE_RECALL_SECONDS = float(
 
     )
 )
-
-if LATENCY_BRIDGE_ASR_SECONDS <= 0:
-    raise ValueError("LATENCY_BRIDGE_ASR_SECONDS must be greater than zero.")
-
-if not LATENCY_BRIDGE_ASR_PHRASES:
-    raise ValueError("LATENCY_BRIDGE_ASR_PHRASES must contain at least one phrase.")
 
 if LATENCY_BRIDGE_GREETING_SECONDS <= 0:
     raise ValueError("LATENCY_BRIDGE_GREETING_SECONDS must be greater than zero.")

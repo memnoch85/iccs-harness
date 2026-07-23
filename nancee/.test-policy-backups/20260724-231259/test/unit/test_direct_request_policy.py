@@ -37,6 +37,11 @@ class DirectRequestPolicyTests(unittest.TestCase):
                 self.assertEqual("directive", route.kind)
                 self.assertEqual("directive", policy.name)
                 self.assertFalse(policy.drop_history)
+                self.assertIn(
+                    "Preserve nouns, articles, and ownership",
+                    policy.instruction,
+                )
+
     def test_actual_personal_update_still_acknowledges(self):
         route = route_user_input("I finished wiring the power board today.")
         policy = response_policy_for_route(route.kind)

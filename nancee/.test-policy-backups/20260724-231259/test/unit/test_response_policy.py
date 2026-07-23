@@ -51,14 +51,14 @@ class ResponsePolicyTests(unittest.TestCase):
         policy = self.policy_for("Hardly drive.")
         self.assertEqual("clarify", policy.name)
 
-    def test_recall_route_selects_recall_policy(self):
+    def test_recall_instruction_forbids_inference(self):
         policy = self.policy_for(
             "What did I buy yesterday?",
             authoritative_context_found=True,
         )
         self.assertEqual("recall", policy.name)
-        self.assertEqual("recall", policy.name)
-        self.assertFalse(policy.drop_history)
-        self.assertTrue(policy.instruction.strip())
+        self.assertIn("Never infer", policy.instruction)
+
+
 if __name__ == "__main__":
     unittest.main()

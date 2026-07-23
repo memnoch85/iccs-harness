@@ -16,6 +16,9 @@ from pathlib import Path
 from authoritative_response import prepare_authoritative_response
 from config import (
     BLOCKSIZE,
+    LATENCY_BRIDGE_ASR_PHRASES,
+    LATENCY_BRIDGE_ASR_SECONDS,
+    LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN,
     LATENCY_BRIDGE_ENABLED,
     LATENCY_BRIDGE_GREETING_PHRASES,
     LATENCY_BRIDGE_GREETING_SECONDS,
@@ -108,6 +111,7 @@ asr_process = None
 class SpokenUserInput:
     text: str
     stopped_at: float | None
+    bridge: LatencyBridge | None = None
 
 
 def retrieve_session_context(recall_memory, user_text, allow_weak_match=False):
@@ -331,7 +335,11 @@ def play_asr_ready_tone(sample_rate):
     wait_for_audio_to_drain()
 
 
-def get_spoken_user_input(output_sample_rate):
+def get_spoken_user_input(
+    output_sample_rate,
+    *,
+    bridge_factory=None,
+):
     start_asr_worker()
 
     input("\nPress Enter to begin speaking...")
@@ -372,6 +380,11 @@ def get_spoken_user_input(output_sample_rate):
     input("Recording... Press Enter to stop.\n")
 
     stop_requested_at = time.perf_counter()
+    turn_bridge = (
+        bridge_factory(stop_requested_at)
+        if bridge_factory is not None
+        else None
+    )
 
     print(
         "[ASR] recording_stopped=true transcribing=true",
@@ -380,7 +393,12 @@ def get_spoken_user_input(output_sample_rate):
 
     send_asr_command("STOP")
 
-    message = read_asr_message()
+    try:
+        message = read_asr_message()
+    except KeyboardInterrupt:
+        if turn_bridge is not None:
+            turn_bridge.resolve()
+        raise
     stop_to_result_seconds = time.perf_counter() - stop_requested_at
 
     if message.get("type") == "error":
@@ -388,14 +406,14 @@ def get_spoken_user_input(output_sample_rate):
             f"[ASR ERROR] {message.get('message')}",
             flush=True,
         )
-        return SpokenUserInput("", stop_requested_at)
+        return SpokenUserInput("", stop_requested_at, turn_bridge)
 
     if message.get("type") != "result":
         print(
             f"[ASR ERROR] Unexpected response: {message}",
             flush=True,
         )
-        return SpokenUserInput("", stop_requested_at)
+        return SpokenUserInput("", stop_requested_at, turn_bridge)
 
     print(
         f"[ASR] captured="
@@ -411,6 +429,7 @@ def get_spoken_user_input(output_sample_rate):
     return SpokenUserInput(
         str(message.get("text", "")).strip(),
         stop_requested_at,
+        turn_bridge,
     )
 
 
@@ -1036,6 +1055,61 @@ def main():
     )
 
     tts = build_tts()
+
+    # NANCEE STOP-TIME ASR BRIDGE v4.3
+    # Generate neutral bridge audio once. The timer may fire while Whisper is
+    # transcribing, so its callback must only enqueue pre-generated samples.
+    asr_bridge_audio_options = [
+        (
+            phrase,
+            *generate_bridge_audio(
+                tts,
+                phrase,
+            ),
+        )
+        for phrase in LATENCY_BRIDGE_ASR_PHRASES
+    ]
+
+    random.shuffle(asr_bridge_audio_options)
+    asr_bridge_audio_cycle = itertools.cycle(
+        asr_bridge_audio_options
+    )
+
+    def start_asr_latency_bridge(stopped_at):
+        (
+            phrase,
+            samples,
+            sample_rate,
+        ) = next(asr_bridge_audio_cycle)
+
+        def play_asr_latency_bridge():
+            print(
+                f"\n[LATENCY BRIDGE] fired phase=asr phrase={phrase!r}",
+                flush=True,
+            )
+
+            enqueue_audio(
+                samples.copy(),
+                sample_rate,
+            )
+
+        turn_bridge = LatencyBridge(
+            delay_seconds=LATENCY_BRIDGE_ASR_SECONDS,
+            enabled=LATENCY_BRIDGE_ENABLED,
+            on_fire=play_asr_latency_bridge,
+        )
+        turn_bridge.start()
+
+        print(
+            "[LATENCY BRIDGE] armed phase=asr "
+            f"target={LATENCY_BRIDGE_ASR_SECONDS:.3f}s "
+            f"stopped_at={stopped_at:.6f} "
+            f"phrase={phrase!r}",
+            flush=True,
+        )
+
+        return turn_bridge
+
     bridge_audio_options = [
         (
             phrase,
@@ -1085,6 +1159,7 @@ def main():
     print(
         "[LATENCY BRIDGE] "
         f"enabled={LATENCY_BRIDGE_ENABLED} "
+        f"asr_stop_threshold={LATENCY_BRIDGE_ASR_SECONDS:.3f}s "
         f"greeting_threshold="
         f"{LATENCY_BRIDGE_GREETING_SECONDS:.3f}s "
         f"normal_threshold={LATENCY_BRIDGE_NORMAL_SECONDS:.3f}s "
@@ -1178,11 +1253,31 @@ def main():
         ):
             while True:
                 try:
+                    # NANCEE ASR BRIDGE INITIAL-TURN GATE v4.3.1c
+                    # The route is unknown until Whisper returns. Skip the
+                    # pre-transcription bridge on the initial user turn so the
+                    # greeting route can use its own phrase set and threshold.
+                    is_initial_turn = not recent_prompt_memory.get_messages()
+                    asr_bridge_factory = start_asr_latency_bridge
+
+                    if (
+                        LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN
+                        and is_initial_turn
+                    ):
+                        asr_bridge_factory = None
+                        print(
+                            "[LATENCY BRIDGE] skipped phase=asr "
+                            "reason=initial_turn",
+                            flush=True,
+                        )
+
                     spoken_input = get_spoken_user_input(
                         tts.sample_rate,
+                        bridge_factory=asr_bridge_factory,
                     )
                     user_text = spoken_input.text
                     recording_stopped_at = spoken_input.stopped_at
+                    bridge = spoken_input.bridge
 
                 except KeyboardInterrupt:
                     print(
@@ -1230,6 +1325,9 @@ def main():
                 )
 
                 if input_route.kind == "invalid":
+                    if bridge is not None:
+                        bridge.resolve()
+
                     print(
                         "[INPUT ROUTE] "
                         f"kind=invalid reason={input_route.reason}",
@@ -1254,6 +1352,8 @@ def main():
                 )
 
                 if input_route.kind == "exit":
+                    if bridge is not None:
+                        bridge.resolve()
                     break
 
                 global_start = time.time()
@@ -1400,7 +1500,8 @@ def main():
                     end="",
                     flush=True,
                 )
-                bridge = None
+                # The first bridge was armed at the recording-stop event and
+                # may already have spoken while Whisper was transcribing.
 
                 if response_policy.name == "greeting":
                     selected_bridge_audio_cycle = greeting_bridge_audio_cycle
@@ -1415,7 +1516,7 @@ def main():
 
                 def play_latency_bridge():
                     print(
-                        f"\n[LATENCY BRIDGE] fired phrase={bridge_phrase!r}",
+                        f"\n[LATENCY BRIDGE] fired phase=route phrase={bridge_phrase!r}",
                         flush=True,
                     )
 
@@ -1441,7 +1542,7 @@ def main():
                     )
 
                     print(
-                        "[LATENCY BRIDGE DEADLINE] "
+                        "[LATENCY BRIDGE DEADLINE] phase=route "
                         f"target={bridge_target_seconds:.3f}s "
                         f"elapsed_since_stop={bridge_elapsed_seconds:.3f}s "
                         f"remaining={bridge_delay_seconds:.3f}s",
@@ -1453,16 +1554,36 @@ def main():
                         "speaker_return",
                     }
 
-                    bridge = LatencyBridge(
-                        delay_seconds=bridge_delay_seconds,
-                        enabled=(
-                            LATENCY_BRIDGE_ENABLED
-                            and not direct_speaker_route
-                        ),
-                        on_fire=play_latency_bridge,
+                    asr_bridge_fired = (
+                        bridge.resolve()
+                        if bridge is not None
+                        else False
                     )
 
-                    bridge.start()
+                    if asr_bridge_fired:
+                        print(
+                            "[LATENCY BRIDGE HANDOFF] "
+                            "asr_fired=true route_bridge_armed=false",
+                            flush=True,
+                        )
+                    else:
+                        bridge = LatencyBridge(
+                            delay_seconds=bridge_delay_seconds,
+                            enabled=(
+                                LATENCY_BRIDGE_ENABLED
+                                and not direct_speaker_route
+                            ),
+                            on_fire=play_latency_bridge,
+                        )
+
+                        bridge.start()
+
+                        print(
+                            "[LATENCY BRIDGE HANDOFF] "
+                            "asr_fired=false route_bridge_armed="
+                            f"{str(LATENCY_BRIDGE_ENABLED and not direct_speaker_route).lower()}",
+                            flush=True,
+                        )
 
                     if input_route.force_keep_history:
                         request_history = recent_prompt_memory.get_messages()

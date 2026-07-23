@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import os
 
-# NANCEE runs Whisper from the local Hugging Face cache.
-# Do not contact Hugging Face Hub during normal vehicle startup.
+# NANCEE runs Whisper from the local HF cache.
+# Do not contact Hugging Face Hub during startup.
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
@@ -20,17 +20,12 @@ from typing import Optional
 
 import numpy as np
 import sounddevice as sd
+from transformers.utils import logging as transformers_logging
 
 from transcribe import (
-    ASR_BEAM_SIZE,
-    ASR_COMPUTE_TYPE,
-    ASR_THREADS,
-    ASR_VAD_FILTER,
-    DEFAULT_BACKEND,
     DEFAULT_MODEL,
     DEFAULT_SAMPLE_RATE,
     WhisperTranscriber,
-    configure_backend_logging,
 )
 
 
@@ -122,6 +117,7 @@ class PersistentRecorder:
 
 def send_message(**message: object) -> None:
     """Send one JSON message to nancee_chat.py."""
+
     print(
         json.dumps(message),
         flush=True,
@@ -129,30 +125,21 @@ def send_message(**message: object) -> None:
 
 
 def main() -> int:
-    configure_backend_logging()
+    transformers_logging.set_verbosity_error()
 
     print(
-        "[ASR] Loading Whisper once: "
-        f"backend={DEFAULT_BACKEND} "
-        f"model={DEFAULT_MODEL} "
-        f"compute_type={ASR_COMPUTE_TYPE} "
-        f"threads={ASR_THREADS} "
-        f"beam_size={ASR_BEAM_SIZE} "
-        f"vad_filter={str(ASR_VAD_FILTER).lower()}",
+        f"[ASR] Loading Whisper once: {DEFAULT_MODEL}",
         file=sys.stderr,
         flush=True,
     )
 
-    # Keep stdout as a clean JSON communication channel for nancee_chat.py.
+    # WhisperTranscriber currently writes status messages to stdout.
+    # Redirect those messages to stderr so stdout stays a clean JSON
+    # communication channel for nancee_chat.py.
     with redirect_stdout(sys.stderr):
         transcriber = WhisperTranscriber(
             model_name=DEFAULT_MODEL,
             sample_rate=DEFAULT_SAMPLE_RATE,
-            backend=DEFAULT_BACKEND,
-            compute_type=ASR_COMPUTE_TYPE,
-            cpu_threads=ASR_THREADS,
-            beam_size=ASR_BEAM_SIZE,
-            vad_filter=ASR_VAD_FILTER,
         )
 
     recorder = PersistentRecorder(
@@ -165,7 +152,9 @@ def main() -> int:
         flush=True,
     )
 
-    send_message(type="ready")
+    send_message(
+        type="ready",
+    )
 
     try:
         for raw_command in sys.stdin:
@@ -174,7 +163,11 @@ def main() -> int:
             if command == "START":
                 try:
                     recorder.start()
-                    send_message(type="started")
+
+                    send_message(
+                        type="started",
+                    )
+
                 except Exception as exc:
                     send_message(
                         type="error",
@@ -184,7 +177,11 @@ def main() -> int:
             elif command == "CLEAR":
                 try:
                     recorder.clear()
-                    send_message(type="cleared")
+
+                    send_message(
+                        type="cleared",
+                    )
+
                 except Exception as exc:
                     send_message(
                         type="error",
@@ -205,12 +202,23 @@ def main() -> int:
                         )
                         continue
 
-                    duration = audio.size / DEFAULT_SAMPLE_RATE
-                    peak = float(np.max(np.abs(audio)))
+                    duration = (
+                        audio.size / DEFAULT_SAMPLE_RATE
+                    )
+
+                    peak = float(
+                        np.max(np.abs(audio))
+                    )
+
                     started_at = time.perf_counter()
-                    text = transcriber.transcribe(audio)
+
+                    text = transcriber.transcribe(
+                        audio
+                    )
+
                     transcription_seconds = (
-                        time.perf_counter() - started_at
+                        time.perf_counter()
+                        - started_at
                     )
 
                     send_message(
@@ -223,6 +231,7 @@ def main() -> int:
 
                 except Exception as exc:
                     recorder.close()
+
                     send_message(
                         type="error",
                         message=str(exc),
@@ -230,7 +239,11 @@ def main() -> int:
 
             elif command == "QUIT":
                 recorder.close()
-                send_message(type="stopped")
+
+                send_message(
+                    type="stopped",
+                )
+
                 return 0
 
             else:
@@ -241,6 +254,7 @@ def main() -> int:
 
     except KeyboardInterrupt:
         pass
+
     finally:
         recorder.close()
 

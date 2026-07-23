@@ -14,6 +14,15 @@ class DirectedRequestPolicyTests(unittest.TestCase):
         self.assertEqual("directive", route.kind)
         self.assertEqual("directive", policy.name)
         self.assertFalse(policy.drop_history)
+        self.assertIn(
+            "Preserve nouns, articles, and ownership",
+            policy.instruction,
+        )
+        self.assertIn(
+            "For ask-me commands, output only the question.",
+            policy.instruction,
+        )
+
     def test_direct_ask_request(self):
         self.assert_directive(
             "Ask me whether I finished wiring the power board."
