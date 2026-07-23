@@ -8,6 +8,12 @@ _TEMPORAL_PREFIX = (
 )
 
 
+_QUOTED_USER_MEMORY_ECHO = re.compile(
+    r'''^\s*(?:you\s+(?:said|told\s+me))\s*[:,-]?\s*[\"“](?P<quote>.+?)[\"”]\s*[.!?]*\s*$''',
+    flags=re.IGNORECASE | re.DOTALL,
+)
+
+
 _NANCEE_FIRST_PERSON_PREFIX = re.compile(
     rf"""
     ^\s*
@@ -109,8 +115,20 @@ def repair_recall_perspective(
     if not text:
         return text, False
 
+    # Small models sometimes echo the raw first-person memory instead of
+    # answering the user directly:
+    #
+    #     You said "I did finish wiring the power board."
+    #
+    # Strip only this narrow wrapper, then let the normal I/my -> you/your
+    # repair below convert the quoted human-user fact.
+    quoted_memory = _QUOTED_USER_MEMORY_ECHO.fullmatch(text)
+
+    if quoted_memory is not None:
+        text = quoted_memory.group("quote").strip()
+
     if _NANCEE_FIRST_PERSON_PREFIX.match(text):
-        return text, False
+        return text, text != original
 
     # "Actually, it was me who bought..."
     text = re.sub(

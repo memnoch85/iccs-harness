@@ -257,7 +257,7 @@ def load_system_prompt():
 
 # Memory debug logging.
 # Enable with:
-#   export NANCEE_MEMORY_DEBUG=true
+#export NANCEE_MEMORY_DEBUG=true
 MEMORY_DEBUG_ENABLED = (
     os.getenv(
         "NANCEE_MEMORY_DEBUG",
@@ -278,14 +278,14 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
-        "4.5",
+        "4.0",
     )
 )
 
 LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
-        "5.0",
+        "4.5",
     )
 )
 
@@ -293,6 +293,7 @@ LATENCY_BRIDGE_RECALL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_RECALL_SECONDS",
         "4.5",
+
     )
 )
 

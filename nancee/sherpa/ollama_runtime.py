@@ -462,11 +462,20 @@ def stream_ollama_response(
     num_predict=None,
     completion_state=None,
 ):
+    request_started = time.perf_counter()
+    first_token_seconds = None
+
     if completion_state is not None:
         completion_state.clear()
         completion_state.update(
             done_reason="",
             response_tokens=0,
+            first_token_seconds=None,
+            total_seconds=None,
+            load_seconds=0.0,
+            prompt_eval_seconds=0.0,
+            generation_seconds=0.0,
+            prompt_tokens=0,
         )
 
     messages = build_ollama_messages(
@@ -579,9 +588,25 @@ def stream_ollama_response(
                 token = data.get("message", {}).get("content", "")
 
                 if token:
+                    if first_token_seconds is None:
+                        first_token_seconds = (
+                            time.perf_counter()
+                            - request_started
+                        )
+
+                        if completion_state is not None:
+                            completion_state["first_token_seconds"] = (
+                                first_token_seconds
+                            )
+
                     yield token
 
                 if data.get("done"):
+                    request_total_seconds = (
+                        time.perf_counter()
+                        - request_started
+                    )
+
                     if completion_state is not None:
                         completion_state.update(
                             done_reason=data.get(
@@ -590,6 +615,23 @@ def stream_ollama_response(
                             ),
                             response_tokens=data.get(
                                 "eval_count",
+                                0,
+                            ),
+                            total_seconds=request_total_seconds,
+                            load_seconds=duration_seconds(
+                                data,
+                                "load_duration",
+                            ),
+                            prompt_eval_seconds=duration_seconds(
+                                data,
+                                "prompt_eval_duration",
+                            ),
+                            generation_seconds=duration_seconds(
+                                data,
+                                "eval_duration",
+                            ),
+                            prompt_tokens=data.get(
+                                "prompt_eval_count",
                                 0,
                             ),
                         )
