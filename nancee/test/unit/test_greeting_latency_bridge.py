@@ -23,22 +23,16 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
         self.assertEqual(
             LATENCY_BRIDGE_GREETING_PHRASES,
             (
-                "Oh hey, umm...",
-                "What's up, humm...",
-                "Oh hi, umm...",
-                "Hey there, umm...",
-                "Hi, umm...",
-                "Hey, humm...",
+                "So umm...",
+                "humm...",
                 "Oh hey...",
-                "Oh hi there...",
-                "Umm...",
-                "Humm...",
+                "Oh hey again..."
             ),
         )
 
     def test_greeting_phrases_are_one_to_four_words(self):
         self.assertEqual(
-            10,
+            4,
             len(LATENCY_BRIDGE_GREETING_PHRASES),
         )
 

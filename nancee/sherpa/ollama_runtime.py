@@ -22,7 +22,8 @@ from config import (
     OLLAMA_WARMUP_TIMEOUT,
     load_system_prompt,
 )
-from prompt_identity import log_prompt_identity
+from prompt_identity import json_sha256, log_prompt_identity
+from tenacious_prefix_cache import TenaciousPrefixCache
 from warmup_contract import (
     CONTEXT_PRIME_USER_TEXT,
     WARMUP_STATE_FILE,
@@ -68,6 +69,19 @@ def build_ollama_prefix_messages(
     messages.extend(history)
 
     return messages
+
+
+def ollama_prefix_sha256(
+    *,
+    history=None,
+    memory_context="",
+):
+    return json_sha256(
+        build_ollama_prefix_messages(
+            history=history,
+            memory_context=memory_context,
+        )
+    )
 
 
 def build_ollama_messages(
@@ -601,3 +615,11 @@ def stream_ollama_response(
                         flush=True,
                     )
                     break
+
+def create_ollama_tpc():
+    return TenaciousPrefixCache(
+        prime_function=prime_ollama_context,
+        request_function=stream_ollama_response,
+        prefix_fingerprint_function=ollama_prefix_sha256,
+    )
+

@@ -118,7 +118,7 @@ SPEED = float(
 TTS_GREETING_BRIDGE_SPEED = float(
     os.getenv(
         "NANCEE_TTS_GREETING_BRIDGE_SPEED",
-        "1.0",
+        "1.1",
     )
 )
 
@@ -278,7 +278,7 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
-        "3.0",
+        "5.5",
     )
 )
 
@@ -292,7 +292,7 @@ LATENCY_BRIDGE_NORMAL_SECONDS = float(
 LATENCY_BRIDGE_RECALL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_RECALL_SECONDS",
-        "4.5",
+        "5.2",
     )
 )
 
@@ -314,16 +314,10 @@ LATENCY_BRIDGE_PHRASES = (
 )
 
 LATENCY_BRIDGE_GREETING_PHRASES = (
-    "Oh hey, umm...",
-    "What's up, humm...",
-    "Oh hi, umm...",
-    "Hey there, umm...",
-    "Hi, umm...",
-    "Hey, humm...",
-    "Oh hey...",
-    "Oh hi there...",
-    "Umm...",
-    "Humm...",
+    "umm...",
+    "humm...",
+    "So...",
+    "One second..."
 )
 
 for phrase in LATENCY_BRIDGE_GREETING_PHRASES:
