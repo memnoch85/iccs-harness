@@ -7,12 +7,14 @@ import subprocess
 import threading
 import time
 import urllib.error
+from collections import deque
+from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
+
 import numpy as np
 import sherpa_onnx
 import sounddevice as sd
-from collections import deque
-from dataclasses import dataclass
-from pathlib import Path
 from authoritative_response import prepare_authoritative_response
 from config import (
     BLOCKSIZE,
@@ -86,7 +88,6 @@ from tts_chunking import (
 )
 from tts_request import build_tts_request
 from user_profile import UserProfile
-
 
 #global fields
 text_queue = queue.Queue()
@@ -197,7 +198,7 @@ def print_memory_status(recent_prompt_memory, recall_memory, phase):
                     len(str(row.get("raw_text", "")))
                     for row in recall_memory.store.debug_dump()
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001
             recall_characters = 0
 
     print(
@@ -380,6 +381,13 @@ def get_spoken_user_input(
     input("Recording... Press Enter to stop.\n")
 
     stop_requested_at = time.perf_counter()
+
+    print(
+        "[LATENCY CLOCK] "
+        "event=recording_stop "
+        f"timestamp={stop_requested_at:.6f}",
+        flush=True,
+    )
     turn_bridge = (
         bridge_factory(stop_requested_at)
         if bridge_factory is not None
@@ -495,6 +503,37 @@ def enqueue_audio(samples, sample_rate):
             first_audio_enqueued = True
 
         audio_chunks.append(samples)
+
+
+def fire_route_latency_bridge(
+    *,
+    stopped_at,
+    deadline,
+    phase,
+    phrase,
+    samples,
+    sample_rate,
+    target_seconds,
+):
+    fired_at = time.perf_counter()
+    elapsed_since_stop = fired_at - stopped_at
+    deadline_error = fired_at - deadline
+
+    print(
+        "\n[LATENCY BRIDGE FIRE] "
+        f"phase={phase} "
+        f"phrase={phrase!r} "
+        f"fired_at={fired_at:.6f} "
+        f"elapsed_since_stop={elapsed_since_stop:.3f}s "
+        f"target={target_seconds:.3f}s "
+        f"deadline_error={deadline_error:+.3f}s",
+        flush=True,
+    )
+
+    enqueue_audio(
+        samples.copy(),
+        sample_rate,
+    )
 
 
 def output_callback(
@@ -757,7 +796,7 @@ def tts_worker(tts):
                 flush=True,
             )
 
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001
             print(
                 f"[TTS ERROR] {error!r}",
                 flush=True,
@@ -1082,9 +1121,23 @@ def main():
             sample_rate,
         ) = next(asr_bridge_audio_cycle)
 
+        logical_deadline = (
+            stopped_at
+            + LATENCY_BRIDGE_ASR_SECONDS
+        )
+
         def play_asr_latency_bridge():
+            fired_at = time.perf_counter()
+            elapsed_since_stop = fired_at - stopped_at
+            deadline_error = fired_at - logical_deadline
+
             print(
-                f"\n[LATENCY BRIDGE] fired phase=asr phrase={phrase!r}",
+                "\n[LATENCY BRIDGE FIRE] "
+                "phase=asr "
+                f"phrase={phrase!r} "
+                f"fired_at={fired_at:.6f} "
+                f"elapsed_since_stop={elapsed_since_stop:.3f}s "
+                f"deadline_error={deadline_error:+.3f}s",
                 flush=True,
             )
 
@@ -1098,12 +1151,20 @@ def main():
             enabled=LATENCY_BRIDGE_ENABLED,
             on_fire=play_asr_latency_bridge,
         )
+
+        armed_at = time.perf_counter()
+        elapsed_before_arm = armed_at - stopped_at
+
         turn_bridge.start()
 
         print(
-            "[LATENCY BRIDGE] armed phase=asr "
-            f"target={LATENCY_BRIDGE_ASR_SECONDS:.3f}s "
-            f"stopped_at={stopped_at:.6f} "
+            "[LATENCY BRIDGE ARM] "
+            "phase=asr "
+            f"logical_start={stopped_at:.6f} "
+            f"physical_arm={armed_at:.6f} "
+            f"elapsed_before_arm={elapsed_before_arm:.3f}s "
+            f"delay_given={LATENCY_BRIDGE_ASR_SECONDS:.3f}s "
+            f"logical_deadline={logical_deadline:.6f} "
             f"phrase={phrase!r}",
             flush=True,
         )
@@ -1290,6 +1351,18 @@ def main():
                         flush=True,
                     )
                     break
+
+                if recording_stopped_at is None:
+                    if bridge is not None:
+                        bridge.resolve()
+
+                    print(
+                        "[LATENCY CLOCK] "
+                        "event=recording_stop_missing "
+                        "route_bridge_skipped=true",
+                        flush=True,
+                    )
+                    continue
 
                 handoff_update = speaker_state.begin_turn()
 
@@ -1519,17 +1592,6 @@ def main():
                     bridge_sample_rate,
                 ) = next(selected_bridge_audio_cycle)
 
-                def play_latency_bridge():
-                    print(
-                        f"\n[LATENCY BRIDGE] fired phase=route phrase={bridge_phrase!r}",
-                        flush=True,
-                    )
-
-                    enqueue_audio(
-                        bridge_samples.copy(),
-                        bridge_sample_rate,
-                    )
-
                 try:
                     if response_policy.name == "greeting":
                         bridge_target_seconds = LATENCY_BRIDGE_GREETING_SECONDS
@@ -1544,6 +1606,24 @@ def main():
                     ) = calculate_remaining_bridge_delay(
                         bridge_target_seconds,
                         started_at=recording_stopped_at,
+                    )
+                    logical_deadline = (
+                        recording_stopped_at
+                        + bridge_target_seconds
+                    )
+
+                    route_decided_at = time.perf_counter()
+
+                    print(
+                        "[LATENCY BRIDGE CLOCK] "
+                        f"phase={response_policy.name} "
+                        f"logical_start={recording_stopped_at:.6f} "
+                        f"route_decided_at={route_decided_at:.6f} "
+                        f"elapsed_since_stop={bridge_elapsed_seconds:.3f}s "
+                        f"target={bridge_target_seconds:.3f}s "
+                        f"remaining={bridge_delay_seconds:.3f}s "
+                        f"logical_deadline={logical_deadline:.6f}",
+                        flush=True,
                     )
 
                     print(
@@ -1572,13 +1652,38 @@ def main():
                             flush=True,
                         )
                     else:
+                        route_bridge_callback = partial(
+                            fire_route_latency_bridge,
+                            stopped_at=recording_stopped_at,
+                            deadline=logical_deadline,
+                            phase=response_policy.name,
+                            phrase=bridge_phrase,
+                            samples=bridge_samples,
+                            sample_rate=bridge_sample_rate,
+                            target_seconds=bridge_target_seconds,
+                        )
+
                         bridge = LatencyBridge(
                             delay_seconds=bridge_delay_seconds,
                             enabled=(
                                 LATENCY_BRIDGE_ENABLED
                                 and not direct_speaker_route
                             ),
-                            on_fire=play_latency_bridge,
+                            on_fire=route_bridge_callback,
+                        )
+
+                        physical_arm_at = time.perf_counter()
+
+                        print(
+                            "[LATENCY BRIDGE ARM] "
+                            f"phase={response_policy.name} "
+                            f"logical_start={recording_stopped_at:.6f} "
+                            f"physical_arm={physical_arm_at:.6f} "
+                            f"elapsed_before_arm="
+                            f"{physical_arm_at - recording_stopped_at:.3f}s "
+                            f"delay_given={bridge_delay_seconds:.3f}s "
+                            f"logical_deadline={logical_deadline:.6f}",
+                            flush=True,
                         )
 
                         bridge.start()

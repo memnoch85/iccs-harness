@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 _TEMPORAL_PREFIX = (
     r"(?:actually[, ]+|today[, ]+|yesterday[, ]+)?"
 )

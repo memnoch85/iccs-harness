@@ -357,7 +357,7 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_ASR_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_ASR_SECONDS",
-        "10.0",
+        "8.5",
     )
 )
 
@@ -388,7 +388,7 @@ LATENCY_BRIDGE_GREETING_SECONDS = float(
 LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
-        "7.2",
+        "5.5",
     )
 )
 
@@ -416,18 +416,17 @@ if LATENCY_BRIDGE_RECALL_SECONDS <= 0:
     raise ValueError("LATENCY_BRIDGE_RECALL_SECONDS must be greater than zero.")
 
 LATENCY_BRIDGE_PHRASES = (
-    "Let me check that,",
+    "Just one second please,",
     "Give me one moment,",
     "Let me think briefly,",
-    "Checking that for you,",
+    "Umm, one moment please,",
     "Hang on one moment,",
 )
 
 LATENCY_BRIDGE_GREETING_PHRASES = (
     "umm...",
     "humm...",
-    "So...",
-    "One second..."
+    "So..."
 )
 
 for phrase in LATENCY_BRIDGE_GREETING_PHRASES:

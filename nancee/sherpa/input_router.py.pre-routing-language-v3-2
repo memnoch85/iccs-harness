@@ -226,40 +226,6 @@ def _classification_text(user_text: str) -> str:
     return substantive or re.sub(r"\s+", " ", str(user_text).strip())
 
 
-_EXPLICIT_MEMORY_STORE_PATTERN = re.compile(
-    r"^(?:please\s+)?(?:"
-    r"remember\s+this(?:\s*:)?|"
-    r"remember(?:\s+that)?|"
-    r"don't\s+forget(?:\s+that)?|"
-    r"do\s+not\s+forget(?:\s+that)?"
-    r")\s+(?P<statement>.+?)\s*$",
-    flags=re.IGNORECASE,
-)
-
-
-def _extract_explicit_memory_store(user_text: str) -> str | None:
-    candidate = re.sub(
-        r"\s+",
-        " ",
-        str(user_text).strip(),
-    )
-    match = _EXPLICIT_MEMORY_STORE_PATTERN.fullmatch(candidate)
-
-    if match is None:
-        return None
-
-    statement = match.group("statement").strip()
-
-    if (
-        not statement
-        or statement.endswith("?")
-        or _word_count(statement) < 3
-    ):
-        return None
-
-    return statement
-
-
 def _resolve_contextual_memory(
     user_text: str,
     previous_turn: dict[str, str] | None,
@@ -316,7 +282,6 @@ def route_user_input(
     personal_fact_fragment = looks_like_personal_fact_fragment(raw_text)
     contextual_memory = _resolve_contextual_memory(raw_text, previous_turn)
     question_like = "?" in lowered or lowered.startswith(_QUESTION_PREFIXES)
-    explicit_memory_store = _extract_explicit_memory_store(raw_text)
 
     greeting_substantive, had_greeting_preface = (
         _strip_leading_greeting_preface(raw_text)
@@ -437,17 +402,6 @@ def route_user_input(
                 force_keep_history=True,
             )
         # End:: Checking perspective correction
-
-        # Begin:: Checking explicit memory storage command
-        case _ if explicit_memory_store is not None:
-            return InputRoute(
-                "acknowledge",
-                lowered,
-                reason="explicit_memory_store",
-                store_recall=True,
-                recall_storage_text=explicit_memory_store,
-            )
-        # End:: Checking explicit memory storage command
 
         # Begin:: Checking primary speaker return
         case _ if primary_speaker_return:

@@ -1,8 +1,8 @@
 import re
 import sqlite3
-from difflib import SequenceMatcher
 import time
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from typing import List, Optional
 
 STOPWORDS = {

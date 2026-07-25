@@ -4,7 +4,6 @@ import threading
 import time
 from collections.abc import Callable
 
-
 MINIMUM_BRIDGE_DELAY_SECONDS = 0.001
 
 
