@@ -18,9 +18,6 @@ import sounddevice as sd
 from authoritative_response import prepare_authoritative_response
 from config import (
     BLOCKSIZE,
-    LATENCY_BRIDGE_ASR_PHRASES,
-    LATENCY_BRIDGE_ASR_SECONDS,
-    LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN,
     LATENCY_BRIDGE_ENABLED,
     LATENCY_BRIDGE_GREETING_PHRASES,
     LATENCY_BRIDGE_GREETING_SECONDS,
@@ -112,7 +109,6 @@ asr_process = None
 class SpokenUserInput:
     text: str
     stopped_at: float | None
-    bridge: LatencyBridge | None = None
 
 
 def retrieve_session_context(recall_memory, user_text, allow_weak_match=False):
@@ -338,8 +334,6 @@ def play_asr_ready_tone(sample_rate):
 
 def get_spoken_user_input(
     output_sample_rate,
-    *,
-    bridge_factory=None,
 ):
     start_asr_worker()
 
@@ -388,12 +382,6 @@ def get_spoken_user_input(
         f"timestamp={stop_requested_at:.6f}",
         flush=True,
     )
-    turn_bridge = (
-        bridge_factory(stop_requested_at)
-        if bridge_factory is not None
-        else None
-    )
-
     print(
         "[ASR] recording_stopped=true transcribing=true",
         flush=True,
@@ -401,12 +389,7 @@ def get_spoken_user_input(
 
     send_asr_command("STOP")
 
-    try:
-        message = read_asr_message()
-    except KeyboardInterrupt:
-        if turn_bridge is not None:
-            turn_bridge.resolve()
-        raise
+    message = read_asr_message()
     stop_to_result_seconds = time.perf_counter() - stop_requested_at
 
     if message.get("type") == "error":
@@ -414,14 +397,14 @@ def get_spoken_user_input(
             f"[ASR ERROR] {message.get('message')}",
             flush=True,
         )
-        return SpokenUserInput("", stop_requested_at, turn_bridge)
+        return SpokenUserInput("", stop_requested_at)
 
     if message.get("type") != "result":
         print(
             f"[ASR ERROR] Unexpected response: {message}",
             flush=True,
         )
-        return SpokenUserInput("", stop_requested_at, turn_bridge)
+        return SpokenUserInput("", stop_requested_at)
 
     print(
         f"[ASR] captured="
@@ -437,7 +420,6 @@ def get_spoken_user_input(
     return SpokenUserInput(
         str(message.get("text", "")).strip(),
         stop_requested_at,
-        turn_bridge,
     )
 
 
@@ -631,6 +613,10 @@ def tts_worker(tts):
             def callback(
                 samples: np.ndarray,
                 progress: float,
+                real_audio_started=real_audio_started,
+                request=request,
+                start=start,
+                text=text,
             ):
                 nonlocal first_callback
                 nonlocal callback_count
@@ -653,15 +639,18 @@ def tts_worker(tts):
                     first_callback = now
 
                     print(
-                        f"[TTS FIRST AUDIO] "
-                        f"{first_callback - start:.3f}s | "
-                        f"progress={progress:.3f} | "
-                        f"speed={request.speed:.2f} | "
-                        f"{text!r}",
-                        flush=True,
-                    )
+                               f"[TTS FIRST AUDIO] "
+                               f"{first_callback - start:.3f}s | "
+                               f"progress={progress:.3f} | "
+                               f"speed={request.speed:.2f} | "
+                               f"{text!r}",
+                               flush=True,
+                           )
 
-                if first_audio_for_request and request.first_audio_callback is not None:
+                if (
+                    first_audio_for_request
+                    and request.first_audio_callback is not None
+                ):
                     request.first_audio_callback()
 
                 enqueue_audio(
@@ -673,13 +662,15 @@ def tts_worker(tts):
 
             if TTS_GAP_FILLER_ENABLED and request.allow_gap_filler:
 
-                def play_gap_filler():
+                def play_gap_filler(
+                    _real_audio_started=real_audio_started,
+                ):
                     global gap_fillers_used
                     global last_gap_filler_time
 
                     # Real audio may have arrived while this timer
                     # thread was waking up.
-                    if real_audio_started.is_set():
+                    if _real_audio_started.is_set():
                         return
 
                     with audio_lock:
@@ -691,7 +682,7 @@ def tts_worker(tts):
                     with gap_filler_lock:
                         # Check again after acquiring the shared
                         # filler-state lock.
-                        if real_audio_started.is_set():
+                        if _real_audio_started.is_set():
                             return
 
                         if gap_fillers_used >= TTS_GAP_FILLER_MAX_PER_TURN:
@@ -729,7 +720,7 @@ def tts_worker(tts):
 
                         # One final race check before consuming the
                         # budget and placing filler audio in the queue.
-                        if real_audio_started.is_set():
+                        if _real_audio_started.is_set():
                             return
 
                         gap_fillers_used += 1
@@ -1095,82 +1086,6 @@ def main():
 
     tts = build_tts()
 
-    # NANCEE STOP-TIME ASR BRIDGE v4.3
-    # Generate neutral bridge audio once. The timer may fire while Whisper is
-    # transcribing, so its callback must only enqueue pre-generated samples.
-    asr_bridge_audio_options = [
-        (
-            phrase,
-            *generate_bridge_audio(
-                tts,
-                phrase,
-            ),
-        )
-        for phrase in LATENCY_BRIDGE_ASR_PHRASES
-    ]
-
-    random.shuffle(asr_bridge_audio_options)
-    asr_bridge_audio_cycle = itertools.cycle(
-        asr_bridge_audio_options
-    )
-
-    def start_asr_latency_bridge(stopped_at):
-        (
-            phrase,
-            samples,
-            sample_rate,
-        ) = next(asr_bridge_audio_cycle)
-
-        logical_deadline = (
-            stopped_at
-            + LATENCY_BRIDGE_ASR_SECONDS
-        )
-
-        def play_asr_latency_bridge():
-            fired_at = time.perf_counter()
-            elapsed_since_stop = fired_at - stopped_at
-            deadline_error = fired_at - logical_deadline
-
-            print(
-                "\n[LATENCY BRIDGE FIRE] "
-                "phase=asr "
-                f"phrase={phrase!r} "
-                f"fired_at={fired_at:.6f} "
-                f"elapsed_since_stop={elapsed_since_stop:.3f}s "
-                f"deadline_error={deadline_error:+.3f}s",
-                flush=True,
-            )
-
-            enqueue_audio(
-                samples.copy(),
-                sample_rate,
-            )
-
-        turn_bridge = LatencyBridge(
-            delay_seconds=LATENCY_BRIDGE_ASR_SECONDS,
-            enabled=LATENCY_BRIDGE_ENABLED,
-            on_fire=play_asr_latency_bridge,
-        )
-
-        armed_at = time.perf_counter()
-        elapsed_before_arm = armed_at - stopped_at
-
-        turn_bridge.start()
-
-        print(
-            "[LATENCY BRIDGE ARM] "
-            "phase=asr "
-            f"logical_start={stopped_at:.6f} "
-            f"physical_arm={armed_at:.6f} "
-            f"elapsed_before_arm={elapsed_before_arm:.3f}s "
-            f"delay_given={LATENCY_BRIDGE_ASR_SECONDS:.3f}s "
-            f"logical_deadline={logical_deadline:.6f} "
-            f"phrase={phrase!r}",
-            flush=True,
-        )
-
-        return turn_bridge
-
     bridge_audio_options = [
         (
             phrase,
@@ -1225,7 +1140,6 @@ def main():
     print(
         "[LATENCY BRIDGE] "
         f"enabled={LATENCY_BRIDGE_ENABLED} "
-        f"asr_stop_threshold={LATENCY_BRIDGE_ASR_SECONDS:.3f}s "
         f"greeting_threshold="
         f"{LATENCY_BRIDGE_GREETING_SECONDS:.3f}s "
         f"normal_threshold={LATENCY_BRIDGE_NORMAL_SECONDS:.3f}s "
@@ -1319,31 +1233,12 @@ def main():
         ):
             while True:
                 try:
-                    # NANCEE ASR BRIDGE INITIAL-TURN GATE v4.3.1c
-                    # The route is unknown until Whisper returns. Skip the
-                    # pre-transcription bridge on the initial user turn so the
-                    # greeting route can use its own phrase set and threshold.
-                    is_initial_turn = not recent_prompt_memory.get_messages()
-                    asr_bridge_factory = start_asr_latency_bridge
-
-                    if (
-                        LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN
-                        and is_initial_turn
-                    ):
-                        asr_bridge_factory = None
-                        print(
-                            "[LATENCY BRIDGE] skipped phase=asr "
-                            "reason=initial_turn",
-                            flush=True,
-                        )
-
                     spoken_input = get_spoken_user_input(
                         tts.sample_rate,
-                        bridge_factory=asr_bridge_factory,
                     )
                     user_text = spoken_input.text
                     recording_stopped_at = spoken_input.stopped_at
-                    bridge = spoken_input.bridge
+                    bridge = None
 
                 except KeyboardInterrupt:
                     print(
@@ -1578,9 +1473,6 @@ def main():
                     end="",
                     flush=True,
                 )
-                # The first bridge was armed at the recording-stop event and
-                # may already have spoken while Whisper was transcribing.
-
                 if response_policy.name == "greeting":
                     selected_bridge_audio_cycle = greeting_bridge_audio_cycle
                 else:
@@ -1639,61 +1531,41 @@ def main():
                         "speaker_return",
                     }
 
-                    asr_bridge_fired = (
-                        bridge.resolve()
-                        if bridge is not None
-                        else False
+                    route_bridge_callback = partial(
+                        fire_route_latency_bridge,
+                        stopped_at=recording_stopped_at,
+                        deadline=logical_deadline,
+                        phase=response_policy.name,
+                        phrase=bridge_phrase,
+                        samples=bridge_samples,
+                        sample_rate=bridge_sample_rate,
+                        target_seconds=bridge_target_seconds,
                     )
 
-                    if asr_bridge_fired:
-                        print(
-                            "[LATENCY BRIDGE HANDOFF] "
-                            "asr_fired=true route_bridge_armed=false",
-                            flush=True,
-                        )
-                    else:
-                        route_bridge_callback = partial(
-                            fire_route_latency_bridge,
-                            stopped_at=recording_stopped_at,
-                            deadline=logical_deadline,
-                            phase=response_policy.name,
-                            phrase=bridge_phrase,
-                            samples=bridge_samples,
-                            sample_rate=bridge_sample_rate,
-                            target_seconds=bridge_target_seconds,
-                        )
+                    bridge = LatencyBridge(
+                        delay_seconds=bridge_delay_seconds,
+                        enabled=(
+                            LATENCY_BRIDGE_ENABLED
+                            and not direct_speaker_route
+                        ),
+                        on_fire=route_bridge_callback,
+                    )
 
-                        bridge = LatencyBridge(
-                            delay_seconds=bridge_delay_seconds,
-                            enabled=(
-                                LATENCY_BRIDGE_ENABLED
-                                and not direct_speaker_route
-                            ),
-                            on_fire=route_bridge_callback,
-                        )
+                    physical_arm_at = time.perf_counter()
 
-                        physical_arm_at = time.perf_counter()
+                    print(
+                        "[LATENCY BRIDGE ARM] "
+                        f"phase={response_policy.name} "
+                        f"logical_start={recording_stopped_at:.6f} "
+                        f"physical_arm={physical_arm_at:.6f} "
+                        f"elapsed_before_arm="
+                        f"{physical_arm_at - recording_stopped_at:.3f}s "
+                        f"delay_given={bridge_delay_seconds:.3f}s "
+                        f"logical_deadline={logical_deadline:.6f}",
+                        flush=True,
+                    )
 
-                        print(
-                            "[LATENCY BRIDGE ARM] "
-                            f"phase={response_policy.name} "
-                            f"logical_start={recording_stopped_at:.6f} "
-                            f"physical_arm={physical_arm_at:.6f} "
-                            f"elapsed_before_arm="
-                            f"{physical_arm_at - recording_stopped_at:.3f}s "
-                            f"delay_given={bridge_delay_seconds:.3f}s "
-                            f"logical_deadline={logical_deadline:.6f}",
-                            flush=True,
-                        )
-
-                        bridge.start()
-
-                        print(
-                            "[LATENCY BRIDGE HANDOFF] "
-                            "asr_fired=false route_bridge_armed="
-                            f"{str(LATENCY_BRIDGE_ENABLED and not direct_speaker_route).lower()}",
-                            flush=True,
-                        )
+                    bridge.start()
 
                     if input_route.force_keep_history:
                         request_history = recent_prompt_memory.get_messages()
@@ -1713,7 +1585,9 @@ def main():
                     )
 
                     completion_state = {}
+                    assistant_text = ""
                     handled_directly = False
+                    response = None
 
                     if response_policy.name == "speaker_return":
                         assistant_text = direct_speaker_return_response()
@@ -1731,6 +1605,7 @@ def main():
                             assistant_text,
                             first_audio_callback=bridge.resolve,
                         )
+
                     elif response_policy.name == "speaker":
                         assistant_text = direct_speaker_identity_response(
                             speaker_state.current_name,
@@ -1749,6 +1624,7 @@ def main():
                             assistant_text,
                             first_audio_callback=bridge.resolve,
                         )
+
                     else:
                         response = tpc.stream_response(
                             user_text=user_text,
@@ -1756,7 +1632,7 @@ def main():
                             memory_context=request_memory_context,
                             require_exact_prefix=require_exact_tpc_prefix,
                             retrieved_context=retrieved_context,
-                            response_instruction=(response_policy.instruction),
+                            response_instruction=response_policy.instruction,
                             temperature=response_policy.temperature,
                             num_predict=response_policy.num_predict,
                             completion_state=completion_state,
@@ -1764,6 +1640,12 @@ def main():
 
                     if handled_directly:
                         pass
+
+                    elif response is None:
+                        raise RuntimeError(
+                            "Ollama response stream was not created."
+                        )
+
                     elif authoritative_response_required:
                         # Fact-backed answers are collected before speech so a
                         # small-model contradiction cannot enter TTS or history.
@@ -1798,11 +1680,15 @@ def main():
                             )
 
                         if not assistant_text:
-                            assistant_text = "I don't remember that clearly enough."
+                            assistant_text = (
+                                "I don't remember that clearly enough."
+                            )
 
                         if memory_context_found:
-                            assistant_text, repaired = repair_recall_perspective(
-                                assistant_text,
+                            assistant_text, repaired = (
+                                repair_recall_perspective(
+                                    assistant_text,
+                                )
                             )
 
                             if repaired:
@@ -1812,11 +1698,13 @@ def main():
                                     flush=True,
                                 )
 
-                        assistant_text, guard_action = prepare_authoritative_response(
-                            assistant_text,
-                            profile_hits=profile_hits,
-                            fact_miss=fact_miss,
-                            retrieved_context=retrieved_context,
+                        assistant_text, guard_action = (
+                            prepare_authoritative_response(
+                                assistant_text,
+                                profile_hits=profile_hits,
+                                fact_miss=fact_miss,
+                                retrieved_context=retrieved_context,
+                            )
                         )
 
                         if MEMORY_DEBUG_ENABLED:
@@ -1831,18 +1719,23 @@ def main():
                             assistant_text,
                             first_audio_callback=bridge.resolve,
                         )
+
                     elif response_policy.name == "directive":
                         collected_directive = collect_text_response(
                             response,
                         )
 
-                        assistant_text, directive_role_leak_trimmed = trim_prompt_role_leak(
+                        (
+                            assistant_text,
+                            directive_role_leak_trimmed,
+                        ) = trim_prompt_role_leak(
                             collected_directive,
                         )
 
                         if directive_role_leak_trimmed:
                             print(
-                                "[DIRECTIVE RESPONSE GUARD] action=role_leak_trimmed",
+                                "[DIRECTIVE RESPONSE GUARD] "
+                                "action=role_leak_trimmed",
                                 flush=True,
                             )
 
@@ -1855,21 +1748,25 @@ def main():
 
                         if directive_tail_trimmed:
                             print(
-                                "[DIRECTIVE RESPONSE GUARD] action=length_tail_trimmed",
+                                "[DIRECTIVE RESPONSE GUARD] "
+                                "action=length_tail_trimmed",
                                 flush=True,
                             )
 
                         if not assistant_text:
                             assistant_text = "Could you repeat that?"
 
-                        assistant_text, directive_repaired = repair_directive_perspective(
-                            user_text,
-                            assistant_text,
+                        assistant_text, directive_repaired = (
+                            repair_directive_perspective(
+                                user_text,
+                                assistant_text,
+                            )
                         )
 
                         if directive_repaired:
                             print(
-                                f"[DIRECTIVE PERSPECTIVE REPAIR] output={assistant_text!r}",
+                                "[DIRECTIVE PERSPECTIVE REPAIR] "
+                                f"output={assistant_text!r}",
                                 flush=True,
                             )
 
@@ -1877,6 +1774,7 @@ def main():
                             assistant_text,
                             first_audio_callback=bridge.resolve,
                         )
+
                     elif response_policy.name == "clarify":
                         collected_clarification = collect_text_response(
                             response,
@@ -1899,6 +1797,7 @@ def main():
                             assistant_text,
                             first_audio_callback=bridge.resolve,
                         )
+
                     else:
                         assistant_text = stream_text_to_tts(
                             response,

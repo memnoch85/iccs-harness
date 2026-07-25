@@ -3,7 +3,6 @@ import sqlite3
 import time
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import List, Optional
 
 STOPWORDS = {
     "a",
@@ -65,7 +64,7 @@ STOPWORDS = {
 
 FILLER_ONLY = {"ok", "okay", "yes", "no", "sure", "thanks", "thank you", "bye"}
 
-OVERLAP_TOKEN_CANONICAL = {
+OVERLAP_TOKEN_CANONICAL: dict[str, str] = {
     "bought": "buy",
     "buying": "buy",
     "completed": "complete",
@@ -102,10 +101,10 @@ class MemoryHit:
     search_text: str
     bm25_score: float
     created_ts: float
-    turn_id: Optional[int]
+    turn_id: int | None
 
 
-def tokenize(text: str) -> List[str]:
+def tokenize(text: str) -> list[str]:
     text = str(text).lower().replace("'", " ")
     text = re.sub(r"[^a-z0-9\s]", " ", text)
     return [
@@ -116,10 +115,17 @@ def tokenize(text: str) -> List[str]:
 
 
 def _overlap_tokens(text: str) -> set[str]:
-    return {
-        OVERLAP_TOKEN_CANONICAL.get(token, token)
-        for token in tokenize(text)
-    }
+    tokens: set[str] = set()
+
+    for token in tokenize(text):
+        canonical = OVERLAP_TOKEN_CANONICAL.get(token)
+
+        if canonical is None:
+            canonical = token
+
+        tokens.add(canonical)
+
+    return tokens
 
 
 def meaningful_token_overlap_count(
@@ -214,15 +220,17 @@ def should_store_memory(raw_text: str) -> bool:
 
 
 def format_memory_overlay(
-    hits: List[MemoryHit],
-    max_characters: Optional[int] = None,
+    hits: list[MemoryHit],
+    max_characters: int | None = None,
 ) -> str:
     if not hits:
         return ""
 
     lines = [
-        "Confirmed user memory. In quotes, I/me/my means the human user; "
-        "answer as you/your.",
+        (
+            "Confirmed user memory. In quotes, I/me/my means the human user; "
+            "answer as you/your."
+        ),
     ]
 
     seen = set()
@@ -282,7 +290,7 @@ def _best_fuzzy_word_span(
         target_count + 1,
     )
 
-    best = None
+    best: tuple[int, int, float] | None = None
 
     for window_size in range(
         minimum_window,
@@ -314,7 +322,7 @@ def _best_fuzzy_word_span(
 
 
 class SessionMemoryStore:
-    def __init__(self, max_memories: int = 384, db_path: Optional[str] = None):
+    def __init__(self, max_memories: int = 384, db_path: str | None = None):
         self.max_memories = int(max_memories)
         self.conn = sqlite3.connect(db_path or ":memory:")
         self.conn.row_factory = sqlite3.Row
@@ -332,7 +340,7 @@ class SessionMemoryStore:
         """)
         self.conn.commit()
 
-    def add_memory(self, raw_text: str, turn_id: Optional[int] = None) -> Optional[int]:
+    def add_memory(self, raw_text: str, turn_id: int | None = None) -> int | None:
         if not should_store_memory(raw_text):
             return None
         search_text = normalize_for_search(raw_text)
@@ -351,7 +359,15 @@ class SessionMemoryStore:
         )
         self.conn.commit()
         self._evict_old()
-        return int(cur.lastrowid)
+
+        memory_id = cur.lastrowid
+
+        if memory_id is None:
+            raise RuntimeError(
+                "SQLite insert completed without returning a row ID."
+            )
+
+        return int(memory_id)
 
     def _evict_old(self) -> None:
         if self.max_memories <= 0:
@@ -372,7 +388,7 @@ class SessionMemoryStore:
             )
         self.conn.commit()
 
-    def search_memory(self, query: str, limit: int = 3) -> List[MemoryHit]:
+    def search_memory(self, query: str, limit: int = 3) -> list[MemoryHit]:
         match_query = make_fts_query(query)
         if not match_query:
             return []
@@ -407,7 +423,7 @@ class SessionMemoryStore:
         *,
         new_value: str,
         old_value: str,
-    ) -> Optional[int]:
+    ) -> int | None:
         """
         Rewrite the newest matching raw memory in place.
 
@@ -516,7 +532,7 @@ class SessionMemoryStore:
             self.conn.execute("SELECT COUNT(*) AS c FROM memory_fts").fetchone()["c"]
         )
 
-    def debug_dump(self) -> List[dict]:
+    def debug_dump(self) -> list[dict]:
         rows = self.conn.execute(
             "SELECT rowid, raw_text, search_text, created_ts, turn_id FROM memory_fts ORDER BY rowid"
         ).fetchall()

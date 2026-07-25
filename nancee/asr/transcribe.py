@@ -2,25 +2,24 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import argparse
 import sys
 import time
 from pathlib import Path
-from typing import Optional, Union
 
 import numpy as np
 import sounddevice as sd
 
-
 # asr/ and sherpa/ are sibling directories. Add sherpa/ so this standalone
 # worker and command-line tool use the same central NANCEE configuration.
 NANCEE_ROOT = Path(__file__).resolve().parents[1]
-SHERPA_DIRECTORY = NANCEE_ROOT / "sherpa"
 
-if str(SHERPA_DIRECTORY) not in sys.path:
-    sys.path.insert(0, str(SHERPA_DIRECTORY))
+if str(NANCEE_ROOT) not in sys.path:
+    sys.path.insert(0, str(NANCEE_ROOT))
 
-from config import (  # noqa: E402
+from sherpa.config import (  # noqa: E402
     ASR_BACKEND,
     ASR_BEAM_SIZE,
     ASR_COMPUTE_TYPE,
@@ -29,7 +28,6 @@ from config import (  # noqa: E402
     ASR_THREADS,
     ASR_VAD_FILTER,
 )
-
 
 DEFAULT_BACKEND = ASR_BACKEND
 DEFAULT_MODEL = ASR_MODEL
@@ -44,7 +42,7 @@ def configure_backend_logging():
         transformers_logging.set_verbosity_error()
 
 
-def parse_device(value: Optional[str]) -> Optional[Union[int, str]]:
+def parse_device(value: str | None) -> int | str | None:
     """
     Convert a numeric device argument into an integer.
 
@@ -68,7 +66,7 @@ class PushToTalkRecorder:
     def __init__(
         self,
         sample_rate: int = DEFAULT_SAMPLE_RATE,
-        device: Optional[Union[int, str]] = None,
+        device: int | str | None = None,
     ) -> None:
         self.sample_rate = sample_rate
         self.device = device
@@ -161,8 +159,8 @@ class WhisperTranscriber:
         self.beam_size = int(beam_size)
         self.vad_filter = bool(vad_filter)
 
-        self.asr_pipeline = None
-        self.whisper_model = None
+        self.asr_pipeline: Any | None = None
+        self.whisper_model: Any | None = None
 
         print(
             "[ASR] Loading "
@@ -217,17 +215,38 @@ class WhisperTranscriber:
             device=-1,
         )
 
-        generation_config = (
-            self.asr_pipeline.model.generation_config
+        model = getattr(
+            self.asr_pipeline,
+            "model",
+            None,
         )
-        generation_config.forced_decoder_ids = None
+        generation_config = getattr(
+            model,
+            "generation_config",
+            None,
+        )
+
+        if generation_config is not None:
+            setattr(
+                generation_config,
+                "forced_decoder_ids",
+                None,
+            )
 
     def transcribe(self, audio):
         if audio.size == 0:
             return ""
 
         if self.backend == "faster_whisper":
-            segments, _info = self.whisper_model.transcribe(
+            whisper_model = self.whisper_model
+
+            if whisper_model is None:
+                raise RuntimeError(
+                    "Faster-Whisper was selected but the model "
+                    "was not initialized."
+                )
+
+            segments, _info = whisper_model.transcribe(
                 audio,
                 language="en",
                 beam_size=self.beam_size,
@@ -235,11 +254,18 @@ class WhisperTranscriber:
             )
 
             return "".join(
-                segment.text
+                str(segment.text)
                 for segment in segments
             ).strip()
 
-        result = self.asr_pipeline(
+        asr_pipeline = self.asr_pipeline
+
+        if asr_pipeline is None:
+            raise RuntimeError(
+                "The Hugging Face ASR pipeline was not initialized."
+            )
+
+        result = asr_pipeline(
             {
                 "array": audio,
                 "sampling_rate": self.sample_rate,
@@ -247,7 +273,10 @@ class WhisperTranscriber:
             return_timestamps=False,
         )
 
-        return str(result.get("text", "")).strip()
+        if isinstance(result, dict):
+            return str(result.get("text", "")).strip()
+
+        return str(result).strip()
 
 
 def build_argument_parser():

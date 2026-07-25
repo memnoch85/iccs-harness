@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 _LEADING_PREFACE = re.compile(
     r"^(?:(?:good morning|good afternoon|good evening|"
     r"so|well|okay|ok|also|and|yeah|yep|yup|uh|um|hmm|"
@@ -405,10 +404,10 @@ def is_complete_memory_statement(text: str) -> bool:
 
     # Whisper sometimes drops the leading "I" but preserves an unmistakable
     # completed-action statement: "Bought a blue backpack at Macy's."
-    if _IMPLIED_I_ACTION.match(subject_text) and _word_count(subject_text) >= 4:
-        return True
-
-    return False
+    return bool(
+        _IMPLIED_I_ACTION.match(subject_text)
+        and _word_count(subject_text) >= 4
+    )
 
 
 def memory_storage_skip_reason(text: str) -> str:

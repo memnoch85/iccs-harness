@@ -354,30 +354,6 @@ LATENCY_BRIDGE_ENABLED = (
     == "true"
 )
 
-LATENCY_BRIDGE_ASR_SECONDS = float(
-    os.getenv(
-        "NANCEE_LATENCY_BRIDGE_ASR_SECONDS",
-        "8.5",
-    )
-)
-
-LATENCY_BRIDGE_ASR_PHRASES = tuple(
-    phrase.strip()
-    for phrase in os.getenv(
-        "NANCEE_LATENCY_BRIDGE_ASR_PHRASES",
-        "Umm, one moment please...|So, just one second...",
-    ).split("|")
-    if phrase.strip()
-)
-
-LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN = (
-    os.getenv(
-        "NANCEE_LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN",
-        "true",
-    ).lower()
-    == "true"
-)
-
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
@@ -399,12 +375,6 @@ LATENCY_BRIDGE_RECALL_SECONDS = float(
 
     )
 )
-
-if LATENCY_BRIDGE_ASR_SECONDS <= 0:
-    raise ValueError("LATENCY_BRIDGE_ASR_SECONDS must be greater than zero.")
-
-if not LATENCY_BRIDGE_ASR_PHRASES:
-    raise ValueError("LATENCY_BRIDGE_ASR_PHRASES must contain at least one phrase.")
 
 if LATENCY_BRIDGE_GREETING_SECONDS <= 0:
     raise ValueError("LATENCY_BRIDGE_GREETING_SECONDS must be greater than zero.")

@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 from __future__ import annotations
 
 import json
@@ -391,12 +390,14 @@ def prime_ollama_context(
     started = time.perf_counter()
 
     try:
-        with _OLLAMA_REQUEST_LOCK:
-            with urllib.request.urlopen(
+        with (
+            _OLLAMA_REQUEST_LOCK,
+            urllib.request.urlopen(
                 request,
                 timeout=OLLAMA_RESPONSE_TIMEOUT,
-            ) as response:
-                data = json.load(response)
+            ) as response,
+        ):
+            data = json.load(response)
 
     except (
         urllib.error.URLError,
@@ -491,13 +492,16 @@ def stream_ollama_response(
         prefix_messages=messages[:-1],
         full_messages=messages,
     )
+
     print(
         "[PROMPT SHAPE] "
         f"messages={len(messages)} "
         f"prefix_messages={len(messages[:-1])} "
         f"history_messages={len(history or [])} "
-        f"retrieved_context_chars={len(str(retrieved_context).strip())} "
-        f"memory_context_chars={len(str(memory_context).strip())}",
+        f"retrieved_context_chars="
+        f"{len(str(retrieved_context).strip())} "
+        f"memory_context_chars="
+        f"{len(str(memory_context).strip())}",
         flush=True,
     )
 
@@ -522,16 +526,26 @@ def stream_ollama_response(
         )
 
     effective_temperature = (
-        LLM_TEMPERATURE if temperature is None else float(temperature)
+        LLM_TEMPERATURE
+        if temperature is None
+        else float(temperature)
     )
 
-    effective_num_predict = LLM_NUM_PREDICT if num_predict is None else int(num_predict)
+    effective_num_predict = (
+        LLM_NUM_PREDICT
+        if num_predict is None
+        else int(num_predict)
+    )
 
     if effective_temperature < 0:
-        raise ValueError("temperature cannot be negative.")
+        raise ValueError(
+            "temperature cannot be negative."
+        )
 
     if effective_num_predict <= 0:
-        raise ValueError("num_predict must be positive.")
+        raise ValueError(
+            "num_predict must be positive."
+        )
 
     print(
         "[LLM REQUEST OPTIONS] "
@@ -561,11 +575,14 @@ def stream_ollama_response(
         method="POST",
     )
 
-    with _OLLAMA_REQUEST_LOCK:
-        with urllib.request.urlopen(
-            request,
-            timeout=OLLAMA_RESPONSE_TIMEOUT,
-        ) as response:
+    try:
+        with (
+            _OLLAMA_REQUEST_LOCK,
+            urllib.request.urlopen(
+                request,
+                timeout=OLLAMA_RESPONSE_TIMEOUT,
+            ) as response,
+        ):
             for raw_line in response:
                 line = raw_line.decode(
                     "utf-8",
@@ -577,15 +594,26 @@ def stream_ollama_response(
 
                 try:
                     data = json.loads(line)
+
                 except json.JSONDecodeError as error:
                     raise RuntimeError(
-                        f"Ollama returned invalid JSON: {error}"
+                        "Ollama returned invalid JSON: "
+                        f"{error}"
                     ) from error
 
                 if data.get("error"):
-                    raise RuntimeError(f"Ollama returned an error: {data['error']}")
+                    raise RuntimeError(
+                        "Ollama returned an error: "
+                        f"{data['error']}"
+                    )
 
-                token = data.get("message", {}).get("content", "")
+                token = data.get(
+                    "message",
+                    {},
+                ).get(
+                    "content",
+                    "",
+                )
 
                 if token:
                     if first_token_seconds is None:
@@ -595,9 +623,9 @@ def stream_ollama_response(
                         )
 
                         if completion_state is not None:
-                            completion_state["first_token_seconds"] = (
-                                first_token_seconds
-                            )
+                            completion_state[
+                                "first_token_seconds"
+                            ] = first_token_seconds
 
                     yield token
 
@@ -617,18 +645,24 @@ def stream_ollama_response(
                                 "eval_count",
                                 0,
                             ),
-                            total_seconds=request_total_seconds,
+                            total_seconds=(
+                                request_total_seconds
+                            ),
                             load_seconds=duration_seconds(
                                 data,
                                 "load_duration",
                             ),
-                            prompt_eval_seconds=duration_seconds(
-                                data,
-                                "prompt_eval_duration",
+                            prompt_eval_seconds=(
+                                duration_seconds(
+                                    data,
+                                    "prompt_eval_duration",
+                                )
                             ),
-                            generation_seconds=duration_seconds(
-                                data,
-                                "eval_duration",
+                            generation_seconds=(
+                                duration_seconds(
+                                    data,
+                                    "eval_duration",
+                                )
                             ),
                             prompt_tokens=data.get(
                                 "prompt_eval_count",
@@ -638,8 +672,10 @@ def stream_ollama_response(
 
                     print(
                         "\n[OLLAMA DONE] "
-                        f"reason={data.get('done_reason', 'unknown')} "
-                        f"load={duration_seconds(data, 'load_duration'):.3f}s "
+                        f"reason="
+                        f"{data.get('done_reason', 'unknown')} "
+                        f"load="
+                        f"{duration_seconds(data, 'load_duration'):.3f}s "
                         f"prompt_eval="
                         f"{duration_seconds(data, 'prompt_eval_duration'):.3f}s "
                         f"generation="
@@ -658,10 +694,18 @@ def stream_ollama_response(
                     )
                     break
 
+    except (
+        urllib.error.URLError,
+        urllib.error.HTTPError,
+        TimeoutError,
+    ) as error:
+        raise RuntimeError(
+            f"Ollama request failed: {error}"
+        ) from error
+
 def create_ollama_tpc():
     return TenaciousPrefixCache(
         prime_function=prime_ollama_context,
         request_function=stream_ollama_response,
         prefix_fingerprint_function=ollama_prefix_sha256,
     )
-

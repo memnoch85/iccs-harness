@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 
 from __future__ import annotations
 
@@ -16,16 +15,24 @@ import json
 import sys
 import time
 from contextlib import redirect_stdout
-from typing import Optional
+from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
 
-from transcribe import (
+NANCEE_ROOT = Path(__file__).resolve().parents[1]
+
+if str(NANCEE_ROOT) not in sys.path:
+    sys.path.insert(0, str(NANCEE_ROOT))
+
+
+from sherpa.config import (  # noqa: E402
     ASR_BEAM_SIZE,
     ASR_COMPUTE_TYPE,
     ASR_THREADS,
     ASR_VAD_FILTER,
+)
+from asr.transcribe import (  # noqa: E402
     DEFAULT_BACKEND,
     DEFAULT_MODEL,
     DEFAULT_SAMPLE_RATE,
@@ -43,7 +50,7 @@ class PersistentRecorder:
     ) -> None:
         self.sample_rate = sample_rate
         self.audio_blocks: list[np.ndarray] = []
-        self.stream: Optional[sd.InputStream] = None
+        self.stream: sd.InputStream | None = None
 
     def _audio_callback(
         self,
@@ -175,7 +182,7 @@ def main() -> int:
                 try:
                     recorder.start()
                     send_message(type="started")
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     send_message(
                         type="error",
                         message=str(exc),
@@ -185,7 +192,7 @@ def main() -> int:
                 try:
                     recorder.clear()
                     send_message(type="cleared")
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     send_message(
                         type="error",
                         message=str(exc),
@@ -221,7 +228,7 @@ def main() -> int:
                         peak=peak,
                     )
 
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     recorder.close()
                     send_message(
                         type="error",
