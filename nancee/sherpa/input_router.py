@@ -99,8 +99,12 @@ _LEADING_GREETING_TOKEN = re.compile(
 )
 
 _GREETING_CHECKIN_PATTERN = re.compile(
-    r"^(?:how are you|how's it going|how is it going|"
-    r"what's up|what is up|you there)\??[.! ]*$",
+    r"^(?:"
+    r"how are you(?: doing)?(?: today)?|"
+    r"how(?:'s| is) it going(?: today)?|"
+    r"what(?:'s| is) up|"
+    r"you there"
+    r")\??[.! ]*$",
     flags=re.IGNORECASE,
 )
 

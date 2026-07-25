@@ -1121,7 +1121,12 @@ def main():
         for phrase in LATENCY_BRIDGE_PHRASES
     ]
 
-    bridge_audio_cycle = itertools.cycle(bridge_audio_options)
+    # Shuffle once at startup, then use every phrase before repeating.
+    random.shuffle(bridge_audio_options)
+
+    bridge_audio_cycle = itertools.cycle(
+        bridge_audio_options
+    )
 
     greeting_bridge_audio_options = [
         (

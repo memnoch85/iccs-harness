@@ -357,7 +357,7 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_ASR_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_ASR_SECONDS",
-        "8.0",
+        "10.0",
     )
 )
 
@@ -381,21 +381,21 @@ LATENCY_BRIDGE_ASR_SKIP_INITIAL_TURN = (
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
-        "4.5",
+        "5.5",
     )
 )
 
 LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
-        "6.0",
+        "7.2",
     )
 )
 
 LATENCY_BRIDGE_RECALL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_RECALL_SECONDS",
-        "4.5",
+        "6.0",
 
     )
 )
@@ -482,7 +482,7 @@ RESPONSE_ACK_TEMPERATURE = float(os.getenv("NANCEE_RESPONSE_ACK_TEMPERATURE", "0
 RESPONSE_DIRECTIVE_NUM_PREDICT = int(
     os.getenv(
         "NANCEE_RESPONSE_DIRECTIVE_NUM_PREDICT",
-        "48",
+        "58",
     )
 )
 RESPONSE_DIRECTIVE_TEMPERATURE = float(
