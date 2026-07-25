@@ -90,6 +90,85 @@ if USER_PROFILE_RETRIEVAL_LIMIT <= 0:
     raise ValueError("USER_PROFILE_RETRIEVAL_LIMIT must be positive.")
 
 
+# NANCEE ASR RUNTIME CONFIG v1 START
+#
+# The benchmark winner is Faster-Whisper Base.en using INT8 on four CPU
+# threads. These values may be overridden with NANCEE_* environment variables.
+ASR_BACKEND = os.getenv(
+    "NANCEE_ASR_BACKEND",
+    "faster_whisper",
+).strip().lower()
+
+if ASR_BACKEND not in {
+    "faster_whisper",
+    "hf_direct",
+}:
+    raise ValueError(
+        "NANCEE_ASR_BACKEND must be "
+        "'faster_whisper' or 'hf_direct'."
+    )
+
+# The two backends use different model identifiers.
+_default_asr_model = (
+    "base.en"
+    if ASR_BACKEND == "faster_whisper"
+    else "openai/whisper-base.en"
+)
+
+ASR_MODEL = os.getenv(
+    "NANCEE_ASR_MODEL",
+    _default_asr_model,
+).strip()
+
+ASR_COMPUTE_TYPE = os.getenv(
+    "NANCEE_ASR_COMPUTE_TYPE",
+    "int8",
+).strip().lower()
+
+ASR_THREADS = int(
+    os.getenv(
+        "NANCEE_ASR_THREADS",
+        "4",
+    )
+)
+
+ASR_BEAM_SIZE = int(
+    os.getenv(
+        "NANCEE_ASR_BEAM_SIZE",
+        "1",
+    )
+)
+
+ASR_VAD_FILTER = (
+    os.getenv(
+        "NANCEE_ASR_VAD_FILTER",
+        "false",
+    ).lower()
+    == "true"
+)
+
+ASR_SAMPLE_RATE = int(
+    os.getenv(
+        "NANCEE_ASR_SAMPLE_RATE",
+        "16000",
+    )
+)
+
+if not ASR_MODEL:
+    raise ValueError("NANCEE_ASR_MODEL cannot be empty.")
+
+if ASR_THREADS <= 0:
+    raise ValueError("NANCEE_ASR_THREADS must be positive.")
+
+if ASR_BEAM_SIZE <= 0:
+    raise ValueError("NANCEE_ASR_BEAM_SIZE must be positive.")
+
+if ASR_SAMPLE_RATE <= 0:
+    raise ValueError("NANCEE_ASR_SAMPLE_RATE must be positive.")
+
+# NANCEE ASR RUNTIME CONFIG v1 END
+
+
 # Sherpa/Kokoro configuration
 SHERPA_DIRECTORY = Path(__file__).resolve().parent
 
@@ -118,7 +197,7 @@ SPEED = float(
 TTS_GREETING_BRIDGE_SPEED = float(
     os.getenv(
         "NANCEE_TTS_GREETING_BRIDGE_SPEED",
-        "1.0",
+        "1.1",
     )
 )
 
@@ -210,7 +289,7 @@ OLLAMA_WARMUP_COMMAND = os.environ.get(
 
 LLM_MODEL = os.environ.get(
     "LLM_MODEL",
-    "phi4-mini:3.8b",
+    "llama3.2:3b",
 )
 
 SYSTEM_PROMPT_FILE = os.environ.get(
@@ -257,7 +336,7 @@ def load_system_prompt():
 
 # Memory debug logging.
 # Enable with:
-#   export NANCEE_MEMORY_DEBUG=true
+#export NANCEE_MEMORY_DEBUG=true
 MEMORY_DEBUG_ENABLED = (
     os.getenv(
         "NANCEE_MEMORY_DEBUG",
@@ -278,21 +357,22 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
-        "3.0",
+        "5.5",
     )
 )
 
 LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
-        "6.3",
+        "5.5",
     )
 )
 
 LATENCY_BRIDGE_RECALL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_RECALL_SECONDS",
-        "4.5",
+        "6.0",
+
     )
 )
 
@@ -306,24 +386,17 @@ if LATENCY_BRIDGE_RECALL_SECONDS <= 0:
     raise ValueError("LATENCY_BRIDGE_RECALL_SECONDS must be greater than zero.")
 
 LATENCY_BRIDGE_PHRASES = (
-    "Let me check that,",
+    "Just one second please,",
     "Give me one moment,",
     "Let me think briefly,",
-    "Checking that for you,",
+    "Umm, one moment please,",
     "Hang on one moment,",
 )
 
 LATENCY_BRIDGE_GREETING_PHRASES = (
-    "Oh hey, umm...",
-    "What's up, humm...",
-    "Oh hi, umm...",
-    "Hey there, umm...",
-    "Hi, umm...",
-    "Hey, humm...",
-    "Oh hey...",
-    "Oh hi there...",
-    "Umm...",
-    "Humm...",
+    "umm...",
+    "humm...",
+    "So..."
 )
 
 for phrase in LATENCY_BRIDGE_GREETING_PHRASES:
@@ -353,7 +426,7 @@ TTS_GAP_FILLER_ENABLED = (
     os.getenv("NANCEE_TTS_GAP_FILLER_ENABLED", "true").lower() == "true"
 )
 TTS_GAP_FILLER_COOLDOWN_SECONDS = 9.0
-TTS_GAP_FILLER_SECONDS = float(os.getenv("NANCEE_TTS_GAP_FILLER_SECONDS", "3.5"))
+TTS_GAP_FILLER_SECONDS = float(os.getenv("NANCEE_TTS_GAP_FILLER_SECONDS", "4.0"))
 TTS_GAP_FILLER_MAX_PER_TURN = int(os.getenv("NANCEE_TTS_GAP_FILLER_MAX_PER_TURN", "5"))
 TTS_GAP_FILLER_PHRASES = ("humm...", "Umm...")
 
@@ -366,7 +439,7 @@ if TTS_GAP_FILLER_MAX_PER_TURN < 0:
 # These are per-request generation limits. The global LLM_NUM_PREDICT
 # remains the fallback for callers that do not select a response policy.
 RESPONSE_GREETING_NUM_PREDICT = int(
-    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "12")
+    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "18")
 )
 RESPONSE_GREETING_TEMPERATURE = float(
     os.getenv("NANCEE_RESPONSE_GREETING_TEMPERATURE", "0.15")
@@ -374,6 +447,19 @@ RESPONSE_GREETING_TEMPERATURE = float(
 
 RESPONSE_ACK_NUM_PREDICT = int(os.getenv("NANCEE_RESPONSE_ACK_NUM_PREDICT", "18"))
 RESPONSE_ACK_TEMPERATURE = float(os.getenv("NANCEE_RESPONSE_ACK_TEMPERATURE", "0.25"))
+
+RESPONSE_DIRECTIVE_NUM_PREDICT = int(
+    os.getenv(
+        "NANCEE_RESPONSE_DIRECTIVE_NUM_PREDICT",
+        "58",
+    )
+)
+RESPONSE_DIRECTIVE_TEMPERATURE = float(
+    os.getenv(
+        "NANCEE_RESPONSE_DIRECTIVE_TEMPERATURE",
+        "0.20",
+    )
+)
 
 RESPONSE_CLARIFY_NUM_PREDICT = int(
     os.getenv("NANCEE_RESPONSE_CLARIFY_NUM_PREDICT", "18")
@@ -402,6 +488,10 @@ RESPONSE_RECALL_TEMPERATURE = float(
 for _setting_name, _setting_value in (
     ("RESPONSE_GREETING_NUM_PREDICT", RESPONSE_GREETING_NUM_PREDICT),
     ("RESPONSE_ACK_NUM_PREDICT", RESPONSE_ACK_NUM_PREDICT),
+    (
+        "RESPONSE_DIRECTIVE_NUM_PREDICT",
+        RESPONSE_DIRECTIVE_NUM_PREDICT,
+    ),
     ("RESPONSE_CLARIFY_NUM_PREDICT", RESPONSE_CLARIFY_NUM_PREDICT),
     ("RESPONSE_NORMAL_NUM_PREDICT", RESPONSE_NORMAL_NUM_PREDICT),
     ("RESPONSE_DETAILED_NUM_PREDICT", RESPONSE_DETAILED_NUM_PREDICT),
@@ -413,6 +503,10 @@ for _setting_name, _setting_value in (
 for _setting_name, _setting_value in (
     ("RESPONSE_GREETING_TEMPERATURE", RESPONSE_GREETING_TEMPERATURE),
     ("RESPONSE_ACK_TEMPERATURE", RESPONSE_ACK_TEMPERATURE),
+    (
+        "RESPONSE_DIRECTIVE_TEMPERATURE",
+        RESPONSE_DIRECTIVE_TEMPERATURE,
+    ),
     ("RESPONSE_CLARIFY_TEMPERATURE", RESPONSE_CLARIFY_TEMPERATURE),
     ("RESPONSE_NORMAL_TEMPERATURE", RESPONSE_NORMAL_TEMPERATURE),
     ("RESPONSE_DETAILED_TEMPERATURE", RESPONSE_DETAILED_TEMPERATURE),

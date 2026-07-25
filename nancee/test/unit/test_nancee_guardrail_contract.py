@@ -16,9 +16,9 @@ class NanceeGuardrailContractTests(unittest.TestCase):
             SOURCE,
         )
 
-    def test_authoritative_answers_are_collected_before_tts(self):
+    def test_authoritative_answers_and_misses_are_collected_before_tts(self):
         self.assertIn(
-            "if authoritative_context_found:",
+            "if authoritative_response_required:",
             SOURCE,
         )
         self.assertIn(
@@ -26,9 +26,13 @@ class NanceeGuardrailContractTests(unittest.TestCase):
             SOURCE,
         )
 
-    def test_memory_storage_uses_conservative_policy(self):
+    def test_memory_storage_uses_router_decision(self):
         self.assertIn(
-            "if should_store_recall_turn(user_text):",
+            "elif input_route.store_recall:",
+            SOURCE,
+        )
+        self.assertIn(
+            "input_route.recall_storage_text",
             SOURCE,
         )
         self.assertIn(
@@ -36,11 +40,14 @@ class NanceeGuardrailContractTests(unittest.TestCase):
             SOURCE,
         )
 
-    def test_personal_fact_fragments_enter_recall_path(self):
+    def test_router_is_the_only_top_level_classifier(self):
         self.assertIn(
-            "looks_like_personal_fact_fragment(user_text)",
+            "from input_router import route_user_input",
             SOURCE,
         )
+        self.assertEqual(1, SOURCE.count("route_user_input("))
+        self.assertNotIn("def looks_like_recall_request", SOURCE)
+        self.assertNotIn("def should_retrieve_recall", SOURCE)
 
 
 if __name__ == "__main__":

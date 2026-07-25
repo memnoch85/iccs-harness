@@ -192,7 +192,7 @@ class PipelineWiringContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         self.assertIn(
-            "allow_weak_match=explicit_memory_request",
+            "allow_weak_match=input_route.allow_weak_match",
             source,
         )
         self.assertIn(

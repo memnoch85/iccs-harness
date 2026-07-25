@@ -1,6 +1,5 @@
-from pathlib import Path
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -35,7 +34,7 @@ class GreetingBridgeSpeedTests(unittest.TestCase):
         )[0]
 
         self.assertIn(
-            '"1.0"',
+            '"1.1"',
             config_block,
         )
 

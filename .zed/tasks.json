@@ -1,0 +1,22 @@
+[
+  {
+    "label": "Run NANCEE normally",
+    "command": "/home/memnoch/Nancee/nancee/sherpa/venv/bin/python",
+    "args": [
+      "/home/memnoch/Nancee/nancee/sherpa/nancee_chat.py"
+    ],
+    "cwd": "/home/memnoch/Nancee/nancee",
+    "env": {
+      "PYTHONPATH": "/home/memnoch/Nancee/nancee:/home/memnoch/Nancee/nancee/sherpa:/home/memnoch/Nancee/nancee/asr",
+      "PYTHONUNBUFFERED": "1"
+    }
+  },
+  {
+    "label": "Run NANCEE tests",
+    "command": "bash",
+    "args": [
+      "test/run_all_tests.sh"
+    ],
+    "cwd": "/home/memnoch/Nancee/nancee"
+  }
+]

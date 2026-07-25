@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import re
-from typing import Iterable, Protocol
+from collections.abc import Iterable
+from typing import Protocol
 
 
 class ProfileHitLike(Protocol):
-    key: str
-    value: str
+    @property
+    def key(self) -> str:
+        ...
+
+    @property
+    def value(self) -> str:
+        ...
 
 
 _WORD = re.compile(r"[a-z0-9']+")
@@ -201,4 +207,3 @@ def prepare_authoritative_response(
         )
 
     return cleaned, "accepted"
-

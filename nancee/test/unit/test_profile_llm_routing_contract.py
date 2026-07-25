@@ -1,6 +1,5 @@
-from pathlib import Path
 import unittest
-
+from pathlib import Path
 
 SOURCE = (
     Path(__file__).resolve().parents[2]
@@ -38,7 +37,11 @@ class ProfileLlmRoutingContractTests(unittest.TestCase):
 
     def test_profile_context_reaches_ollama(self):
         self.assertIn(
-            "memory_context=effective_profile_context",
+            "effective_profile_context,",
+            SOURCE,
+        )
+        self.assertIn(
+            "memory_context=request_memory_context",
             SOURCE,
         )
 

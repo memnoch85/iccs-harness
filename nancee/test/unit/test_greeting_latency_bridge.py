@@ -3,11 +3,10 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from config import (
+from sherpa.config import (
     LATENCY_BRIDGE_GREETING_PHRASES,
     LATENCY_BRIDGE_PHRASES,
 )
-
 
 SOURCE = (
     Path(__file__).resolve().parents[2]
@@ -23,22 +22,15 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
         self.assertEqual(
             LATENCY_BRIDGE_GREETING_PHRASES,
             (
-                "Oh hey, umm...",
-                "What's up, humm...",
-                "Oh hi, umm...",
-                "Hey there, umm...",
-                "Hi, umm...",
-                "Hey, humm...",
-                "Oh hey...",
-                "Oh hi there...",
-                "Umm...",
-                "Humm...",
+                "umm...",
+                "humm...",
+                "So..."
             ),
         )
 
     def test_greeting_phrases_are_one_to_four_words(self):
         self.assertEqual(
-            10,
+            3,
             len(LATENCY_BRIDGE_GREETING_PHRASES),
         )
 
@@ -74,14 +66,15 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
                     )
                 )
 
+
     def test_normal_bridge_phrases_remain_available(self):
         self.assertIn(
-            "Let me check that,",
+            "Hang on one moment,",
             LATENCY_BRIDGE_PHRASES,
         )
 
         self.assertIn(
-            "Give me one moment,",
+            "Umm, one moment please,",
             LATENCY_BRIDGE_PHRASES,
         )
 
@@ -120,10 +113,14 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
         self.assertRegex(
             SOURCE,
             (
-                r"bridge_delay_seconds\s*=\s*"
-                r"\(?\s*"
+                r"bridge_target_seconds\s*=\s*"
                 r"LATENCY_BRIDGE_GREETING_SECONDS"
             ),
+        )
+
+        self.assertIn(
+            "calculate_remaining_bridge_delay(",
+            SOURCE,
         )
 
 

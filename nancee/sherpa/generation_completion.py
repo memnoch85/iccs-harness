@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from collections.abc import Mapping
 
-
 _SENTENCE_END_PATTERN = re.compile(
     r"""[.!?](?:["')\]]+)?""",
 )

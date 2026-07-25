@@ -1,11 +1,10 @@
-#!/usr/bin/env python3
 
 from __future__ import annotations
 
 import os
 
-# NANCEE runs Whisper from the local HF cache.
-# Do not contact Hugging Face Hub during startup.
+# NANCEE runs Whisper from the local Hugging Face cache.
+# Do not contact Hugging Face Hub during normal vehicle startup.
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
@@ -16,16 +15,29 @@ import json
 import sys
 import time
 from contextlib import redirect_stdout
-from typing import Optional
+from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
-from transformers.utils import logging as transformers_logging
 
-from transcribe import (
+NANCEE_ROOT = Path(__file__).resolve().parents[1]
+
+if str(NANCEE_ROOT) not in sys.path:
+    sys.path.insert(0, str(NANCEE_ROOT))
+
+
+from sherpa.config import (  # noqa: E402
+    ASR_BEAM_SIZE,
+    ASR_COMPUTE_TYPE,
+    ASR_THREADS,
+    ASR_VAD_FILTER,
+)
+from asr.transcribe import (  # noqa: E402
+    DEFAULT_BACKEND,
     DEFAULT_MODEL,
     DEFAULT_SAMPLE_RATE,
     WhisperTranscriber,
+    configure_backend_logging,
 )
 
 
@@ -38,7 +50,7 @@ class PersistentRecorder:
     ) -> None:
         self.sample_rate = sample_rate
         self.audio_blocks: list[np.ndarray] = []
-        self.stream: Optional[sd.InputStream] = None
+        self.stream: sd.InputStream | None = None
 
     def _audio_callback(
         self,
@@ -80,6 +92,13 @@ class PersistentRecorder:
 
         self.stream.start()
 
+    def clear(self) -> None:
+        """Discard audio captured so far without stopping the microphone."""
+        if self.stream is None:
+            raise RuntimeError("Recording is not active.")
+
+        self.audio_blocks.clear()
+
     def stop(self) -> np.ndarray:
         if self.stream is None:
             raise RuntimeError("Recording is not active.")
@@ -110,7 +129,6 @@ class PersistentRecorder:
 
 def send_message(**message: object) -> None:
     """Send one JSON message to nancee_chat.py."""
-
     print(
         json.dumps(message),
         flush=True,
@@ -118,21 +136,30 @@ def send_message(**message: object) -> None:
 
 
 def main() -> int:
-    transformers_logging.set_verbosity_error()
+    configure_backend_logging()
 
     print(
-        f"[ASR] Loading Whisper once: {DEFAULT_MODEL}",
+        "[ASR] Loading Whisper once: "
+        f"backend={DEFAULT_BACKEND} "
+        f"model={DEFAULT_MODEL} "
+        f"compute_type={ASR_COMPUTE_TYPE} "
+        f"threads={ASR_THREADS} "
+        f"beam_size={ASR_BEAM_SIZE} "
+        f"vad_filter={str(ASR_VAD_FILTER).lower()}",
         file=sys.stderr,
         flush=True,
     )
 
-    # WhisperTranscriber currently writes status messages to stdout.
-    # Redirect those messages to stderr so stdout stays a clean JSON
-    # communication channel for nancee_chat.py.
+    # Keep stdout as a clean JSON communication channel for nancee_chat.py.
     with redirect_stdout(sys.stderr):
         transcriber = WhisperTranscriber(
             model_name=DEFAULT_MODEL,
             sample_rate=DEFAULT_SAMPLE_RATE,
+            backend=DEFAULT_BACKEND,
+            compute_type=ASR_COMPUTE_TYPE,
+            cpu_threads=ASR_THREADS,
+            beam_size=ASR_BEAM_SIZE,
+            vad_filter=ASR_VAD_FILTER,
         )
 
     recorder = PersistentRecorder(
@@ -145,9 +172,7 @@ def main() -> int:
         flush=True,
     )
 
-    send_message(
-        type="ready",
-    )
+    send_message(type="ready")
 
     try:
         for raw_command in sys.stdin:
@@ -156,12 +181,18 @@ def main() -> int:
             if command == "START":
                 try:
                     recorder.start()
-
+                    send_message(type="started")
+                except Exception as exc:  # noqa: BLE001
                     send_message(
-                        type="started",
+                        type="error",
+                        message=str(exc),
                     )
 
-                except Exception as exc:
+            elif command == "CLEAR":
+                try:
+                    recorder.clear()
+                    send_message(type="cleared")
+                except Exception as exc:  # noqa: BLE001
                     send_message(
                         type="error",
                         message=str(exc),
@@ -181,23 +212,12 @@ def main() -> int:
                         )
                         continue
 
-                    duration = (
-                        audio.size / DEFAULT_SAMPLE_RATE
-                    )
-
-                    peak = float(
-                        np.max(np.abs(audio))
-                    )
-
+                    duration = audio.size / DEFAULT_SAMPLE_RATE
+                    peak = float(np.max(np.abs(audio)))
                     started_at = time.perf_counter()
-
-                    text = transcriber.transcribe(
-                        audio
-                    )
-
+                    text = transcriber.transcribe(audio)
                     transcription_seconds = (
-                        time.perf_counter()
-                        - started_at
+                        time.perf_counter() - started_at
                     )
 
                     send_message(
@@ -208,9 +228,8 @@ def main() -> int:
                         peak=peak,
                     )
 
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001
                     recorder.close()
-
                     send_message(
                         type="error",
                         message=str(exc),
@@ -218,11 +237,7 @@ def main() -> int:
 
             elif command == "QUIT":
                 recorder.close()
-
-                send_message(
-                    type="stopped",
-                )
-
+                send_message(type="stopped")
                 return 0
 
             else:
@@ -233,7 +248,6 @@ def main() -> int:
 
     except KeyboardInterrupt:
         pass
-
     finally:
         recorder.close()
 

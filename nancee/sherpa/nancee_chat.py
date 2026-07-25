@@ -8,6 +8,8 @@ import threading
 import time
 import urllib.error
 from collections import deque
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -55,28 +57,27 @@ from generation_completion import (
     trim_incomplete_length_tail,
     trim_prompt_role_leak,
 )
-from latency_bridge import LatencyBridge
-from memory_policy import (
-    extract_simple_fact_correction,
-    is_complete_memory_statement,
-    looks_like_personal_fact_fragment,
-    looks_like_personal_fact_question,
-    memory_storage_skip_reason,
+from input_router import route_user_input
+from latency_bridge import (
+    LatencyBridge,
+    calculate_remaining_bridge_delay,
 )
+from memory_policy import memory_storage_skip_reason
 from ollama_runtime import (
+    create_ollama_tpc,
     ensure_ollama_model_loaded,
-    prime_ollama_context,
-    stream_ollama_response,
 )
 from profile_fact_index import ProfileFactIndex
-from recall_policy import (
-    looks_like_perspective_correction,
-    repair_recall_perspective,
-)
-from response_policy import select_response_policy
+from recall_policy import repair_recall_perspective
+from response_policy import response_policy_for_route
 from session_archive import SessionArchive
 from session_memory_store import filter_memory_hits_by_overlap
 from short_term_memory import ShortTermMemory
+from speaker_state import (
+    SpeakerState,
+    direct_speaker_identity_response,
+    direct_speaker_return_response,
+)
 from tts_chunking import (
     extract_tts_chunk,
     is_filler_preface,
@@ -85,12 +86,12 @@ from tts_chunking import (
 from tts_request import build_tts_request
 from user_profile import UserProfile
 
+#global fields
 text_queue = queue.Queue()
 stop_event = threading.Event()
 audio_lock = threading.Lock()
 audio_chunks = deque()
 first_audio_enqueued = False
-
 gap_filler_lock = threading.Lock()
 gap_filler_audio_cycle = None
 gap_fillers_used = 0
@@ -104,141 +105,33 @@ ASR_WORKER_SCRIPT = ASR_DIRECTORY / "asr_worker.py"
 asr_process = None
 
 
-def memory_debug_enabled():
-    return MEMORY_DEBUG_ENABLED
+@dataclass(frozen=True)
+class SpokenUserInput:
+    text: str
+    stopped_at: float | None
 
 
-_QUESTION_PREFIXES = (
-    "what ",
-    "who ",
-    "where ",
-    "when ",
-    "why ",
-    "how ",
-    "do ",
-    "does ",
-    "did ",
-    "can ",
-    "could ",
-    "would ",
-    "should ",
-    "is ",
-    "are ",
-)
-
-_RECALL_QUERY_PATTERNS = (
-    r"\bdo you remember\b",
-    r"\bcan you remember\b",
-    r"\bdo you recall\b",
-    r"\bcan you recall\b",
-    r"\btell me what my\b",
-    r"\bcan you tell me what my\b",
-    r"\bwhat did i\b",
-    r"\bwhere did i\b",
-    r"\bwhere do i\b",
-    r"\bwhere is\b",
-    r"\bwhat do i\b",
-    r"\bwhat i\s+(?:drive|own|have)\b",
-    r"\bwhat am i driving\b",
-    r"\bwhat car\s+(?:am i driving|do i drive|do i have)\b",
-    r"\bwhat vehicle\s+(?:am i driving|do i drive|do i have)\b",
-    r"\bwhat kind of\s+(?:car|vehicle)\s+do i\s+(?:drive|own|have)\b",
-    r"\bwhat type of\s+(?:car|vehicle)\s+do i\s+(?:drive|own|have)\b",
-    r"\bcan you tell me what i\s+(?:drive|own|have)\b",
-    r"\bcan you tell me what car\s+(?:i drive|i have|i am driving)\b",
-    r"\bcan you tell me what vehicle\s+(?:i drive|i have|i am driving)\b",
-    r"\bwhat is my\b",
-    r"\bwhat's my\b",
-    r"\bwho is my\b",
-    r"\bwho's my\b",
-    r"\bwhere is .* from\b",
-    r"\bwhere .* is from\b",
-    r"\bwhat .* did i mention\b",
-    r"\bwhat .* did i tell you\b",
-    r"\bi told you .* earlier\b",
-)
-
-
-def normalize_user_text_for_memory(user_text):
-    lowered = re.sub(
-        r"\s+",
-        " ",
-        str(user_text).strip().lower(),
-    )
-
-    return re.sub(
-        r"^(nancy|nancee)[,\s]+",
-        "",
-        lowered,
-    )
-
-
-def looks_like_recall_request(user_text):
-    lowered = normalize_user_text_for_memory(user_text)
-
-    if not lowered:
-        return False
-
-    if looks_like_perspective_correction(lowered):
-        return True
-
-    if looks_like_personal_fact_question(lowered):
-        return True
-
-    return any(
-        re.search(
-            pattern,
-            lowered,
-            flags=re.IGNORECASE,
-        )
-        for pattern in _RECALL_QUERY_PATTERNS
-    )
-
-
-def looks_like_question_text(user_text):
-    lowered = normalize_user_text_for_memory(user_text)
-
-    if not lowered:
-        return False
-
-    if "?" in lowered:
-        return True
-
-    if lowered.startswith(_QUESTION_PREFIXES):
-        return True
-
-    return looks_like_recall_request(lowered)
-
-
-def retrieve_session_context(recall_memory, user_text):
+def retrieve_session_context(recall_memory, user_text, allow_weak_match=False):
+    # Timing
     started = time.perf_counter()
 
+    # Recall disabled
     if not MEMORY_RECALL_ENABLED:
-        if memory_debug_enabled():
+        if MEMORY_DEBUG_ENABLED:
             print(
                 f"[MEMORY RECALL] disabled=true query={user_text!r}",
                 flush=True,
             )
+
         return ""
 
-    retrieved_turns = recall_memory.retrieve(
-        user_text,
-        limit=MEMORY_RECALL_LIMIT,
-    )
-
-    explicit_memory_request = looks_like_recall_request(
-        user_text
-    ) or looks_like_personal_fact_fragment(user_text)
-
+    # Retrieve and filter memory
+    retrieved_turns = recall_memory.retrieve(user_text, limit=MEMORY_RECALL_LIMIT)
     unfiltered_count = len(retrieved_turns)
-    retrieved_turns = filter_memory_hits_by_overlap(
-        user_text,
-        retrieved_turns,
-        minimum_overlap=2,
-        allow_weak_match=explicit_memory_request,
-    )
+    retrieved_turns = filter_memory_hits_by_overlap(user_text, retrieved_turns, minimum_overlap=2, allow_weak_match=allow_weak_match)
 
-    if memory_debug_enabled() and len(retrieved_turns) != unfiltered_count:
+    # Report filtered memory
+    if MEMORY_DEBUG_ENABLED and len(retrieved_turns) != unfiltered_count:
         print(
             "[MEMORY RECALL FILTER] "
             f"removed={unfiltered_count - len(retrieved_turns)} "
@@ -246,14 +139,12 @@ def retrieve_session_context(recall_memory, user_text):
             flush=True,
         )
 
-    retrieved_context = recall_memory.format_related_context(
-        retrieved_turns,
-        max_characters=MEMORY_RECALL_CONTEXT_MAX_CHARACTERS,
-    )
-
+    # Format retrieved context
+    retrieved_context = recall_memory.format_related_context(retrieved_turns, max_characters=MEMORY_RECALL_CONTEXT_MAX_CHARACTERS)
     elapsed = time.perf_counter() - started
 
-    if memory_debug_enabled():
+    # Report recall results
+    if MEMORY_DEBUG_ENABLED:
         print(
             "[MEMORY RECALL] "
             f"query={user_text!r} "
@@ -303,7 +194,7 @@ def print_memory_status(recent_prompt_memory, recall_memory, phase):
                     len(str(row.get("raw_text", "")))
                     for row in recall_memory.store.debug_dump()
                 )
-        except Exception:
+        except Exception:  # noqa: BLE001
             recall_characters = 0
 
     print(
@@ -366,7 +257,84 @@ def send_asr_command(command):
     asr_process.stdin.flush()
 
 
-def get_spoken_user_input():
+def play_asr_ready_tone(sample_rate):
+    """Play a clear two-tone cue through Nancee's active output stream."""
+    sample_rate = int(sample_rate)
+
+    def make_tone(frequency_hz, duration_seconds):
+        sample_count = int(
+            sample_rate * duration_seconds
+        )
+
+        positions = (
+            np.arange(
+                sample_count,
+                dtype=np.float32,
+            )
+            / float(sample_rate)
+        )
+
+        samples = (
+            0.35
+            * np.sin(
+                2.0
+                * np.pi
+                * frequency_hz
+                * positions
+            )
+        ).astype(
+            np.float32,
+            copy=False,
+        )
+
+        fade_count = min(
+            int(sample_rate * 0.015),
+            sample_count // 2,
+        )
+
+        if fade_count > 0:
+            fade = np.linspace(
+                0.0,
+                1.0,
+                fade_count,
+                dtype=np.float32,
+            )
+
+            samples[:fade_count] *= fade
+            samples[-fade_count:] *= fade[::-1]
+
+        return samples
+
+    gap = np.zeros(
+        int(sample_rate * 0.07),
+        dtype=np.float32,
+    )
+
+    cue = np.concatenate(
+        (
+            make_tone(750.0, 0.18),
+            gap,
+            make_tone(1050.0, 0.18),
+        )
+    )
+
+    print(
+        "[ASR READY TONE] playing=true "
+        f"duration={len(cue) / sample_rate:.3f}s",
+        flush=True,
+    )
+
+    enqueue_audio(
+        cue,
+        sample_rate,
+    )
+
+    wait_for_audio_to_drain()
+
+
+def get_spoken_user_input(
+    output_sample_rate,
+):
     start_asr_worker()
 
     input("\nPress Enter to begin speaking...")
@@ -380,39 +348,79 @@ def get_spoken_user_input():
             f"[ASR ERROR] {message}",
             flush=True,
         )
-        return ""
+        return SpokenUserInput("", None)
+
+    # The microphone is confirmed active. Play the cue,
+    # then discard anything recorded while the cue played.
+    play_asr_ready_tone(
+        output_sample_rate,
+    )
+
+    send_asr_command("CLEAR")
+
+    message = read_asr_message()
+
+    if message.get("type") != "cleared":
+        print(
+            f"[ASR ERROR] Could not clear cue audio: {message}",
+            flush=True,
+        )
+        return SpokenUserInput("", None)
+
+    print(
+        "[ASR READY TONE] microphone_buffer_cleared=true",
+        flush=True,
+    )
 
     input("Recording... Press Enter to stop.\n")
+
+    stop_requested_at = time.perf_counter()
+
+    print(
+        "[LATENCY CLOCK] "
+        "event=recording_stop "
+        f"timestamp={stop_requested_at:.6f}",
+        flush=True,
+    )
+    print(
+        "[ASR] recording_stopped=true transcribing=true",
+        flush=True,
+    )
 
     send_asr_command("STOP")
 
     message = read_asr_message()
+    stop_to_result_seconds = time.perf_counter() - stop_requested_at
 
     if message.get("type") == "error":
         print(
             f"[ASR ERROR] {message.get('message')}",
             flush=True,
         )
-        return ""
+        return SpokenUserInput("", stop_requested_at)
 
     if message.get("type") != "result":
         print(
             f"[ASR ERROR] Unexpected response: {message}",
             flush=True,
         )
-        return ""
+        return SpokenUserInput("", stop_requested_at)
 
     print(
         f"[ASR] captured="
         f"{message.get('duration', 0.0):.2f}s "
         f"transcription="
         f"{message.get('transcription_seconds', 0.0):.2f}s "
+        f"stop_to_result={stop_to_result_seconds:.2f}s "
         f"peak="
         f"{message.get('peak', 0.0):.4f}",
         flush=True,
     )
 
-    return str(message.get("text", "")).strip()
+    return SpokenUserInput(
+        str(message.get("text", "")).strip(),
+        stop_requested_at,
+    )
 
 
 def stop_asr_worker():
@@ -477,6 +485,37 @@ def enqueue_audio(samples, sample_rate):
             first_audio_enqueued = True
 
         audio_chunks.append(samples)
+
+
+def fire_route_latency_bridge(
+    *,
+    stopped_at,
+    deadline,
+    phase,
+    phrase,
+    samples,
+    sample_rate,
+    target_seconds,
+):
+    fired_at = time.perf_counter()
+    elapsed_since_stop = fired_at - stopped_at
+    deadline_error = fired_at - deadline
+
+    print(
+        "\n[LATENCY BRIDGE FIRE] "
+        f"phase={phase} "
+        f"phrase={phrase!r} "
+        f"fired_at={fired_at:.6f} "
+        f"elapsed_since_stop={elapsed_since_stop:.3f}s "
+        f"target={target_seconds:.3f}s "
+        f"deadline_error={deadline_error:+.3f}s",
+        flush=True,
+    )
+
+    enqueue_audio(
+        samples.copy(),
+        sample_rate,
+    )
 
 
 def output_callback(
@@ -574,6 +613,10 @@ def tts_worker(tts):
             def callback(
                 samples: np.ndarray,
                 progress: float,
+                real_audio_started=real_audio_started,
+                request=request,
+                start=start,
+                text=text,
             ):
                 nonlocal first_callback
                 nonlocal callback_count
@@ -596,15 +639,18 @@ def tts_worker(tts):
                     first_callback = now
 
                     print(
-                        f"[TTS FIRST AUDIO] "
-                        f"{first_callback - start:.3f}s | "
-                        f"progress={progress:.3f} | "
-                        f"speed={request.speed:.2f} | "
-                        f"{text!r}",
-                        flush=True,
-                    )
+                               f"[TTS FIRST AUDIO] "
+                               f"{first_callback - start:.3f}s | "
+                               f"progress={progress:.3f} | "
+                               f"speed={request.speed:.2f} | "
+                               f"{text!r}",
+                               flush=True,
+                           )
 
-                if first_audio_for_request and request.first_audio_callback is not None:
+                if (
+                    first_audio_for_request
+                    and request.first_audio_callback is not None
+                ):
                     request.first_audio_callback()
 
                 enqueue_audio(
@@ -616,13 +662,15 @@ def tts_worker(tts):
 
             if TTS_GAP_FILLER_ENABLED and request.allow_gap_filler:
 
-                def play_gap_filler():
+                def play_gap_filler(
+                    _real_audio_started=real_audio_started,
+                ):
                     global gap_fillers_used
                     global last_gap_filler_time
 
                     # Real audio may have arrived while this timer
                     # thread was waking up.
-                    if real_audio_started.is_set():
+                    if _real_audio_started.is_set():
                         return
 
                     with audio_lock:
@@ -634,7 +682,7 @@ def tts_worker(tts):
                     with gap_filler_lock:
                         # Check again after acquiring the shared
                         # filler-state lock.
-                        if real_audio_started.is_set():
+                        if _real_audio_started.is_set():
                             return
 
                         if gap_fillers_used >= TTS_GAP_FILLER_MAX_PER_TURN:
@@ -650,7 +698,7 @@ def tts_worker(tts):
                             and (now - last_gap_filler_time)
                             < TTS_GAP_FILLER_COOLDOWN_SECONDS
                         ):
-                            if memory_debug_enabled():
+                            if MEMORY_DEBUG_ENABLED:
                                 remaining = TTS_GAP_FILLER_COOLDOWN_SECONDS - (
                                     now - last_gap_filler_time
                                 )
@@ -672,7 +720,7 @@ def tts_worker(tts):
 
                         # One final race check before consuming the
                         # budget and placing filler audio in the queue.
-                        if real_audio_started.is_set():
+                        if _real_audio_started.is_set():
                             return
 
                         gap_fillers_used += 1
@@ -739,7 +787,7 @@ def tts_worker(tts):
                 flush=True,
             )
 
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001
             print(
                 f"[TTS ERROR] {error!r}",
                 flush=True,
@@ -1030,16 +1078,6 @@ def wait_for_audio_to_drain():
     time.sleep(0.25)
 
 
-def should_store_recall_turn(user_text):
-    return is_complete_memory_statement(user_text)
-
-
-def should_retrieve_recall(user_text):
-    return looks_like_question_text(user_text) or looks_like_personal_fact_fragment(
-        user_text
-    )
-
-
 def main():
     print(
         "Loading Sherpa Kokoro...",
@@ -1047,6 +1085,7 @@ def main():
     )
 
     tts = build_tts()
+
     bridge_audio_options = [
         (
             phrase,
@@ -1058,7 +1097,12 @@ def main():
         for phrase in LATENCY_BRIDGE_PHRASES
     ]
 
-    bridge_audio_cycle = itertools.cycle(bridge_audio_options)
+    # Shuffle once at startup, then use every phrase before repeating.
+    random.shuffle(bridge_audio_options)
+
+    bridge_audio_cycle = itertools.cycle(
+        bridge_audio_options
+    )
 
     greeting_bridge_audio_options = [
         (
@@ -1119,14 +1163,39 @@ def main():
 
     worker.start()
 
+    user_profile = UserProfile.load()
+    profile_index = ProfileFactIndex(
+        user_profile.facts,
+    )
+    speaker_state = SpeakerState(
+        primary_name=user_profile.facts.get("name"),
+    )
+
+    print(
+        "[USER PROFILE INDEX] "
+        f"loaded={not user_profile.is_empty()} "
+        f"facts={profile_index.count()}",
+        flush=True,
+    )
+
+    print(
+        "[SPEAKER STATE] "
+        f"current={speaker_state.current_name!r} "
+        "source=primary_profile",
+        flush=True,
+    )
+
+    tpc = create_ollama_tpc()
+
     try:
         ensure_ollama_model_loaded(
             LLM_MODEL,
         )
 
-        prime_ollama_context(
+        tpc.prime_now(
             history=[],
-            memory_context="",
+            memory_context=speaker_state.prompt_context(),
+            reason="startup",
         )
 
     except RuntimeError as error:
@@ -1135,6 +1204,7 @@ def main():
             flush=True,
         )
 
+        tpc.shutdown()
         stop_event.set()
         worker.join(timeout=2.0)
 
@@ -1148,525 +1218,754 @@ def main():
         max_turns=MEMORY_RECALL_TURN_LIMIT,
     )
 
-    user_profile = UserProfile.load()
-    profile_index = ProfileFactIndex(
-        user_profile.facts,
-    )
-
-    print(
-        "[USER PROFILE INDEX] "
-        f"loaded={not user_profile.is_empty()} "
-        f"facts={profile_index.count()}",
-        flush=True,
-    )
-
     print(
         "Opening persistent audio stream...",
         flush=True,
     )
 
-    with sd.OutputStream(
-        channels=1,
-        samplerate=tts.sample_rate,
-        dtype="float32",
-        blocksize=BLOCKSIZE,
-        callback=output_callback,
-    ):
-        while True:
-            try:
-                user_text = get_spoken_user_input()
+    try:
+        with sd.OutputStream(
+            channels=1,
+            samplerate=tts.sample_rate,
+            dtype="float32",
+            blocksize=BLOCKSIZE,
+            callback=output_callback,
+        ):
+            while True:
+                try:
+                    spoken_input = get_spoken_user_input(
+                        tts.sample_rate,
+                    )
+                    user_text = spoken_input.text
+                    recording_stopped_at = spoken_input.stopped_at
+                    bridge = None
 
-            except KeyboardInterrupt:
-                print(
-                    "\nStopping.",
-                    flush=True,
-                )
-                break
-
-            if not user_text:
-                continue
-
-            if is_punctuation_only(user_text):
-                print(
-                    "[ASR] Ignoring punctuation-only transcription.",
-                    flush=True,
-                )
-                continue
-
-            if len(user_text) > 1000:
-                print(
-                    "[ASR] Ignoring implausibly long transcription.",
-                    flush=True,
-                )
-                continue
-
-            print(
-                f"\nYou: {user_text}",
-                flush=True,
-            )
-
-            if user_text.lower() in {
-                "q",
-                "quit",
-                "exit",
-            }:
-                break
-
-            global_start = time.time()
-
-            global gap_fillers_used
-            global last_gap_filler_time
-
-            with gap_filler_lock:
-                gap_fillers_used = 0
-                last_gap_filler_time = 0.0
-
-            personal_fact_fragment = looks_like_personal_fact_fragment(user_text)
-            recall_requested = should_retrieve_recall(user_text)
-            explicit_recall_requested = (
-                looks_like_recall_request(user_text) or personal_fact_fragment
-            )
-
-            profile_started = time.perf_counter()
-            effective_profile_context = ""
-            profile_hits = []
-
-            if USER_PROFILE_RETRIEVAL_ENABLED:
-                (
-                    effective_profile_context,
-                    profile_hits,
-                ) = profile_index.retrieve_context(
-                    user_text,
-                    limit=USER_PROFILE_RETRIEVAL_LIMIT,
-                    max_characters=(USER_PROFILE_CONTEXT_MAX_CHARACTERS),
-                )
-
-            profile_context_found = bool(effective_profile_context.strip())
-            profile_elapsed = time.perf_counter() - profile_started
-
-            if memory_debug_enabled():
-                print(
-                    "[USER PROFILE RETRIEVAL] "
-                    f"hits={[hit.key for hit in profile_hits]} "
-                    f"context_characters="
-                    f"{len(effective_profile_context)} "
-                    f"elapsed={profile_elapsed:.6f}s",
-                    flush=True,
-                )
-
-            if profile_context_found:
-                # A matching profile fact is confirmed and authoritative.
-                # Do not add a weaker raw-session FTS5 hit to the same prompt.
-                retrieved_context = ""
-                memory_context_found = False
-
-                if memory_debug_enabled():
+                except KeyboardInterrupt:
                     print(
-                        "[MEMORY RECALL] skipped=true reason=authoritative_profile_hit",
+                        "\nStopping.",
+                        flush=True,
+                    )
+                    break
+
+                if recording_stopped_at is None:
+                    if bridge is not None:
+                        bridge.resolve()
+
+                    print(
+                        "[LATENCY CLOCK] "
+                        "event=recording_stop_missing "
+                        "route_bridge_skipped=true",
+                        flush=True,
+                    )
+                    continue
+
+                handoff_update = speaker_state.begin_turn()
+
+                if handoff_update.action != "unchanged":
+                    print(
+                        "[SPEAKER STATE] "
+                        f"action={handoff_update.action} "
+                        f"current={speaker_state.current_name!r}",
                         flush=True,
                     )
 
-            elif recall_requested:
-                retrieved_context = retrieve_session_context(
+                speaker_context_before_observation = (
+                    speaker_state.prompt_context()
+                )
+                speaker_update = speaker_state.observe(user_text)
+                active_speaker_context = speaker_state.prompt_context()
+                speaker_context_changed_for_request = (
+                    active_speaker_context
+                    != speaker_context_before_observation
+                )
+
+                if speaker_update.action != "unchanged":
+                    print(
+                        "[SPEAKER STATE] "
+                        f"action={speaker_update.action} "
+                        f"name={speaker_update.name!r} "
+                        f"current={speaker_state.current_name!r} "
+                        f"pending={speaker_state.pending_name!r}",
+                        flush=True,
+                    )
+
+                previous_turns = recent_prompt_memory.get_turns_snapshot()
+                previous_turn = previous_turns[-1] if previous_turns else None
+
+                input_route = route_user_input(
+                    user_text,
+                    previous_turn=previous_turn,
+                )
+
+                if input_route.kind == "invalid":
+                    if bridge is not None:
+                        bridge.resolve()
+
+                    print(
+                        "[INPUT ROUTE] "
+                        f"kind=invalid reason={input_route.reason}",
+                        flush=True,
+                    )
+                    continue
+
+                print(
+                    f"\nYou: {user_text}",
+                    flush=True,
+                )
+
+                print(
+                    "[INPUT ROUTE] "
+                    f"kind={input_route.kind} "
+                    f"reason={input_route.reason} "
+                    f"retrieve_recall={input_route.retrieve_recall} "
+                    f"explicit_recall={input_route.explicit_recall} "
+                    f"allow_weak_match={input_route.allow_weak_match} "
+                    f"store_recall={input_route.store_recall}",
+                    flush=True,
+                )
+
+                if input_route.kind == "exit":
+                    if bridge is not None:
+                        bridge.resolve()
+                    break
+
+                global_start = time.time()
+
+                global gap_fillers_used
+                global last_gap_filler_time
+
+                with gap_filler_lock:
+                    gap_fillers_used = 0
+                    last_gap_filler_time = 0.0
+
+                recall_requested = input_route.retrieve_recall
+                explicit_recall_requested = input_route.explicit_recall
+
+                profile_started = time.perf_counter()
+                effective_profile_context = ""
+                profile_hits = []
+
+                if (
+                    USER_PROFILE_RETRIEVAL_ENABLED
+                    and input_route.kind != "speaker"
+                    and input_route.kind != "speaker_return"
+                ):
+                    (
+                        effective_profile_context,
+                        profile_hits,
+                    ) = profile_index.retrieve_context(
+                        user_text,
+                        limit=USER_PROFILE_RETRIEVAL_LIMIT,
+                        max_characters=(USER_PROFILE_CONTEXT_MAX_CHARACTERS),
+                    )
+
+                profile_context_found = bool(effective_profile_context.strip())
+                profile_elapsed = time.perf_counter() - profile_started
+
+                if MEMORY_DEBUG_ENABLED:
+                    print(
+                        "[USER PROFILE RETRIEVAL] "
+                        f"hits={[hit.key for hit in profile_hits]} "
+                        f"context_characters="
+                        f"{len(effective_profile_context)} "
+                        f"elapsed={profile_elapsed:.6f}s",
+                        flush=True,
+                    )
+
+                if profile_context_found:
+                    # A matching profile fact is confirmed and authoritative.
+                    # Do not add a weaker raw-session FTS5 hit to the same prompt.
+                    retrieved_context = ""
+                    memory_context_found = False
+
+                    if MEMORY_DEBUG_ENABLED:
+                        print(
+                            "[MEMORY RECALL] skipped=true reason=authoritative_profile_hit",
+                            flush=True,
+                        )
+
+                elif recall_requested:
+                    retrieved_context = retrieve_session_context(
+                        recall_memory,
+                        user_text,
+                        allow_weak_match=input_route.allow_weak_match,
+                    )
+
+                    memory_context_found = bool(str(retrieved_context).strip())
+
+                else:
+                    retrieved_context = ""
+                    memory_context_found = False
+
+                    if MEMORY_DEBUG_ENABLED:
+                        print(
+                            "[MEMORY RECALL] skipped=true reason=not_recall_request",
+                            flush=True,
+                        )
+
+                fact_miss = (
+                    explicit_recall_requested
+                    and not memory_context_found
+                    and not profile_context_found
+                )
+
+                if fact_miss:
+                    # Only a clear explicit recall request earns an
+                    # authoritative memory-miss answer. Ordinary questions and
+                    # incomplete fragments remain on their normal model route.
+                    effective_profile_context = (
+                        "No matching confirmed fact about the human user "
+                        "was retrieved. Say only that you do not remember "
+                        "it yet."
+                    )
+
+                    if MEMORY_DEBUG_ENABLED:
+                        print(
+                            "[USER FACT MISS] llm_answer=true",
+                            flush=True,
+                        )
+
+                request_memory_context = "\n\n".join(
+                    context
+                    for context in (
+                        active_speaker_context,
+                        effective_profile_context,
+                    )
+                    if str(context).strip()
+                )
+
+                authoritative_context_found = (
+                    profile_context_found
+                    or (
+                        input_route.explicit_recall
+                        and memory_context_found
+                    )
+                )
+
+                authoritative_response_required = (
+                    authoritative_context_found
+                    or fact_miss
+                )
+
+                response_policy = response_policy_for_route(
+                    input_route.kind,
+                    authoritative_context_found=authoritative_context_found,
+                    fact_miss=fact_miss,
+                )
+
+                print(
+                    "[RESPONSE POLICY] "
+                    f"name={response_policy.name} "
+                    f"temperature={response_policy.temperature:.2f} "
+                    f"num_predict={response_policy.num_predict} "
+                    f"drop_history={response_policy.drop_history}",
+                    flush=True,
+                )
+
+                print_memory_status(
+                    recent_prompt_memory,
                     recall_memory,
-                    user_text,
+                    "before_request",
                 )
 
-                memory_context_found = bool(str(retrieved_context).strip())
-
-            else:
-                retrieved_context = ""
-                memory_context_found = False
-
-                if memory_debug_enabled():
-                    print(
-                        "[MEMORY RECALL] skipped=true reason=not_recall_request",
-                        flush=True,
-                    )
-
-            if (
-                explicit_recall_requested
-                and not memory_context_found
-                and not profile_context_found
-            ):
-                # Keep a recall miss inside the LLM personality path,
-                # but give the model a tiny authoritative instruction
-                # instead of the complete user profile.
-                effective_profile_context = (
-                    "No matching confirmed fact about the human user "
-                    "was retrieved. Say only that you do not remember "
-                    "it yet."
-                )
-
-                if memory_debug_enabled():
-                    print(
-                        "[USER FACT MISS] llm_answer=true",
-                        flush=True,
-                    )
-
-            authoritative_context_found = memory_context_found or bool(
-                effective_profile_context.strip()
-            )
-
-            response_policy = select_response_policy(
-                user_text,
-                authoritative_context_found=(authoritative_context_found),
-            )
-
-            print(
-                "[RESPONSE POLICY] "
-                f"name={response_policy.name} "
-                f"temperature={response_policy.temperature:.2f} "
-                f"num_predict={response_policy.num_predict} "
-                f"drop_history={response_policy.drop_history}",
-                flush=True,
-            )
-
-            print_memory_status(
-                recent_prompt_memory,
-                recall_memory,
-                "before_request",
-            )
-
-            print(
-                "\nNancee: ",
-                end="",
-                flush=True,
-            )
-            bridge = None
-
-            if response_policy.name == "greeting":
-                selected_bridge_audio_cycle = greeting_bridge_audio_cycle
-            else:
-                selected_bridge_audio_cycle = bridge_audio_cycle
-
-            (
-                bridge_phrase,
-                bridge_samples,
-                bridge_sample_rate,
-            ) = next(selected_bridge_audio_cycle)
-
-            def play_latency_bridge():
                 print(
-                    f"\n[LATENCY BRIDGE] fired phrase={bridge_phrase!r}",
+                    "\nNancee: ",
+                    end="",
                     flush=True,
                 )
-
-                enqueue_audio(
-                    bridge_samples.copy(),
-                    bridge_sample_rate,
-                )
-
-            try:
                 if response_policy.name == "greeting":
-                    bridge_delay_seconds = LATENCY_BRIDGE_GREETING_SECONDS
-                elif authoritative_context_found:
-                    bridge_delay_seconds = LATENCY_BRIDGE_RECALL_SECONDS
+                    selected_bridge_audio_cycle = greeting_bridge_audio_cycle
                 else:
-                    bridge_delay_seconds = LATENCY_BRIDGE_NORMAL_SECONDS
+                    selected_bridge_audio_cycle = bridge_audio_cycle
 
-                bridge = LatencyBridge(
-                    delay_seconds=bridge_delay_seconds,
-                    enabled=LATENCY_BRIDGE_ENABLED,
-                    on_fire=play_latency_bridge,
-                )
+                (
+                    bridge_phrase,
+                    bridge_samples,
+                    bridge_sample_rate,
+                ) = next(selected_bridge_audio_cycle)
 
-                bridge.start()
+                try:
+                    if response_policy.name == "greeting":
+                        bridge_target_seconds = LATENCY_BRIDGE_GREETING_SECONDS
+                    elif authoritative_response_required:
+                        bridge_target_seconds = LATENCY_BRIDGE_RECALL_SECONDS
+                    else:
+                        bridge_target_seconds = LATENCY_BRIDGE_NORMAL_SECONDS
 
-                if looks_like_perspective_correction(user_text):
-                    request_history = recent_prompt_memory.get_messages()
-                elif authoritative_context_found or response_policy.drop_history:
-                    # Retrieved facts are authoritative. Dropping the
-                    # one-turn chat history keeps the prompt smaller and
-                    # prevents a prior verbose answer from contaminating
-                    # the fact-based response.
-                    request_history = []
-                else:
-                    request_history = recent_prompt_memory.get_messages()
-
-                completion_state = {}
-
-                response = stream_ollama_response(
-                    user_text=user_text,
-                    history=request_history,
-                    memory_context=effective_profile_context,
-                    retrieved_context=retrieved_context,
-                    response_instruction=(response_policy.instruction),
-                    temperature=response_policy.temperature,
-                    num_predict=response_policy.num_predict,
-                    completion_state=completion_state,
-                )
-
-                if authoritative_context_found:
-                    # Fact-backed answers are collected before speech so a
-                    # small-model contradiction cannot enter TTS or history.
-                    assistant_text = collect_text_response(
-                        response,
+                    (
+                        bridge_delay_seconds,
+                        bridge_elapsed_seconds,
+                    ) = calculate_remaining_bridge_delay(
+                        bridge_target_seconds,
+                        started_at=recording_stopped_at,
                     )
-                    assistant_text, authoritative_role_leak_trimmed = (
-                        trim_prompt_role_leak(assistant_text)
+                    logical_deadline = (
+                        recording_stopped_at
+                        + bridge_target_seconds
                     )
 
-                    if authoritative_role_leak_trimmed:
+                    route_decided_at = time.perf_counter()
+
+                    print(
+                        "[LATENCY BRIDGE CLOCK] "
+                        f"phase={response_policy.name} "
+                        f"logical_start={recording_stopped_at:.6f} "
+                        f"route_decided_at={route_decided_at:.6f} "
+                        f"elapsed_since_stop={bridge_elapsed_seconds:.3f}s "
+                        f"target={bridge_target_seconds:.3f}s "
+                        f"remaining={bridge_delay_seconds:.3f}s "
+                        f"logical_deadline={logical_deadline:.6f}",
+                        flush=True,
+                    )
+
+                    print(
+                        "[LATENCY BRIDGE DEADLINE] phase=route "
+                        f"target={bridge_target_seconds:.3f}s "
+                        f"elapsed_since_stop={bridge_elapsed_seconds:.3f}s "
+                        f"remaining={bridge_delay_seconds:.3f}s",
+                        flush=True,
+                    )
+
+                    direct_speaker_route = response_policy.name in {
+                        "speaker",
+                        "speaker_return",
+                    }
+
+                    route_bridge_callback = partial(
+                        fire_route_latency_bridge,
+                        stopped_at=recording_stopped_at,
+                        deadline=logical_deadline,
+                        phase=response_policy.name,
+                        phrase=bridge_phrase,
+                        samples=bridge_samples,
+                        sample_rate=bridge_sample_rate,
+                        target_seconds=bridge_target_seconds,
+                    )
+
+                    bridge = LatencyBridge(
+                        delay_seconds=bridge_delay_seconds,
+                        enabled=(
+                            LATENCY_BRIDGE_ENABLED
+                            and not direct_speaker_route
+                        ),
+                        on_fire=route_bridge_callback,
+                    )
+
+                    physical_arm_at = time.perf_counter()
+
+                    print(
+                        "[LATENCY BRIDGE ARM] "
+                        f"phase={response_policy.name} "
+                        f"logical_start={recording_stopped_at:.6f} "
+                        f"physical_arm={physical_arm_at:.6f} "
+                        f"elapsed_before_arm="
+                        f"{physical_arm_at - recording_stopped_at:.3f}s "
+                        f"delay_given={bridge_delay_seconds:.3f}s "
+                        f"logical_deadline={logical_deadline:.6f}",
+                        flush=True,
+                    )
+
+                    bridge.start()
+
+                    if input_route.force_keep_history:
+                        request_history = recent_prompt_memory.get_messages()
+                    elif authoritative_response_required or response_policy.drop_history:
+                        # Explicit fact answers and explicit misses are isolated
+                        # from conversational history. Background enrichment for
+                        # an ordinary question keeps the live one-turn history.
+                        request_history = []
+                    else:
+                        request_history = recent_prompt_memory.get_messages()
+
+                    live_history = recent_prompt_memory.get_messages()
+                    require_exact_tpc_prefix = (
+                        request_history == live_history
+                        and not effective_profile_context.strip()
+                        and not speaker_context_changed_for_request
+                    )
+
+                    completion_state = {}
+                    assistant_text = ""
+                    handled_directly = False
+                    response = None
+
+                    if response_policy.name == "speaker_return":
+                        assistant_text = direct_speaker_return_response()
+                        handled_directly = True
+
                         print(
-                            "[LLM STREAM GUARD] "
-                            "Removed prompt-role continuation "
-                            "before authoritative validation.",
-                            flush=True,
-                        )
-
-                    assistant_text, authoritative_tail_trimmed = (
-                        trim_incomplete_length_tail(
-                            assistant_text,
-                            completion_state,
-                        )
-                    )
-
-                    if authoritative_tail_trimmed:
-                        print(
-                            "[LLM COMPLETION GUARD] "
-                            "Removed incomplete token-limit tail "
-                            "before authoritative validation.",
-                            flush=True,
-                        )
-
-                    if not assistant_text:
-                        assistant_text = "I don't remember that clearly enough."
-
-                    if memory_context_found:
-                        assistant_text, repaired = repair_recall_perspective(
-                            assistant_text,
-                        )
-
-                        if repaired:
-                            print(
-                                "[MEMORY PERSPECTIVE REPAIR] "
-                                f"output={assistant_text!r}",
-                                flush=True,
-                            )
-
-                    fact_miss = (
-                        explicit_recall_requested
-                        and not memory_context_found
-                        and not profile_context_found
-                    )
-
-                    assistant_text, guard_action = prepare_authoritative_response(
-                        assistant_text,
-                        profile_hits=profile_hits,
-                        fact_miss=fact_miss,
-                        retrieved_context=retrieved_context,
-                    )
-
-                    if memory_debug_enabled():
-                        print(
-                            "[AUTHORITATIVE RESPONSE GUARD] "
-                            f"action={guard_action} "
+                            "[SPEAKER DIRECT RESPONSE] "
+                            "kind=return "
+                            f"current={speaker_state.current_name!r} "
                             f"output={assistant_text!r}",
                             flush=True,
                         )
 
-                    enqueue_complete_response(
-                        assistant_text,
-                        first_audio_callback=bridge.resolve,
-                    )
-                elif response_policy.name == "directive":
-                    collected_directive = collect_text_response(
-                        response,
-                    )
-
-                    assistant_text, directive_role_leak_trimmed = trim_prompt_role_leak(
-                        collected_directive,
-                    )
-
-                    if directive_role_leak_trimmed:
-                        print(
-                            "[DIRECTIVE RESPONSE GUARD] action=role_leak_trimmed",
-                            flush=True,
-                        )
-
-                    assistant_text, directive_tail_trimmed = (
-                        trim_incomplete_length_tail(
+                        enqueue_complete_response(
                             assistant_text,
-                            completion_state,
+                            first_audio_callback=bridge.resolve,
                         )
-                    )
 
-                    if directive_tail_trimmed:
+                    elif response_policy.name == "speaker":
+                        assistant_text = direct_speaker_identity_response(
+                            speaker_state.current_name,
+                        )
+                        handled_directly = True
+
                         print(
-                            "[DIRECTIVE RESPONSE GUARD] action=length_tail_trimmed",
+                            "[SPEAKER DIRECT RESPONSE] "
+                            "kind=identity "
+                            f"current={speaker_state.current_name!r} "
+                            f"output={assistant_text!r}",
                             flush=True,
                         )
 
-                    if not assistant_text:
-                        assistant_text = "Could you repeat that?"
+                        enqueue_complete_response(
+                            assistant_text,
+                            first_audio_callback=bridge.resolve,
+                        )
 
-                    assistant_text, directive_repaired = repair_directive_perspective(
-                        user_text,
-                        assistant_text,
-                    )
+                    else:
+                        response = tpc.stream_response(
+                            user_text=user_text,
+                            history=request_history,
+                            memory_context=request_memory_context,
+                            require_exact_prefix=require_exact_tpc_prefix,
+                            retrieved_context=retrieved_context,
+                            response_instruction=response_policy.instruction,
+                            temperature=response_policy.temperature,
+                            num_predict=response_policy.num_predict,
+                            completion_state=completion_state,
+                        )
 
-                    if directive_repaired:
+                    if handled_directly:
+                        pass
+
+                    elif response is None:
+                        raise RuntimeError(
+                            "Ollama response stream was not created."
+                        )
+
+                    elif authoritative_response_required:
+                        # Fact-backed answers are collected before speech so a
+                        # small-model contradiction cannot enter TTS or history.
+                        assistant_text = collect_text_response(
+                            response,
+                        )
+                        assistant_text, authoritative_role_leak_trimmed = (
+                            trim_prompt_role_leak(assistant_text)
+                        )
+
+                        if authoritative_role_leak_trimmed:
+                            print(
+                                "[LLM STREAM GUARD] "
+                                "Removed prompt-role continuation "
+                                "before authoritative validation.",
+                                flush=True,
+                            )
+
+                        assistant_text, authoritative_tail_trimmed = (
+                            trim_incomplete_length_tail(
+                                assistant_text,
+                                completion_state,
+                            )
+                        )
+
+                        if authoritative_tail_trimmed:
+                            print(
+                                "[LLM COMPLETION GUARD] "
+                                "Removed incomplete token-limit tail "
+                                "before authoritative validation.",
+                                flush=True,
+                            )
+
+                        if not assistant_text:
+                            assistant_text = (
+                                "I don't remember that clearly enough."
+                            )
+
+                        if memory_context_found:
+                            assistant_text, repaired = (
+                                repair_recall_perspective(
+                                    assistant_text,
+                                )
+                            )
+
+                            if repaired:
+                                print(
+                                    "[MEMORY PERSPECTIVE REPAIR] "
+                                    f"output={assistant_text!r}",
+                                    flush=True,
+                                )
+
+                        assistant_text, guard_action = (
+                            prepare_authoritative_response(
+                                assistant_text,
+                                profile_hits=profile_hits,
+                                fact_miss=fact_miss,
+                                retrieved_context=retrieved_context,
+                            )
+                        )
+
+                        if MEMORY_DEBUG_ENABLED:
+                            print(
+                                "[AUTHORITATIVE RESPONSE GUARD] "
+                                f"action={guard_action} "
+                                f"output={assistant_text!r}",
+                                flush=True,
+                            )
+
+                        enqueue_complete_response(
+                            assistant_text,
+                            first_audio_callback=bridge.resolve,
+                        )
+
+                    elif response_policy.name == "directive":
+                        collected_directive = collect_text_response(
+                            response,
+                        )
+
+                        (
+                            assistant_text,
+                            directive_role_leak_trimmed,
+                        ) = trim_prompt_role_leak(
+                            collected_directive,
+                        )
+
+                        if directive_role_leak_trimmed:
+                            print(
+                                "[DIRECTIVE RESPONSE GUARD] "
+                                "action=role_leak_trimmed",
+                                flush=True,
+                            )
+
+                        assistant_text, directive_tail_trimmed = (
+                            trim_incomplete_length_tail(
+                                assistant_text,
+                                completion_state,
+                            )
+                        )
+
+                        if directive_tail_trimmed:
+                            print(
+                                "[DIRECTIVE RESPONSE GUARD] "
+                                "action=length_tail_trimmed",
+                                flush=True,
+                            )
+
+                        if not assistant_text:
+                            assistant_text = "Could you repeat that?"
+
+                        assistant_text, directive_repaired = (
+                            repair_directive_perspective(
+                                user_text,
+                                assistant_text,
+                            )
+                        )
+
+                        if directive_repaired:
+                            print(
+                                "[DIRECTIVE PERSPECTIVE REPAIR] "
+                                f"output={assistant_text!r}",
+                                flush=True,
+                            )
+
+                        enqueue_complete_response(
+                            assistant_text,
+                            first_audio_callback=bridge.resolve,
+                        )
+
+                    elif response_policy.name == "clarify":
+                        collected_clarification = collect_text_response(
+                            response,
+                        )
+                        assistant_text, clarify_guard_action = (
+                            prepare_clarification_response(
+                                collected_clarification,
+                                completion_state,
+                            )
+                        )
+
                         print(
-                            f"[DIRECTIVE PERSPECTIVE REPAIR] output={assistant_text!r}",
+                            "[CLARIFY RESPONSE GUARD] "
+                            f"action={clarify_guard_action} "
+                            f"output={assistant_text!r}",
                             flush=True,
                         )
 
-                    enqueue_complete_response(
-                        assistant_text,
-                        first_audio_callback=bridge.resolve,
-                    )
-                elif response_policy.name == "clarify":
-                    collected_clarification = collect_text_response(
-                        response,
-                    )
-                    assistant_text, clarify_guard_action = (
-                        prepare_clarification_response(
-                            collected_clarification,
-                            completion_state,
+                        enqueue_complete_response(
+                            assistant_text,
+                            first_audio_callback=bridge.resolve,
                         )
-                    )
 
+                    else:
+                        assistant_text = stream_text_to_tts(
+                            response,
+                            first_audio_callback=bridge.resolve,
+                            completion_state=completion_state,
+                        )
+
+                except (
+                    TimeoutError,
+                    urllib.error.URLError,
+                    urllib.error.HTTPError,
+                    RuntimeError,
+                ) as error:
                     print(
-                        "[CLARIFY RESPONSE GUARD] "
-                        f"action={clarify_guard_action} "
-                        f"output={assistant_text!r}",
+                        f"\n[OLLAMA ERROR] {error}",
                         flush=True,
                     )
 
-                    enqueue_complete_response(
-                        assistant_text,
-                        first_audio_callback=bridge.resolve,
-                    )
-                else:
-                    assistant_text = stream_text_to_tts(
-                        response,
-                        first_audio_callback=bridge.resolve,
-                        completion_state=completion_state,
+                    tpc.prime_async(
+                        history=recent_prompt_memory.get_messages(),
+                        memory_context=speaker_state.prompt_context(),
+                        reason="request_recovery",
                     )
 
-            except (
-                TimeoutError,
-                urllib.error.URLError,
-                urllib.error.HTTPError,
-                RuntimeError,
-            ) as error:
-                print(
-                    f"\n[OLLAMA ERROR] {error}",
-                    flush=True,
+                    text_queue.join()
+                    wait_for_audio_to_drain()
+                    continue
+
+                finally:
+                    if bridge is not None:
+                        bridge.resolve()
+
+                if not assistant_text:
+                    print(
+                        "\n[LLM ERROR] Ollama returned no response text.",
+                        flush=True,
+                    )
+
+                    tpc.prime_async(
+                        history=recent_prompt_memory.get_messages(),
+                        memory_context=speaker_state.prompt_context(),
+                        reason="empty_response_recovery",
+                    )
+                    continue
+
+                # Preserve Nancee's real answer in the one-turn live prompt.
+                # FTS5 still stores only the raw user utterance.
+                memory_assistant_text = assistant_text
+
+                # Apply narrow "it was NEW, not OLD" corrections using the
+                # single router decision. Rewriting the original sentence
+                # preserves its action words for later FTS5 recall.
+                correction = input_route.correction
+                corrected_memory_id = None
+
+                if correction is not None:
+                    new_value, old_value = correction
+                    corrected_memory_id = recall_memory.apply_simple_correction(
+                        new_value=new_value,
+                        old_value=old_value,
+                    )
+
+                    if MEMORY_DEBUG_ENABLED:
+                        print(
+                            "[MEMORY RAW CORRECT] "
+                            f"id={corrected_memory_id} "
+                            f"new={new_value!r} "
+                            f"old={old_value!r}",
+                            flush=True,
+                        )
+
+                # FTS5 recall storage is also controlled by the router. A short
+                # contextual answer such as "I sure did" may carry a resolved
+                # statement built from Nancee's previous question.
+                if corrected_memory_id is not None:
+                    pass
+                elif input_route.store_recall:
+                    recall_storage_text = (
+                        input_route.recall_storage_text
+                        or user_text
+                    )
+
+                    added_memory_id = recall_memory.add_turn(
+                        user_text=recall_storage_text,
+                    )
+
+                    if MEMORY_DEBUG_ENABLED:
+                        if added_memory_id is not None:
+                            print(
+                                f"[MEMORY RAW ADD] id={added_memory_id} "
+                                f"stored={recall_storage_text!r} "
+                                f"source={user_text!r}",
+                                flush=True,
+                            )
+                        else:
+                            print(
+                                "[MEMORY RAW SKIP] backend_rejected=true",
+                                flush=True,
+                            )
+                elif MEMORY_DEBUG_ENABLED:
+                    print(
+                        "[MEMORY RAW SKIP] "
+                        f"reason={memory_storage_skip_reason(user_text)} "
+                        f"text={user_text!r}",
+                        flush=True,
+                    )
+
+                recent_prompt_memory.add_turn(
+                    user_text=user_text,
+                    assistant_text=memory_assistant_text,
                 )
 
                 text_queue.join()
+
+                # Direct speaker responses bypass tpc.stream_response(), so the
+                # previous turn's background prime may still be registered even
+                # after its worker has finished. Consume that result before
+                # scheduling the new completed-turn prefix. For ordinary LLM
+                # turns this is a no-op because stream_response() already waited.
+                tpc.wait_until_ready()
+
+                tpc.prime_async(
+                    history=recent_prompt_memory.get_messages(),
+                    memory_context=speaker_state.next_prompt_context(),
+                    reason="completed_turn",
+                )
+
                 wait_for_audio_to_drain()
-                continue
 
-            finally:
-                if bridge is not None:
-                    bridge.resolve()
-
-            if not assistant_text:
-                print(
-                    "\n[LLM ERROR] Ollama returned no response text.",
-                    flush=True,
-                )
-                continue
-
-            # Preserve Nancee's real answer in the one-turn live prompt.
-            # FTS5 still stores only the raw user utterance.
-            memory_assistant_text = assistant_text
-
-            # Apply narrow "it was NEW, not OLD" corrections to the newest
-            # matching raw memory. Rewriting the original sentence preserves
-            # its action words for later FTS5 recall.
-            correction = extract_simple_fact_correction(
-                user_text,
-            )
-            corrected_memory_id = None
-
-            if correction is not None:
-                new_value, old_value = correction
-                corrected_memory_id = recall_memory.apply_simple_correction(
-                    new_value=new_value,
-                    old_value=old_value,
+                print_memory_status(
+                    recent_prompt_memory,
+                    recall_memory,
+                    "after_turn",
                 )
 
-                if memory_debug_enabled():
+                if MEMORY_DEBUG_ENABLED:
                     print(
-                        "[MEMORY RAW CORRECT] "
-                        f"id={corrected_memory_id} "
-                        f"new={new_value!r} "
-                        f"old={old_value!r}",
+                        "[MEMORY DEBUG] "
+                        f"recent={recent_prompt_memory.get_stats()} "
+                        f"recall={recall_memory.get_stats()}",
                         flush=True,
                     )
 
-            # FTS5 raw utterance recall archive.
-            # Store only complete user statements. Questions, commands,
-            # fragments, and likely ASR debris are deliberately rejected.
-            if corrected_memory_id is not None:
-                pass
-            elif should_store_recall_turn(user_text):
-                added_memory_id = recall_memory.add_turn(
-                    user_text=user_text,
-                )
+                total = time.time() - global_start
 
-                if memory_debug_enabled():
-                    if added_memory_id is not None:
-                        print(
-                            f"[MEMORY RAW ADD] id={added_memory_id} "
-                            f"stored={user_text!r}",
-                            flush=True,
-                        )
-                    else:
-                        print(
-                            "[MEMORY RAW SKIP] backend_rejected=true",
-                            flush=True,
-                        )
-            elif memory_debug_enabled():
                 print(
-                    "[MEMORY RAW SKIP] "
-                    f"reason={memory_storage_skip_reason(user_text)} "
-                    f"text={user_text!r}",
+                    f"\n[TURN DONE] total={total:.3f}s",
                     flush=True,
                 )
 
-            recent_prompt_memory.add_turn(
-                user_text=user_text,
-                assistant_text=memory_assistant_text,
-            )
-
-            text_queue.join()
-            wait_for_audio_to_drain()
-
-            print_memory_status(
-                recent_prompt_memory,
-                recall_memory,
-                "after_turn",
-            )
-
-            if memory_debug_enabled():
-                print(
-                    "[MEMORY DEBUG] "
-                    f"recent={recent_prompt_memory.get_stats()} "
-                    f"recall={recall_memory.get_stats()}",
-                    flush=True,
-                )
-
-            total = time.time() - global_start
-
+    finally:
+        try:
+            tpc.shutdown()
+        except RuntimeError as error:
             print(
-                f"\n[TURN DONE] total={total:.3f}s",
+                f"[TPC SHUTDOWN ERROR] {error}",
                 flush=True,
             )
+        finally:
+            stop_asr_worker()
+            stop_event.set()
+            worker.join(timeout=2.0)
 
-        stop_asr_worker()
+    print(
+        "Done.",
+        flush=True,
+    )
 
-        stop_event.set()
-        worker.join(timeout=2.0)
-
-        print(
-            "Done.",
-            flush=True,
-        )
 
 
 if __name__ == "__main__":

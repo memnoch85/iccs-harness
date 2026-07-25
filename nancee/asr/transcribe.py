@@ -2,22 +2,47 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import argparse
 import sys
 import time
-from typing import Optional, Union
+from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
-from transformers import pipeline
-from transformers.utils import logging as transformers_logging
+
+# asr/ and sherpa/ are sibling directories. Add sherpa/ so this standalone
+# worker and command-line tool use the same central NANCEE configuration.
+NANCEE_ROOT = Path(__file__).resolve().parents[1]
+
+if str(NANCEE_ROOT) not in sys.path:
+    sys.path.insert(0, str(NANCEE_ROOT))
+
+from sherpa.config import (  # noqa: E402
+    ASR_BACKEND,
+    ASR_BEAM_SIZE,
+    ASR_COMPUTE_TYPE,
+    ASR_MODEL,
+    ASR_SAMPLE_RATE,
+    ASR_THREADS,
+    ASR_VAD_FILTER,
+)
+
+DEFAULT_BACKEND = ASR_BACKEND
+DEFAULT_MODEL = ASR_MODEL
+DEFAULT_SAMPLE_RATE = ASR_SAMPLE_RATE
 
 
-DEFAULT_MODEL = "openai/whisper-tiny.en"
-DEFAULT_SAMPLE_RATE = 16_000
+def configure_backend_logging():
+    """Silence noncritical backend logging without importing both backends."""
+    if DEFAULT_BACKEND == "hf_direct":
+        from transformers.utils import logging as transformers_logging
+
+        transformers_logging.set_verbosity_error()
 
 
-def parse_device(value: Optional[str]) -> Optional[Union[int, str]]:
+def parse_device(value: str | None) -> int | str | None:
     """
     Convert a numeric device argument into an integer.
 
@@ -41,11 +66,10 @@ class PushToTalkRecorder:
     def __init__(
         self,
         sample_rate: int = DEFAULT_SAMPLE_RATE,
-        device: Optional[Union[int, str]] = None,
+        device: int | str | None = None,
     ) -> None:
         self.sample_rate = sample_rate
         self.device = device
-
         self.audio_blocks: list[np.ndarray] = []
         self.stream_warnings: list[str] = []
 
@@ -62,13 +86,15 @@ class PushToTalkRecorder:
         if status:
             self.stream_warnings.append(str(status))
 
-        # The stream is configured as mono, so select channel zero.
-        block = np.asarray(indata[:, 0], dtype=np.float32).copy()
+        block = np.asarray(
+            indata[:, 0],
+            dtype=np.float32,
+        ).copy()
+
         self.audio_blocks.append(block)
 
     def record(self) -> np.ndarray:
         """Begin recording and stop when Enter is pressed."""
-
         self.audio_blocks.clear()
         self.stream_warnings.clear()
 
@@ -104,42 +130,142 @@ class PushToTalkRecorder:
         if not self.audio_blocks:
             return np.empty(0, dtype=np.float32)
 
-        return np.concatenate(self.audio_blocks).astype(
+        return np.concatenate(
+            self.audio_blocks
+        ).astype(
             np.float32,
             copy=False,
         )
 
 
 class WhisperTranscriber:
-    """Load Whisper once and reuse it for each recording."""
+    """Load one configured Whisper backend and reuse it for every recording."""
 
     def __init__(
         self,
-        model_name: str = DEFAULT_MODEL,
-        sample_rate: int = DEFAULT_SAMPLE_RATE,
-    ) -> None:
-        self.model_name = model_name
-        self.sample_rate = sample_rate
+        model_name=DEFAULT_MODEL,
+        sample_rate=DEFAULT_SAMPLE_RATE,
+        backend=DEFAULT_BACKEND,
+        compute_type=ASR_COMPUTE_TYPE,
+        cpu_threads=ASR_THREADS,
+        beam_size=ASR_BEAM_SIZE,
+        vad_filter=ASR_VAD_FILTER,
+    ):
+        self.model_name = str(model_name).strip()
+        self.sample_rate = int(sample_rate)
+        self.backend = str(backend).strip().lower()
+        self.compute_type = str(compute_type).strip().lower()
+        self.cpu_threads = int(cpu_threads)
+        self.beam_size = int(beam_size)
+        self.vad_filter = bool(vad_filter)
 
-        print(f"Loading Whisper model: {model_name}", flush=True)
+        self.asr_pipeline: Any | None = None
+        self.whisper_model: Any | None = None
+
+        print(
+            "[ASR] Loading "
+            f"backend={self.backend} "
+            f"model={self.model_name} "
+            f"compute_type={self.compute_type} "
+            f"threads={self.cpu_threads} "
+            f"beam_size={self.beam_size} "
+            f"vad_filter={str(self.vad_filter).lower()}",
+            flush=True,
+        )
+
+        if self.backend == "faster_whisper":
+            self._load_faster_whisper()
+        elif self.backend == "hf_direct":
+            self._load_hf_direct()
+        else:
+            raise ValueError(
+                "Unsupported ASR backend: "
+                f"{self.backend!r}"
+            )
+
+        print("[ASR] Whisper loaded.", flush=True)
+
+    def _load_faster_whisper(self):
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError as exc:
+            raise RuntimeError(
+                "Faster-Whisper is selected but is not installed in the "
+                "production ASR virtual environment. Install it with:\n"
+                '  "$HOME/Nancee/nancee/asr/venv/bin/python" -m pip '
+                "install faster-whisper==1.2.1 ctranslate2==4.8.1"
+            ) from exc
+
+        self.whisper_model = WhisperModel(
+            self.model_name,
+            device="cpu",
+            compute_type=self.compute_type,
+            cpu_threads=self.cpu_threads,
+        )
+
+    def _load_hf_direct(self):
+        from transformers import pipeline
+        from transformers.utils import logging as transformers_logging
+
+        transformers_logging.set_verbosity_error()
 
         self.asr_pipeline = pipeline(
             task="automatic-speech-recognition",
-            model=model_name,
-            device=-1,  # Run on the Raspberry Pi CPU.
+            model=self.model_name,
+            device=-1,
         )
 
-        # Avoid the deprecated forced_decoder_ids behavior.
-        generation_config = self.asr_pipeline.model.generation_config
-        generation_config.forced_decoder_ids = None
+        model = getattr(
+            self.asr_pipeline,
+            "model",
+            None,
+        )
+        generation_config = getattr(
+            model,
+            "generation_config",
+            None,
+        )
 
-        print("Whisper loaded.", flush=True)
+        if generation_config is not None:
+            setattr(
+                generation_config,
+                "forced_decoder_ids",
+                None,
+            )
 
-    def transcribe(self, audio: np.ndarray) -> str:
+    def transcribe(self, audio):
         if audio.size == 0:
             return ""
 
-        result = self.asr_pipeline(
+        if self.backend == "faster_whisper":
+            whisper_model = self.whisper_model
+
+            if whisper_model is None:
+                raise RuntimeError(
+                    "Faster-Whisper was selected but the model "
+                    "was not initialized."
+                )
+
+            segments, _info = whisper_model.transcribe(
+                audio,
+                language="en",
+                beam_size=self.beam_size,
+                vad_filter=self.vad_filter,
+            )
+
+            return "".join(
+                str(segment.text)
+                for segment in segments
+            ).strip()
+
+        asr_pipeline = self.asr_pipeline
+
+        if asr_pipeline is None:
+            raise RuntimeError(
+                "The Hugging Face ASR pipeline was not initialized."
+            )
+
+        result = asr_pipeline(
             {
                 "array": audio,
                 "sampling_rate": self.sample_rate,
@@ -147,14 +273,25 @@ class WhisperTranscriber:
             return_timestamps=False,
         )
 
-        return str(result.get("text", "")).strip()
+        if isinstance(result, dict):
+            return str(result.get("text", "")).strip()
+
+        return str(result).strip()
 
 
-def build_argument_parser() -> argparse.ArgumentParser:
+def build_argument_parser():
     parser = argparse.ArgumentParser(
         description=(
-            "Push-to-talk microphone transcription using Whisper."
+            "Push-to-talk microphone transcription using the "
+            "configured NANCEE ASR backend."
         )
+    )
+
+    parser.add_argument(
+        "--backend",
+        default=DEFAULT_BACKEND,
+        choices=("faster_whisper", "hf_direct"),
+        help=f"ASR backend. Default: {DEFAULT_BACKEND}",
     )
 
     parser.add_argument(
@@ -180,7 +317,7 @@ def build_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
+def main():
     parser = build_argument_parser()
     args = parser.parse_args()
 
@@ -189,9 +326,7 @@ def main() -> int:
         return 0
 
     device = parse_device(args.device)
-
-    # Reduce the large amount of noncritical Transformers logging.
-    transformers_logging.set_verbosity_error()
+    configure_backend_logging()
 
     recorder = PushToTalkRecorder(
         sample_rate=DEFAULT_SAMPLE_RATE,
@@ -201,6 +336,7 @@ def main() -> int:
     transcriber = WhisperTranscriber(
         model_name=args.model,
         sample_rate=DEFAULT_SAMPLE_RATE,
+        backend=args.backend,
     )
 
     print()
@@ -238,15 +374,13 @@ def main() -> int:
             print("Transcribing...", flush=True)
 
             transcription_started = time.perf_counter()
-
             text = transcriber.transcribe(audio)
-
             transcription_seconds = (
                 time.perf_counter() - transcription_started
             )
 
             print(
-                f"Transcription completed in "
+                "Transcription completed in "
                 f"{transcription_seconds:.2f} seconds.",
                 flush=True,
             )

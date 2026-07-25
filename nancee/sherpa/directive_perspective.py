@@ -4,7 +4,10 @@ import re
 
 
 _ASK_ME_CLAUSE_PATTERN = re.compile(
-    r"\bask\s+me\s+(?:if|whether)\s+"
+    r"\bask\s+me"
+    r"(?:\s+(?P<timing>today|tomorrow|tonight|later|"
+    r"next\s+(?:week|month)))?"
+    r"\s+(?:if|whether)\s+"
     r"(?P<clause>.+?)(?:[.?!]+)?\s*$",
     flags=re.IGNORECASE,
 )
@@ -40,20 +43,30 @@ _SOURCE_TO_SPOKEN_DETERMINER = {
 }
 
 
-def _extract_ask_me_clause(user_text: str) -> str:
+def _extract_ask_me_parts(
+    user_text: str,
+) -> tuple[str, str]:
     match = _ASK_ME_CLAUSE_PATTERN.search(
         str(user_text).strip()
     )
 
     if match is None:
-        return ""
+        return "", ""
 
-    return (
+    timing = str(match.group("timing") or "").strip()
+    clause = (
         match.group("clause")
         .strip()
         .rstrip(".?!")
         .strip()
     )
+
+    return timing, clause
+
+
+def _extract_ask_me_clause(user_text: str) -> str:
+    _, clause = _extract_ask_me_parts(user_text)
+    return clause
 
 
 def _is_single_question(text: str) -> bool:
@@ -291,6 +304,67 @@ def _restore_source_determiners(
     return repaired
 
 
+def _restore_single_logical_connector(
+    source_clause: str,
+    response_text: str,
+) -> str:
+    source_or_count = len(
+        re.findall(r"\bor\b", source_clause, flags=re.IGNORECASE)
+    )
+    source_and_count = len(
+        re.findall(r"\band\b", source_clause, flags=re.IGNORECASE)
+    )
+    response_or_count = len(
+        re.findall(r"\bor\b", response_text, flags=re.IGNORECASE)
+    )
+    response_and_count = len(
+        re.findall(r"\band\b", response_text, flags=re.IGNORECASE)
+    )
+
+    if (
+        source_or_count == 1
+        and source_and_count == 0
+        and response_or_count == 0
+        and response_and_count == 1
+    ):
+        return re.sub(
+            r"\band\b",
+            "or",
+            response_text,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
+    if (
+        source_and_count == 1
+        and source_or_count == 0
+        and response_and_count == 0
+        and response_or_count == 1
+    ):
+        return re.sub(
+            r"\bor\b",
+            "and",
+            response_text,
+            count=1,
+            flags=re.IGNORECASE,
+        )
+
+    return response_text
+
+
+def _future_directive_limitation(
+    timing: str,
+    clause: str,
+) -> str:
+    mapped_clause = _map_first_person_to_second(clause)
+    mapped_clause = mapped_clause[:1].lower() + mapped_clause[1:]
+
+    return (
+        "I can't schedule that yet, but you asked me to check "
+        f"{timing} whether {mapped_clause}."
+    )
+
+
 def repair_directive_perspective(
     user_text: str,
     response_text: str,
@@ -307,10 +381,17 @@ def repair_directive_perspective(
       user's original embedded clause.
     """
     original = str(response_text).strip()
-    clause = _extract_ask_me_clause(user_text)
+    timing, clause = _extract_ask_me_parts(user_text)
 
     if not original or not clause:
         return original, False
+
+    if timing:
+        repaired = _future_directive_limitation(
+            timing,
+            clause,
+        )
+        return repaired, repaired != original
 
     if not _is_single_question(original):
         return original, False
@@ -341,6 +422,10 @@ def repair_directive_perspective(
         )
 
     repaired = _restore_source_determiners(
+        clause,
+        repaired,
+    )
+    repaired = _restore_single_logical_connector(
         clause,
         repaired,
     )
