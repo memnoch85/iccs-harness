@@ -27,7 +27,7 @@ The exact models and settings are still being benchmarked, but the current worki
 - **Compute:** Raspberry Pi 5, 8 GB RAM, NVMe storage.
 - **LLM runtime:** Ollama with a small local instruct model.
 - **Current LLM family:** Llama 3.2 3B.
-- **ASR:** OpenAI Whisper English models, currently centered on `whisper-base.en` while alternatives are benchmarked.
+- **ASR:** Faster-Whisper using the OpenAI Whisper `base.en` model via CTranslate2, with INT8 compute, 4 CPU threads, beam size 1, and VAD filtering disabled.
 - **TTS:** Kokoro ONNX at 24 kHz.
 - **Memory:** SQLite with FTS5 full-text retrieval.
 - **Vehicle communication:** SocketCAN with MCP2515 and CANable interfaces.
