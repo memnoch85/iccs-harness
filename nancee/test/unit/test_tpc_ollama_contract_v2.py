@@ -58,15 +58,25 @@ class TpcOllamaContractV2Tests(unittest.TestCase):
         self.assertEqual(stable_messages, full_messages[: len(stable_messages)])
         self.assertGreater(len(full_messages), len(stable_messages))
 
-    def test_factory_owns_prime_request_and_fingerprint_functions(self):
+    def test_factory_owns_builder_prime_request_and_snapshot_fingerprint(self):
         tpc = ollama_runtime.create_ollama_tpc()
 
         try:
-            self.assertIs(tpc._prime_function, ollama_runtime.prime_ollama_context)
-            self.assertIs(tpc._request_function, ollama_runtime.stream_ollama_response)
+            self.assertIs(
+                tpc._prime_function,
+                ollama_runtime.prime_ollama_context,
+            )
+            self.assertIs(
+                tpc._request_function,
+                ollama_runtime.stream_ollama_response,
+            )
+            self.assertIs(
+                tpc._prefix_builder_function,
+                ollama_runtime.build_ollama_prefix_messages,
+            )
             self.assertIs(
                 tpc._prefix_fingerprint_function,
-                ollama_runtime.ollama_prefix_sha256,
+                json_sha256,
             )
         finally:
             tpc.shutdown()

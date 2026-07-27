@@ -19,7 +19,6 @@ from config import (
     OLLAMA_URL,
     OLLAMA_WARMUP_COMMAND,
     OLLAMA_WARMUP_TIMEOUT,
-    SHERPA_DIRECTORY,
     load_system_prompt,
 )
 from prompt_contract import (
@@ -266,26 +265,6 @@ def ensure_ollama_model_loaded(
     )
 
     try:
-        warmup_environment = os.environ.copy()
-
-        existing_python_path = warmup_environment.get(
-            "PYTHONPATH",
-            "",
-        ).strip()
-
-        warmup_python_paths = [
-            str(SHERPA_DIRECTORY),
-        ]
-
-        if existing_python_path:
-            warmup_python_paths.append(
-                existing_python_path,
-            )
-
-        warmup_environment["PYTHONPATH"] = os.pathsep.join(
-            warmup_python_paths
-        )
-
         result = subprocess.run(
             [
                 OLLAMA_WARMUP_COMMAND,
@@ -295,8 +274,6 @@ def ensure_ollama_model_loaded(
             capture_output=True,
             text=True,
             timeout=OLLAMA_WARMUP_TIMEOUT,
-            cwd=str(SHERPA_DIRECTORY),
-            env=warmup_environment,
         )
 
     except subprocess.TimeoutExpired as error:

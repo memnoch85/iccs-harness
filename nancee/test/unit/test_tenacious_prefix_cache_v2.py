@@ -3,24 +3,52 @@ from __future__ import annotations
 import threading
 import time
 import unittest
+from copy import deepcopy
 
 from tenacious_prefix_cache import TenaciousPrefixCache
 
 
-def fingerprint(*, history, memory_context):
-    parts = [message["content"] for message in history]
-    return "|".join(parts + [str(memory_context)])
+def build_prefix(*, history=None, memory_context=""):
+    messages = [
+        {
+            "role": "system",
+            "content": "base",
+        }
+    ]
+
+    clean_memory_context = str(memory_context).strip()
+
+    if clean_memory_context:
+        messages.append(
+            {
+                "role": "system",
+                "content": clean_memory_context,
+            }
+        )
+
+    messages.extend(deepcopy(list(history or [])))
+    return messages
+
+
+def fingerprint(prefix_messages):
+    return "|".join(
+        f"{message['role']}:{message['content']}"
+        for message in prefix_messages
+    )
 
 
 class TenaciousPrefixCacheV2Tests(unittest.TestCase):
-    def make_tpc(self, *, prime_function=None, request_function=None):
+    def make_tpc(
+        self,
+        *,
+        prime_function=None,
+        request_function=None,
+        prefix_builder_function=build_prefix,
+    ):
         if prime_function is None:
-            def prime_function(*, history, memory_context):
+            def prime_function(*, prefix_messages):
                 return {
-                    "prefix_sha256": fingerprint(
-                        history=history,
-                        memory_context=memory_context,
-                    )
+                    "prefix_sha256": fingerprint(prefix_messages)
                 }
 
         if request_function is None:
@@ -30,11 +58,14 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
         return TenaciousPrefixCache(
             prime_function=prime_function,
             request_function=request_function,
+            prefix_builder_function=prefix_builder_function,
             prefix_fingerprint_function=fingerprint,
         )
 
     def test_synchronous_startup_prime_records_prepared_prefix(self):
         tpc = self.make_tpc()
+        expected_prefix = build_prefix(history=[], memory_context="")
+        expected_sha256 = fingerprint(expected_prefix)
 
         try:
             result = tpc.prime_now(
@@ -42,8 +73,9 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
                 memory_context="",
             )
 
-            self.assertEqual("", result["prefix_sha256"])
-            self.assertEqual("", tpc.prepared_prefix_sha256)
+            self.assertEqual(expected_sha256, result["prefix_sha256"])
+            self.assertEqual(expected_sha256, tpc.prepared_prefix_sha256)
+            self.assertEqual(expected_prefix, tpc._prepared_prefix_messages)
         finally:
             tpc.shutdown()
 
@@ -52,16 +84,12 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
         release = threading.Event()
         captured = {}
 
-        def prime_function(*, history, memory_context):
+        def prime_function(*, prefix_messages):
             started.set()
             release.wait(timeout=1.0)
-            captured["history"] = history
-            captured["memory_context"] = memory_context
+            captured["prefix_messages"] = prefix_messages
             return {
-                "prefix_sha256": fingerprint(
-                    history=history,
-                    memory_context=memory_context,
-                )
+                "prefix_sha256": fingerprint(prefix_messages)
             }
 
         tpc = self.make_tpc(prime_function=prime_function)
@@ -77,12 +105,23 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
             release.set()
             tpc.wait_until_ready()
 
-            self.assertEqual(
-                [{"role": "user", "content": "original"}],
-                captured["history"],
+            expected_prefix = build_prefix(
+                history=[{"role": "user", "content": "original"}],
+                memory_context="stable",
             )
-            self.assertEqual("stable", captured["memory_context"])
-            self.assertEqual("original|stable", tpc.prepared_prefix_sha256)
+
+            self.assertEqual(
+                expected_prefix,
+                captured["prefix_messages"],
+            )
+            self.assertEqual(
+                fingerprint(expected_prefix),
+                tpc.prepared_prefix_sha256,
+            )
+            self.assertEqual(
+                expected_prefix,
+                tpc._prepared_prefix_messages,
+            )
         finally:
             release.set()
             tpc.shutdown()
@@ -90,17 +129,16 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
     def test_gateway_waits_for_pending_prime_before_request(self):
         release = threading.Event()
         request_started = threading.Event()
+        request_calls = []
 
-        def prime_function(*, history, memory_context):
+        def prime_function(*, prefix_messages):
             release.wait(timeout=1.0)
             return {
-                "prefix_sha256": fingerprint(
-                    history=history,
-                    memory_context=memory_context,
-                )
+                "prefix_sha256": fingerprint(prefix_messages)
             }
 
-        def request_function(**_kwargs):
+        def request_function(**kwargs):
+            request_calls.append(kwargs)
             request_started.set()
             yield "answer"
 
@@ -129,6 +167,15 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
             self.assertTrue(finished.wait(timeout=0.25))
             self.assertTrue(request_started.is_set())
             worker.join(timeout=0.25)
+
+            self.assertEqual(
+                "prepared_snapshot",
+                request_calls[0]["prefix_source"],
+            )
+            self.assertEqual(
+                build_prefix(history=history),
+                request_calls[0]["prefix_messages"],
+            )
         finally:
             release.set()
             tpc.shutdown()
@@ -181,21 +228,89 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
 
             self.assertEqual(["answer"], tokens)
             self.assertEqual(1, len(request_calls))
+            self.assertEqual(
+                "fresh_snapshot",
+                request_calls[0]["prefix_source"],
+            )
+            self.assertEqual(
+                build_prefix(
+                    history=[],
+                    memory_context="dynamic profile",
+                ),
+                request_calls[0]["prefix_messages"],
+            )
+        finally:
+            tpc.shutdown()
+
+    def test_exact_match_consumes_prepared_snapshot(self):
+        primed_prefixes = []
+        request_calls = []
+
+        def prime_function(*, prefix_messages):
+            primed_prefixes.append(prefix_messages)
+            return {
+                "prefix_sha256": fingerprint(prefix_messages)
+            }
+
+        def request_function(**kwargs):
+            request_calls.append(kwargs)
+            yield "answer"
+
+        history = [
+            {"role": "user", "content": "Previous question."},
+            {"role": "assistant", "content": "Previous answer."},
+        ]
+        tpc = self.make_tpc(
+            prime_function=prime_function,
+            request_function=request_function,
+        )
+
+        try:
+            tpc.prime_now(
+                history=history,
+                memory_context="ACTIVE SPEAKER: Daniel.",
+            )
+
+            self.assertEqual(
+                ["answer"],
+                list(
+                    tpc.stream_response(
+                        history=history,
+                        memory_context="ACTIVE SPEAKER: Daniel.",
+                        user_text="hello",
+                    )
+                ),
+            )
+
+            self.assertEqual(
+                "prepared_snapshot",
+                request_calls[0]["prefix_source"],
+            )
+            self.assertEqual(
+                primed_prefixes[0],
+                request_calls[0]["prefix_messages"],
+            )
+            self.assertIsNot(
+                primed_prefixes[0],
+                request_calls[0]["prefix_messages"],
+            )
         finally:
             tpc.shutdown()
 
     def test_real_request_invalidates_prepared_prefix(self):
         tpc = self.make_tpc()
+        expected_sha256 = fingerprint(build_prefix(history=[]))
 
         try:
             tpc.prime_now(history=[])
-            self.assertEqual("", tpc.prepared_prefix_sha256)
+            self.assertEqual(expected_sha256, tpc.prepared_prefix_sha256)
 
             self.assertEqual(
                 ["ok"],
                 list(tpc.stream_response(history=[], user_text="hello")),
             )
             self.assertIsNone(tpc.prepared_prefix_sha256)
+            self.assertIsNone(tpc._prepared_prefix_messages)
         finally:
             tpc.shutdown()
 
@@ -214,13 +329,21 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
             tpc.prime_now(history=[])
 
             worker = threading.Thread(
-                target=lambda: list(tpc.stream_response(history=[], user_text="hello")),
+                target=lambda: list(
+                    tpc.stream_response(
+                        history=[],
+                        user_text="hello",
+                    )
+                ),
                 daemon=True,
             )
             worker.start()
             self.assertTrue(request_started.wait(timeout=0.25))
 
-            with self.assertRaisesRegex(RuntimeError, "real model request is active"):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "real model request is active",
+            ):
                 tpc.prime_async(history=[])
 
             release.set()
@@ -236,7 +359,10 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
         tpc = self.make_tpc(prime_function=bad_prime)
 
         try:
-            with self.assertRaisesRegex(RuntimeError, "wrong prefix fingerprint"):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "wrong prefix fingerprint",
+            ):
                 tpc.prime_now(history=[])
         finally:
             tpc.shutdown()
@@ -247,6 +373,7 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
             yield "unreachable"
 
         tpc = self.make_tpc(request_function=request_function)
+        expected_sha256 = fingerprint(build_prefix(history=[]))
 
         try:
             tpc.prime_now(history=[])
@@ -257,7 +384,7 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
             self.assertFalse(tpc.request_active)
             tpc.prime_async(history=[], reason="request_recovery")
             tpc.wait_until_ready()
-            self.assertEqual("", tpc.prepared_prefix_sha256)
+            self.assertEqual(expected_sha256, tpc.prepared_prefix_sha256)
         finally:
             tpc.shutdown()
 
