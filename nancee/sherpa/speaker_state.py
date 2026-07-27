@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-
 _NAME_PATTERN = r"[A-Za-z][A-Za-z'\-]{1,39}"
 
 _DIRECT_SELF_INTRO_PATTERNS = (
