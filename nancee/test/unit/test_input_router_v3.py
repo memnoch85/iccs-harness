@@ -83,7 +83,7 @@ class InputRouterV3Tests(unittest.TestCase):
             route.recall_storage_text,
         )
 
-    def test_self_introduction_plus_question_preserves_facts(self):
+    def test_leading_hi_overrides_self_introduction_and_question(self):
         route = route_user_input(
             (
                 "Hi, this is Daniel. I'm old as fuck. "
@@ -92,11 +92,9 @@ class InputRouterV3Tests(unittest.TestCase):
             )
         )
 
-        self.assertEqual("normal", route.kind)
-        self.assertTrue(route.store_recall)
-        self.assertIn("this is Daniel", route.recall_storage_text)
-        self.assertIn("I like to cross-country ski", route.recall_storage_text)
-        self.assertNotIn("How are you doing today", route.recall_storage_text)
+        self.assertEqual("greeting", route.kind)
+        self.assertEqual("leading_hello_or_hi", route.reason)
+        self.assertFalse(route.store_recall)
 
     def test_contextual_answer_resolves_previous_question_for_storage(self):
         route = route_user_input(
@@ -156,6 +154,40 @@ class InputRouterV3Tests(unittest.TestCase):
         self.assertEqual("normal", route.kind)
         self.assertEqual("default_model_route", route.reason)
         self.assertFalse(route.explicit_recall)
+
+
+    def test_leading_hello_is_always_greeting(self):
+        samples = (
+            "Hello fuck face.",
+            "Hello, Auntie, how are you?",
+            "Hello, explain step by step how a turbocharger works.",
+        )
+
+        for text in samples:
+            with self.subTest(text=text):
+                route = route_user_input(text)
+                self.assertEqual("greeting", route.kind)
+                self.assertEqual("leading_hello_or_hi", route.reason)
+
+    def test_leading_hi_is_always_greeting(self):
+        samples = (
+            "Hi whatever your name is.",
+            "Hi, tell me a joke.",
+        )
+
+        for text in samples:
+            with self.subTest(text=text):
+                route = route_user_input(text)
+                self.assertEqual("greeting", route.kind)
+                self.assertEqual("leading_hello_or_hi", route.reason)
+
+    def test_existing_soft_greeting_prefaces_keep_existing_routing(self):
+        route = route_user_input(
+            "Hey Nancee, explain step by step how a turbocharger works."
+        )
+
+        self.assertEqual("detailed", route.kind)
+        self.assertEqual("detailed_request", route.reason)
 
 
 if __name__ == "__main__":

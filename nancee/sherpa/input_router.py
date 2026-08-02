@@ -86,6 +86,11 @@ _RECALL_QUERY_PATTERNS = (
     r"\bi told you .* earlier\b",
 )
 
+_HARD_GREETING_PREFIX_PATTERN = re.compile(
+    r"^(?:hello|hi)\b",
+    flags=re.IGNORECASE,
+)
+
 _LEADING_GREETING_TOKEN = re.compile(
     r"^(?:good morning|good afternoon|good evening|"
     r"hello|hi|hey|nancy|nancee|"
@@ -313,6 +318,9 @@ def route_user_input(
     contextual_memory = _resolve_contextual_memory(raw_text, previous_turn)
     question_like = "?" in lowered or lowered.startswith(_QUESTION_PREFIXES)
     explicit_memory_store = _extract_explicit_memory_store(raw_text)
+    hard_greeting_prefix = bool(
+        _HARD_GREETING_PREFIX_PATTERN.match(raw_text)
+    )
 
     greeting_substantive, had_greeting_preface = (
         _strip_leading_greeting_preface(raw_text)
@@ -404,6 +412,15 @@ def route_user_input(
         case _ if lowered in {"q", "quit", "exit"}:
             return InputRoute("exit", lowered, reason="exit_command")
         # End:: Checking exit commands
+
+        # Begin:: Checking unconditional hello/hi prefix
+        case _ if hard_greeting_prefix:
+            return InputRoute(
+                "greeting",
+                lowered,
+                reason="leading_hello_or_hi",
+            )
+        # End:: Checking unconditional hello/hi prefix
 
         # Begin:: Checking direct memory correction
         case _ if correction is not None:

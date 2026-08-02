@@ -11,12 +11,13 @@ class InputRouterSpeakerV42Tests(unittest.TestCase):
         route = route_user_input("Who invented the transistor?")
         self.assertEqual("normal", route.kind)
 
-    def test_self_introduction_still_uses_normal_conversation_route(self):
+    def test_leading_hi_is_unconditionally_a_greeting(self):
         route = route_user_input(
             "Hi, this is Daniel. I like to cross-country ski. How are you?"
         )
-        self.assertEqual("normal", route.kind)
-        self.assertTrue(route.store_recall)
+        self.assertEqual("greeting", route.kind)
+        self.assertEqual("leading_hello_or_hi", route.reason)
+        self.assertFalse(route.store_recall)
 
 
 

@@ -254,7 +254,7 @@ LLM_MODEL = os.environ.get(
 
 SYSTEM_PROMPT_FILE = os.environ.get(
     "NANCEE_SYSTEM_PROMPT_FILE",
-    "/home/memnoch/Nancee/nancee/sherpa/system-prompt.txt",
+    str(Path(__file__).resolve().with_name("system-prompt.txt")),
 )
 
 
@@ -317,21 +317,21 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
-        "5.8",
+        "5.5",
     )
 )
 
 LATENCY_BRIDGE_NORMAL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_NORMAL_SECONDS",
-        "5.5",
+        "4.5",
     )
 )
 
 LATENCY_BRIDGE_RECALL_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_RECALL_SECONDS",
-        "6.0",
+        "5.0",
 
     )
 )
@@ -355,8 +355,7 @@ LATENCY_BRIDGE_PHRASES = (
 
 LATENCY_BRIDGE_GREETING_PHRASES = (
     "umm...",
-    "humm...",
-    "So..."
+    "humm..."
 )
 
 for phrase in LATENCY_BRIDGE_GREETING_PHRASES:
@@ -385,7 +384,7 @@ if not (
 TTS_GAP_FILLER_ENABLED = (
     os.getenv("NANCEE_TTS_GAP_FILLER_ENABLED", "true").lower() == "true"
 )
-TTS_GAP_FILLER_COOLDOWN_SECONDS = 9.0
+TTS_GAP_FILLER_COOLDOWN_SECONDS = 9.5
 TTS_GAP_FILLER_SECONDS = float(os.getenv("NANCEE_TTS_GAP_FILLER_SECONDS", "4.0"))
 TTS_GAP_FILLER_MAX_PER_TURN = int(os.getenv("NANCEE_TTS_GAP_FILLER_MAX_PER_TURN", "5"))
 TTS_GAP_FILLER_PHRASES = ("humm...", "Umm...")
@@ -399,10 +398,10 @@ if TTS_GAP_FILLER_MAX_PER_TURN < 0:
 # These are per-request generation limits. The global LLM_NUM_PREDICT
 # remains the fallback for callers that do not select a response policy.
 RESPONSE_GREETING_NUM_PREDICT = int(
-    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "18")
+    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "8")
 )
 RESPONSE_GREETING_TEMPERATURE = float(
-    os.getenv("NANCEE_RESPONSE_GREETING_TEMPERATURE", "0.15")
+    os.getenv("NANCEE_RESPONSE_GREETING_TEMPERATURE", "0.10")
 )
 
 RESPONSE_ACK_NUM_PREDICT = int(os.getenv("NANCEE_RESPONSE_ACK_NUM_PREDICT", "18"))

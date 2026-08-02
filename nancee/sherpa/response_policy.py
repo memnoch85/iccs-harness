@@ -61,7 +61,7 @@ def response_policy_for_route(
             name="greeting",
             temperature=RESPONSE_GREETING_TEMPERATURE,
             num_predict=RESPONSE_GREETING_NUM_PREDICT,
-            instruction="Reply warmly in one to four words.",
+            instruction="Reply in 1-4 words.",
         )
 
     if route_kind == "directive":
