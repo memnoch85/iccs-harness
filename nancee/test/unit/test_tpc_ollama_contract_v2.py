@@ -8,27 +8,6 @@ from prompt_identity import json_sha256
 
 
 class TpcOllamaContractV2Tests(unittest.TestCase):
-    def test_prefix_fingerprint_hashes_only_stable_prefix(self):
-        history = [
-            {"role": "user", "content": "Previous user."},
-            {"role": "assistant", "content": "Previous answer."},
-        ]
-
-        with patch.object(
-            ollama_runtime,
-            "load_system_prompt",
-            return_value="SYSTEM",
-        ):
-            expected_messages = ollama_runtime.build_ollama_prefix_messages(
-                history=history,
-                memory_context="PROFILE",
-            )
-            actual = ollama_runtime.ollama_prefix_sha256(
-                history=history,
-                memory_context="PROFILE",
-            )
-
-        self.assertEqual(json_sha256(expected_messages), actual)
 
     def test_dynamic_retrieval_does_not_change_stable_prefix_function(self):
         history = [{"role": "user", "content": "Previous user."}]

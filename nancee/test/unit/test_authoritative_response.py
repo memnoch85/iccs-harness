@@ -1,5 +1,4 @@
 import unittest
-from dataclasses import dataclass
 
 from authoritative_response import (
     prepare_authoritative_response,
@@ -7,10 +6,6 @@ from authoritative_response import (
 )
 
 
-@dataclass(frozen=True)
-class Hit:
-    key: str
-    value: str
 
 
 MEMORY_CONTEXT = (
@@ -21,28 +16,11 @@ MEMORY_CONTEXT = (
 
 
 class AuthoritativeResponseTests(unittest.TestCase):
-    def test_correct_profile_answer_is_trimmed(self):
-        answer, action = prepare_authoritative_response(
-            "Your name is Anders. How can I help?",
-            profile_hits=[Hit("name", "Anders")],
-            fact_miss=False,
-        )
-        self.assertEqual("Your name is Anders.", answer)
-        self.assertEqual("accepted", action)
 
-    def test_wrong_profile_answer_is_replaced(self):
-        answer, action = prepare_authoritative_response(
-            "Your name is Nancee.",
-            profile_hits=[Hit("name", "Anders")],
-            fact_miss=False,
-        )
-        self.assertEqual("You're Anders.", answer)
-        self.assertEqual("profile_fallback", action)
 
     def test_grounded_session_answer_is_accepted(self):
         answer, action = prepare_authoritative_response(
             "You bought a blue backpack.",
-            profile_hits=[],
             fact_miss=False,
             retrieved_context=MEMORY_CONTEXT,
         )
@@ -60,7 +38,6 @@ class AuthoritativeResponseTests(unittest.TestCase):
     def test_off_topic_session_answer_is_blocked(self):
         answer, action = prepare_authoritative_response(
             "You went skiing in Denver.",
-            profile_hits=[],
             fact_miss=False,
             retrieved_context=MEMORY_CONTEXT,
         )
@@ -73,7 +50,6 @@ class AuthoritativeResponseTests(unittest.TestCase):
     def test_fact_miss_drops_guessed_second_sentence(self):
         answer, action = prepare_authoritative_response(
             "I don't remember that yet. Could it be Anna?",
-            profile_hits=[],
             fact_miss=True,
         )
         self.assertEqual("I don't remember that yet.", answer)

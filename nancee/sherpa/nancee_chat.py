@@ -45,9 +45,6 @@ from config import (
     TTS_GREETING_BRIDGE_SPEED,
     TTS_MAX_NUM_SENTENCES,
     TTS_SILENCE_SCALE,
-    USER_PROFILE_CONTEXT_MAX_CHARACTERS,
-    USER_PROFILE_RETRIEVAL_ENABLED,
-    USER_PROFILE_RETRIEVAL_LIMIT,
     VOICE_ID,
 )
 from directive_perspective import repair_directive_perspective
@@ -67,24 +64,17 @@ from ollama_runtime import (
     create_ollama_iccs,
     ensure_ollama_model_loaded,
 )
-from profile_fact_index import ProfileFactIndex
 from recall_policy import repair_recall_perspective
 from response_policy import response_policy_for_route
 from session_archive import SessionArchive
 from session_memory_store import filter_memory_hits_by_overlap
 from short_term_memory import ShortTermMemory
-from speaker_state import (
-    SpeakerState,
-    direct_speaker_identity_response,
-    direct_speaker_return_response,
-)
 from tts_chunking import (
     extract_tts_chunk,
     is_filler_preface,
     is_punctuation_only,
 )
 from tts_request import build_tts_request
-from user_profile import UserProfile
 
 #global fields
 text_queue = queue.Queue()
@@ -1163,28 +1153,6 @@ def main():
 
     worker.start()
 
-    user_profile = UserProfile.load()
-    profile_index = ProfileFactIndex(
-        user_profile.facts,
-    )
-    speaker_state = SpeakerState(
-        primary_name=user_profile.facts.get("name"),
-    )
-
-    print(
-        "[USER PROFILE INDEX] "
-        f"loaded={not user_profile.is_empty()} "
-        f"facts={profile_index.count()}",
-        flush=True,
-    )
-
-    print(
-        "[SPEAKER STATE] "
-        f"current={speaker_state.current_name!r} "
-        "source=primary_profile",
-        flush=True,
-    )
-
     iccs = create_ollama_iccs()
 
     try:
@@ -1194,7 +1162,7 @@ def main():
 
         iccs.prime_startup(
             history=[],
-            memory_context=speaker_state.prompt_context(),
+            memory_context="",
             reason="startup",
         )
 
@@ -1259,36 +1227,6 @@ def main():
                     )
                     continue
 
-                handoff_update = speaker_state.begin_turn()
-
-                if handoff_update.action != "unchanged":
-                    print(
-                        "[SPEAKER STATE] "
-                        f"action={handoff_update.action} "
-                        f"current={speaker_state.current_name!r}",
-                        flush=True,
-                    )
-
-                speaker_context_before_observation = (
-                    speaker_state.prompt_context()
-                )
-                speaker_update = speaker_state.observe(user_text)
-                active_speaker_context = speaker_state.prompt_context()
-                speaker_context_changed_for_request = (
-                    active_speaker_context
-                    != speaker_context_before_observation
-                )
-
-                if speaker_update.action != "unchanged":
-                    print(
-                        "[SPEAKER STATE] "
-                        f"action={speaker_update.action} "
-                        f"name={speaker_update.name!r} "
-                        f"current={speaker_state.current_name!r} "
-                        f"pending={speaker_state.pending_name!r}",
-                        flush=True,
-                    )
-
                 previous_turns = recent_prompt_memory.get_turns_snapshot()
                 previous_turn = previous_turns[-1] if previous_turns else None
 
@@ -1341,79 +1279,35 @@ def main():
                 recall_requested = input_route.retrieve_recall
                 explicit_recall_requested = input_route.explicit_recall
 
-                profile_started = time.perf_counter()
-                effective_profile_context = ""
-                profile_hits = []
-
-                if (
-                    USER_PROFILE_RETRIEVAL_ENABLED
-                    and input_route.kind != "speaker"
-                    and input_route.kind != "speaker_return"
-                ):
-                    (
-                        effective_profile_context,
-                        profile_hits,
-                    ) = profile_index.retrieve_context(
-                        user_text,
-                        limit=USER_PROFILE_RETRIEVAL_LIMIT,
-                        max_characters=(USER_PROFILE_CONTEXT_MAX_CHARACTERS),
-                    )
-
-                profile_context_found = bool(effective_profile_context.strip())
-                profile_elapsed = time.perf_counter() - profile_started
-
-                if MEMORY_DEBUG_ENABLED:
-                    print(
-                        "[USER PROFILE RETRIEVAL] "
-                        f"hits={[hit.key for hit in profile_hits]} "
-                        f"context_characters="
-                        f"{len(effective_profile_context)} "
-                        f"elapsed={profile_elapsed:.6f}s",
-                        flush=True,
-                    )
-
-                if profile_context_found:
-                    # A matching profile fact is confirmed and authoritative.
-                    # Do not add a weaker raw-session FTS5 hit to the same prompt.
-                    retrieved_context = ""
-                    memory_context_found = False
-
-                    if MEMORY_DEBUG_ENABLED:
-                        print(
-                            "[MEMORY RECALL] skipped=true reason=authoritative_profile_hit",
-                            flush=True,
-                        )
-
-                elif recall_requested:
+                if recall_requested:
                     retrieved_context = retrieve_session_context(
                         recall_memory,
                         user_text,
                         allow_weak_match=input_route.allow_weak_match,
                     )
-
-                    memory_context_found = bool(str(retrieved_context).strip())
-
+                    memory_context_found = bool(
+                        str(retrieved_context).strip()
+                    )
                 else:
                     retrieved_context = ""
                     memory_context_found = False
 
                     if MEMORY_DEBUG_ENABLED:
                         print(
-                            "[MEMORY RECALL] skipped=true reason=not_recall_request",
+                            "[MEMORY RECALL] "
+                            "skipped=true reason=not_recall_request",
                             flush=True,
                         )
 
                 fact_miss = (
                     explicit_recall_requested
                     and not memory_context_found
-                    and not profile_context_found
                 )
 
+                request_memory_context = ""
+
                 if fact_miss:
-                    # Only a clear explicit recall request earns an
-                    # authoritative memory-miss answer. Ordinary questions and
-                    # incomplete fragments remain on their normal model route.
-                    effective_profile_context = (
+                    request_memory_context = (
                         "No matching confirmed fact about the human user "
                         "was retrieved. Say only that you do not remember "
                         "it yet."
@@ -1425,21 +1319,9 @@ def main():
                             flush=True,
                         )
 
-                request_memory_context = "\n\n".join(
-                    context
-                    for context in (
-                        active_speaker_context,
-                        effective_profile_context,
-                    )
-                    if str(context).strip()
-                )
-
                 authoritative_context_found = (
-                    profile_context_found
-                    or (
-                        input_route.explicit_recall
-                        and memory_context_found
-                    )
+                    input_route.explicit_recall
+                    and memory_context_found
                 )
 
                 authoritative_response_required = (
@@ -1526,10 +1408,6 @@ def main():
                         flush=True,
                     )
 
-                    direct_speaker_route = response_policy.name in {
-                        "speaker",
-                        "speaker_return",
-                    }
 
                     route_bridge_callback = partial(
                         fire_route_latency_bridge,
@@ -1544,10 +1422,7 @@ def main():
 
                     bridge = LatencyBridge(
                         delay_seconds=bridge_delay_seconds,
-                        enabled=(
-                            LATENCY_BRIDGE_ENABLED
-                            and not direct_speaker_route
-                        ),
+                        enabled=LATENCY_BRIDGE_ENABLED,
                         on_fire=route_bridge_callback,
                     )
 
@@ -1580,68 +1455,25 @@ def main():
                     live_history = recent_prompt_memory.get_messages()
                     require_exact_iccs_prefix = (
                         request_history == live_history
-                        and not effective_profile_context.strip()
-                        and not speaker_context_changed_for_request
                     )
 
                     completion_state = {}
                     assistant_text = ""
-                    handled_directly = False
                     response = None
 
-                    if response_policy.name == "speaker_return":
-                        assistant_text = direct_speaker_return_response()
-                        handled_directly = True
+                    response = iccs.respond(
+                        user_text=user_text,
+                        history=request_history,
+                        memory_context=request_memory_context,
+                        require_exact_prefix=require_exact_iccs_prefix,
+                        retrieved_context=retrieved_context,
+                        response_instruction=response_policy.instruction,
+                        temperature=response_policy.temperature,
+                        num_predict=response_policy.num_predict,
+                        completion_state=completion_state,
+                    )
 
-                        print(
-                            "[SPEAKER DIRECT RESPONSE] "
-                            "kind=return "
-                            f"current={speaker_state.current_name!r} "
-                            f"output={assistant_text!r}",
-                            flush=True,
-                        )
-
-                        enqueue_complete_response(
-                            assistant_text,
-                            first_audio_callback=bridge.resolve,
-                        )
-
-                    elif response_policy.name == "speaker":
-                        assistant_text = direct_speaker_identity_response(
-                            speaker_state.current_name,
-                        )
-                        handled_directly = True
-
-                        print(
-                            "[SPEAKER DIRECT RESPONSE] "
-                            "kind=identity "
-                            f"current={speaker_state.current_name!r} "
-                            f"output={assistant_text!r}",
-                            flush=True,
-                        )
-
-                        enqueue_complete_response(
-                            assistant_text,
-                            first_audio_callback=bridge.resolve,
-                        )
-
-                    else:
-                        response = iccs.respond(
-                            user_text=user_text,
-                            history=request_history,
-                            memory_context=request_memory_context,
-                            require_exact_prefix=require_exact_iccs_prefix,
-                            retrieved_context=retrieved_context,
-                            response_instruction=response_policy.instruction,
-                            temperature=response_policy.temperature,
-                            num_predict=response_policy.num_predict,
-                            completion_state=completion_state,
-                        )
-
-                    if handled_directly:
-                        pass
-
-                    elif response is None:
+                    if response is None:
                         raise RuntimeError(
                             "Ollama response stream was not created."
                         )
@@ -1701,7 +1533,6 @@ def main():
                         assistant_text, guard_action = (
                             prepare_authoritative_response(
                                 assistant_text,
-                                profile_hits=profile_hits,
                                 fact_miss=fact_miss,
                                 retrieved_context=retrieved_context,
                             )
@@ -1818,7 +1649,7 @@ def main():
 
                     iccs.prime_next(
                         history=recent_prompt_memory.get_messages(),
-                        memory_context=speaker_state.prompt_context(),
+                        memory_context="",
                         reason="request_recovery",
                     )
 
@@ -1838,7 +1669,7 @@ def main():
 
                     iccs.prime_next(
                         history=recent_prompt_memory.get_messages(),
-                        memory_context=speaker_state.prompt_context(),
+                        memory_context="",
                         reason="empty_response_recovery",
                     )
                     continue
@@ -1921,7 +1752,7 @@ def main():
 
                 iccs.prime_next(
                     history=recent_prompt_memory.get_messages(),
-                    memory_context=speaker_state.next_prompt_context(),
+                    memory_context="",
                     reason="completed_turn",
                 )
 

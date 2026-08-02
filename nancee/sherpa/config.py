@@ -50,46 +50,6 @@ if MEMORY_RECALL_LIMIT <= 0:
 if MEMORY_RECALL_CONTEXT_MAX_CHARACTERS <= 0:
     raise ValueError("MEMORY_RECALL_CONTEXT_MAX_CHARACTERS must be positive.")
 
-# Stable user profile configuration.
-# This is not FTS5 recall. It is a small, explicit profile overlay.
-USER_PROFILE_FILE = os.getenv(
-    "NANCEE_USER_PROFILE_FILE",
-    "/home/memnoch/Nancee/nancee/sherpa/user_profile.json",
-)
-
-
-# Retrieval-only profile context. The complete profile is never placed
-# in the prompt. Only FTS5-matched facts are supplied to the LLM.
-USER_PROFILE_RETRIEVAL_ENABLED = (
-    os.getenv(
-        "NANCEE_USER_PROFILE_RETRIEVAL_ENABLED",
-        "true",
-    ).lower()
-    == "true"
-)
-
-USER_PROFILE_RETRIEVAL_LIMIT = int(
-    os.getenv(
-        "NANCEE_USER_PROFILE_RETRIEVAL_LIMIT",
-        "2",
-    )
-)
-
-USER_PROFILE_CONTEXT_MAX_CHARACTERS = int(
-    os.getenv(
-        "NANCEE_USER_PROFILE_CONTEXT_MAX_CHARACTERS",
-        "240",
-    )
-)
-
-if USER_PROFILE_CONTEXT_MAX_CHARACTERS <= 0:
-    raise ValueError("USER_PROFILE_CONTEXT_MAX_CHARACTERS must be positive.")
-
-
-if USER_PROFILE_RETRIEVAL_LIMIT <= 0:
-    raise ValueError("USER_PROFILE_RETRIEVAL_LIMIT must be positive.")
-
-
 # NANCEE ASR RUNTIME CONFIG v1 START
 #
 # The benchmark winner is Faster-Whisper Base.en using INT8 on four CPU

@@ -180,7 +180,7 @@ class IccsSpineTests(unittest.TestCase):
             tokens = list(
                 iccs.respond(
                     history=[],
-                    memory_context="dynamic profile",
+                    memory_context="dynamic memory",
                     require_exact_prefix=False,
                     user_text="hello",
                 )
@@ -192,7 +192,7 @@ class IccsSpineTests(unittest.TestCase):
                 backend.requests[0]["prefix_source"],
             )
             self.assertEqual(
-                {"role": "system", "content": "dynamic profile"},
+                {"role": "system", "content": "dynamic memory"},
                 backend.requests[0]["prefix_messages"][1],
             )
         finally:

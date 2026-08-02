@@ -33,10 +33,5 @@ class ResponsePolicyRouterV3Tests(unittest.TestCase):
         self.assertIn("general knowledge", policy.instruction)
         self.assertNotIn("do not remember", policy.instruction.lower())
 
-    def test_speaker_return_route_selects_speaker_return_policy(self):
-        policy = response_policy_for_route("speaker_return")
-        self.assertEqual("speaker_return", policy.name)
-        self.assertFalse(policy.drop_history)
-        self.assertTrue(policy.instruction.strip())
 if __name__ == "__main__":
     unittest.main()

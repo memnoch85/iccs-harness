@@ -220,7 +220,7 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
             tokens = list(
                 tpc.stream_response(
                     history=[],
-                    memory_context="dynamic profile",
+                    memory_context="dynamic memory",
                     require_exact_prefix=False,
                     user_text="hello",
                 )
@@ -235,7 +235,7 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
             self.assertEqual(
                 build_prefix(
                     history=[],
-                    memory_context="dynamic profile",
+                    memory_context="dynamic memory",
                 ),
                 request_calls[0]["prefix_messages"],
             )
@@ -268,7 +268,7 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
         try:
             tpc.prime_now(
                 history=history,
-                memory_context="ACTIVE SPEAKER: Daniel.",
+                memory_context="dynamic memory",
             )
 
             self.assertEqual(
@@ -276,7 +276,7 @@ class TenaciousPrefixCacheV2Tests(unittest.TestCase):
                 list(
                     tpc.stream_response(
                         history=history,
-                        memory_context="ACTIVE SPEAKER: Daniel.",
+                        memory_context="dynamic memory",
                         user_text="hello",
                     )
                 ),

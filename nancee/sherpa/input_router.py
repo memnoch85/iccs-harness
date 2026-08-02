@@ -11,10 +11,6 @@ from memory_policy import (
     looks_like_personal_fact_question,
 )
 from recall_policy import looks_like_perspective_correction
-from speaker_state import (
-    looks_like_current_speaker_query,
-    looks_like_primary_return,
-)
 
 
 @dataclass(frozen=True)
@@ -391,8 +387,6 @@ def route_user_input(
         )
     )
 
-    primary_speaker_return = looks_like_primary_return(raw_text)
-    current_speaker_query = looks_like_current_speaker_query(raw_text)
 
     match True:
         # Begin:: Checking invalid input
@@ -448,24 +442,6 @@ def route_user_input(
                 recall_storage_text=explicit_memory_store,
             )
         # End:: Checking explicit memory storage command
-
-        # Begin:: Checking primary speaker return
-        case _ if primary_speaker_return:
-            return InputRoute(
-                "speaker_return",
-                lowered,
-                reason="primary_speaker_return",
-            )
-        # End:: Checking primary speaker return
-
-        # Begin:: Checking current speaker identity
-        case _ if current_speaker_query:
-            return InputRoute(
-                "speaker",
-                lowered,
-                reason="current_speaker_query",
-            )
-        # End:: Checking current speaker identity
 
         # Begin:: Checking explicit recall
         case _ if explicit_recall_match:

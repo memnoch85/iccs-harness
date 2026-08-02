@@ -10,11 +10,6 @@ SOURCE = (
 
 
 class NanceeGuardrailContractTests(unittest.TestCase):
-    def test_profile_hit_skips_weaker_session_recall(self):
-        self.assertIn(
-            "reason=authoritative_profile_hit",
-            SOURCE,
-        )
 
     def test_authoritative_answers_and_misses_are_collected_before_tts(self):
         self.assertIn(
