@@ -1304,20 +1304,11 @@ def main():
                     and not memory_context_found
                 )
 
-                request_memory_context = ""
-
-                if fact_miss:
-                    request_memory_context = (
-                        "No matching confirmed fact about the human user "
-                        "was retrieved. Say only that you do not remember "
-                        "it yet."
+                if fact_miss and MEMORY_DEBUG_ENABLED:
+                    print(
+                        "[USER FACT MISS] llm_answer=true",
+                        flush=True,
                     )
-
-                    if MEMORY_DEBUG_ENABLED:
-                        print(
-                            "[USER FACT MISS] llm_answer=true",
-                            flush=True,
-                        )
 
                 authoritative_context_found = (
                     input_route.explicit_recall
@@ -1464,7 +1455,7 @@ def main():
                     response = iccs.respond(
                         user_text=user_text,
                         history=request_history,
-                        memory_context=request_memory_context,
+                        memory_context="",
                         require_exact_prefix=require_exact_iccs_prefix,
                         retrieved_context=retrieved_context,
                         response_instruction=response_policy.instruction,
@@ -1742,13 +1733,6 @@ def main():
                 )
 
                 text_queue.join()
-
-                # Direct speaker responses bypass iccs.respond(), so the
-                # previous turn's background prime may still be registered even
-                # after its worker has finished. Consume that result before
-                # scheduling the new completed-turn prefix. For ordinary LLM
-                # turns this is a no-op because respond() already waited.
-                iccs.wait_for_prepared_prefix()
 
                 iccs.prime_next(
                     history=recent_prompt_memory.get_messages(),

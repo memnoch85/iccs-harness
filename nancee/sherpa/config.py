@@ -317,7 +317,7 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
-        "5.5",
+        "5.8",
     )
 )
 

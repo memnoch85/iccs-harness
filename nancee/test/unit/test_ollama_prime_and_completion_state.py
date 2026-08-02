@@ -3,7 +3,12 @@ import unittest
 from unittest.mock import patch
 
 import ollama_runtime
-from warmup_contract import CONTEXT_PRIME_USER_TEXT
+from warmup_contract import (
+    CONTEXT_PRIME_EXPECTED_REPLY,
+    CONTEXT_PRIME_NUM_PREDICT,
+    CONTEXT_PRIME_TEMPERATURE,
+    CONTEXT_PRIME_USER_TEXT,
+)
 
 
 class _FakeResponse:
@@ -37,6 +42,7 @@ class OllamaPrimeAndCompletionStateTests(unittest.TestCase):
             )
             return _FakeResponse(
                 payload={
+                    "message": {"content": "k"},
                     "load_duration": 0,
                     "prompt_eval_count": 2,
                     "prompt_eval_duration": 0,
@@ -54,7 +60,7 @@ class OllamaPrimeAndCompletionStateTests(unittest.TestCase):
             "urlopen",
             side_effect=fake_urlopen,
         ):
-            ollama_runtime.prime_ollama_context(
+            result = ollama_runtime.prime_ollama_context(
                 history=[],
                 memory_context="",
             )
@@ -63,15 +69,20 @@ class OllamaPrimeAndCompletionStateTests(unittest.TestCase):
 
         self.assertEqual(
             payload["options"]["temperature"],
-            0.0,
+            CONTEXT_PRIME_TEMPERATURE,
         )
         self.assertEqual(
             payload["options"]["num_predict"],
-            1,
+            CONTEXT_PRIME_NUM_PREDICT,
         )
         self.assertEqual(
             payload["messages"][-1]["content"],
             CONTEXT_PRIME_USER_TEXT,
+        )
+
+        self.assertEqual(
+            result["prime_reply"],
+            CONTEXT_PRIME_EXPECTED_REPLY,
         )
 
     def test_stream_records_done_reason_without_changing_tokens(self):

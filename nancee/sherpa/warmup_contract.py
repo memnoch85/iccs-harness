@@ -13,11 +13,14 @@ from prompt_identity import (
     text_sha256,
 )
 
-# Version 2 replaces the conversational startup sentence with the same
-# one-token prime contract used by the live TPC path.
-WARMUP_FORMAT_VERSION = 2
+# Version 3 makes the disposable ICCS prime explicit and self-contained.
+# Both startup warmup and every live ICCS prime ask for one lowercase k.
+WARMUP_FORMAT_VERSION = 3
 
-CONTEXT_PRIME_USER_TEXT = "Internal context preparation. Reply with READY only."
+CONTEXT_PRIME_USER_TEXT = "Reply with lowercase k only."
+CONTEXT_PRIME_EXPECTED_REPLY = "k"
+CONTEXT_PRIME_TEMPERATURE = 0.0
+CONTEXT_PRIME_NUM_PREDICT = 1
 
 WARMUP_STATE_FILE = Path(
     os.environ.get(

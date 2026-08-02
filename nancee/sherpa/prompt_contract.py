@@ -11,7 +11,7 @@ def build_prompt_prefix(
 ) -> list[dict[str, str]]:
     """Build the canonical application-level prefix exactly once.
 
-    This function is deliberately free of Ollama I/O. Startup warmup, TPC
+    This function is deliberately free of Ollama I/O. Startup warmup, ICCS
     priming, fingerprinting, and real requests must all use this builder so
     prompt shape cannot drift between paths.
     """

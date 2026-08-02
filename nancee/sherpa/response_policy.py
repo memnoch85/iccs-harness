@@ -110,8 +110,5 @@ def response_policy_for_route(
         name="normal",
         temperature=RESPONSE_NORMAL_TEMPERATURE,
         num_predict=RESPONSE_NORMAL_NUM_PREDICT,
-        instruction=(
-            "Answer naturally. Use relevant context; otherwise use general "
-            "knowledge. Be brief."
-        ),
+        instruction="",
     )
