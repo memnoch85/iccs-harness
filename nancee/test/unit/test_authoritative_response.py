@@ -5,9 +5,6 @@ from authoritative_response import (
     session_memory_response_is_grounded,
 )
 
-
-
-
 MEMORY_CONTEXT = (
     "Confirmed user memory. In quotes, I/me/my means the human user; "
     "answer as you/your.\n"

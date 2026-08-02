@@ -13,6 +13,8 @@ __pycache__/
 # Local secrets/configuration
 .env
 
+# don't store zed files
+.zed
 
 # Generated NANCEE debug and benchmark output
 test/manual/memory_debug_*.log

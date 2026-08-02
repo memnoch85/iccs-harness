@@ -31,7 +31,7 @@ class ResponsePolicyTests(unittest.TestCase):
 
     def test_name_preface_does_not_hide_detailed_request(self):
         policy = self.policy_for(
-            "Nancy, explain step by step how a turbocharger works."
+            "Nancy, explain step by step how a database index works."
         )
         self.assertEqual("detailed", policy.name)
 
@@ -48,7 +48,7 @@ class ResponsePolicyTests(unittest.TestCase):
         self.assertEqual("acknowledge", policy.name)
 
     def test_ambiguous_fragment_requests_clarification(self):
-        policy = self.policy_for("Hardly drive.")
+        policy = self.policy_for("Barely works.")
         self.assertEqual("clarify", policy.name)
 
     def test_recall_route_selects_recall_policy(self):
@@ -56,7 +56,6 @@ class ResponsePolicyTests(unittest.TestCase):
             "What did I buy yesterday?",
             authoritative_context_found=True,
         )
-        self.assertEqual("recall", policy.name)
         self.assertEqual("recall", policy.name)
         self.assertFalse(policy.drop_history)
         self.assertTrue(policy.instruction.strip())

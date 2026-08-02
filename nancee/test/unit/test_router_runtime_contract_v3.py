@@ -3,7 +3,6 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 CHAT_SOURCE = (ROOT / "sherpa" / "nancee_chat.py").read_text(encoding="utf-8")
 ROUTER_SOURCE = (ROOT / "sherpa" / "input_router.py").read_text(encoding="utf-8")
@@ -86,8 +85,10 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
         sections = (
             "Checking invalid input",
             "Checking exit commands",
+            "Checking unconditional hello/hi prefix",
             "Checking direct memory correction",
             "Checking perspective correction",
+            "Checking explicit memory storage command",
             "Checking explicit recall",
             "Checking greeting or backchannel",
             "Checking detailed request",

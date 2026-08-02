@@ -8,7 +8,6 @@ from pathlib import Path
 
 from sherpa.latency_bridge import LatencyBridge
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 CHAT_SOURCE = (

@@ -1,5 +1,5 @@
-from pathlib import Path
 import unittest
+from pathlib import Path
 
 from response_policy import response_policy_for_route
 from warmup_contract import (
@@ -8,7 +8,6 @@ from warmup_contract import (
     CONTEXT_PRIME_TEMPERATURE,
     CONTEXT_PRIME_USER_TEXT,
 )
-
 
 ROOT = Path(__file__).resolve().parents[2]
 SHERPA = ROOT / "sherpa"

@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Any, Protocol
 
-
 Message = dict[str, str]
 PrimeResult = Mapping[str, Any] | Any
 

@@ -2,9 +2,6 @@ from __future__ import annotations
 
 import re
 
-
-
-
 _WORD = re.compile(r"[a-z0-9']+")
 _MEMORY_MISS_PATTERN = re.compile(
     r"\b(?:do not|don't|cannot|can't)\s+(?:remember|recall)\b",
@@ -58,18 +55,6 @@ def first_sentence_only(text: str) -> str:
 
 def _normalized_words(text: str) -> list[str]:
     return _WORD.findall(str(text).lower())
-
-
-def _contains_phrase(answer: str, value: str) -> bool:
-    answer_words = _normalized_words(answer)
-    value_words = _normalized_words(value)
-
-    if not value_words:
-        return False
-
-    answer_text = " ".join(answer_words)
-    value_text = " ".join(value_words)
-    return value_text in answer_text
 
 
 def _content_tokens(text: str) -> set[str]:

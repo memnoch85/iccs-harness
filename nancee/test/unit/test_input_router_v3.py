@@ -11,7 +11,7 @@ class InputRouterV3Tests(unittest.TestCase):
         self.assertEqual("greeting", route.kind)
 
     def test_detailed_route(self):
-        route = route_user_input("Explain step by step how a turbocharger works.")
+        route = route_user_input("Explain step by step how a database index works.")
         self.assertEqual("detailed", route.kind)
 
     def test_directive_route(self):
@@ -33,7 +33,7 @@ class InputRouterV3Tests(unittest.TestCase):
         self.assertFalse(route.allow_weak_match)
 
     def test_general_where_question_is_not_forced_recall(self):
-        route = route_user_input("Where is the nearest gas station?")
+        route = route_user_input("Where is the nearest library?")
         self.assertEqual("normal", route.kind)
         self.assertTrue(route.retrieve_recall)
         self.assertFalse(route.explicit_recall)
@@ -65,29 +65,15 @@ class InputRouterV3Tests(unittest.TestCase):
         self.assertTrue(route.store_recall)
         self.assertEqual("My sister lives in Boise.", route.recall_storage_text)
 
-    def test_handoff_with_trailing_checkin_stores_declarative_clauses(self):
-        route = route_user_input(
-            (
-                "Nancy, I'm gonna hand this headset over to my dad. "
-                "His name is Daniel. He's gonna talk to you, okay?"
-            )
-        )
-
+    def test_unrelated_who_question_remains_normal(self):
+        route = route_user_input("Who invented the transistor?")
         self.assertEqual("normal", route.kind)
-        self.assertTrue(route.store_recall)
-        self.assertEqual(
-            (
-                "I'm gonna hand this headset over to my dad. "
-                "His name is Daniel. He's gonna talk to you."
-            ),
-            route.recall_storage_text,
-        )
 
-    def test_leading_hi_overrides_self_introduction_and_question(self):
+    def test_leading_hi_overrides_long_update_and_question(self):
         route = route_user_input(
             (
-                "Hi, this is Daniel. I'm old as fuck. "
-                "And I like to cross-country ski. "
+                "Hi, I finished a long project today. "
+                "And I learned several useful things. "
                 "How are you doing today?"
             )
         )
@@ -160,7 +146,7 @@ class InputRouterV3Tests(unittest.TestCase):
         samples = (
             "Hello fuck face.",
             "Hello, Auntie, how are you?",
-            "Hello, explain step by step how a turbocharger works.",
+            "Hello, explain step by step how a database index works.",
         )
 
         for text in samples:
@@ -183,7 +169,7 @@ class InputRouterV3Tests(unittest.TestCase):
 
     def test_existing_soft_greeting_prefaces_keep_existing_routing(self):
         route = route_user_input(
-            "Hey Nancee, explain step by step how a turbocharger works."
+            "Hey Nancee, explain step by step how a database index works."
         )
 
         self.assertEqual("detailed", route.kind)

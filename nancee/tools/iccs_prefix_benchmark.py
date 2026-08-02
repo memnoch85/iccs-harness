@@ -5,13 +5,15 @@ import argparse
 import contextlib
 import csv
 import json
-import os
 import statistics
 import sys
 import time
 import uuid
 from pathlib import Path
 from typing import Any
+
+DEFAULT_NANCEE_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_DIR = DEFAULT_NANCEE_ROOT.parent / "benchmark-results"
 
 
 def parse_args() -> argparse.Namespace:
@@ -23,8 +25,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--root",
-        default=str(Path.home() / "Nancee" / "nancee"),
-        help="NANCEE application root containing sherpa/ (default: ~/Nancee/nancee)",
+        default=str(DEFAULT_NANCEE_ROOT),
+        help=(
+            "NANCEE application root containing sherpa/ "
+            f"(default: {DEFAULT_NANCEE_ROOT})"
+        ),
     )
     parser.add_argument(
         "--runs",
@@ -41,7 +46,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         default="",
-        help="Directory for CSV/JSON/raw logs (default: ~/Nancee-benchmarks)",
+        help=(
+            "Directory for CSV/JSON/raw logs "
+            f"(default: {DEFAULT_OUTPUT_DIR})"
+        ),
     )
     parser.add_argument(
         "--micro-iterations",
@@ -103,7 +111,7 @@ def main() -> int:
     output_dir = (
         Path(args.output_dir).expanduser()
         if args.output_dir
-        else Path.home() / "Nancee-benchmarks"
+        else DEFAULT_OUTPUT_DIR
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -193,7 +201,7 @@ def main() -> int:
 
     with raw_log_path.open("w", encoding="utf-8") as raw_log:
         print(
-            f"NANCEE ICCS prefix benchmark started {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"ICCS prefix benchmark started {time.strftime('%Y-%m-%d %H:%M:%S')}",
             file=raw_log,
         )
         print(f"model={LLM_MODEL}", file=raw_log)

@@ -8,11 +8,11 @@ class SimpleMemoryCorrectionTests(unittest.TestCase):
     def test_extracts_direct_correction(self):
         self.assertEqual(
             extract_simple_fact_correction(
-                "Actually, it was the power board, not the canned transceiver."
+                "Actually, it was the ceramic mug, not the glass mug."
             ),
             (
-                "the power board",
-                "the canned transceiver",
+                "the ceramic mug",
+                "the glass mug",
             ),
         )
 
@@ -20,11 +20,11 @@ class SimpleMemoryCorrectionTests(unittest.TestCase):
         self.assertEqual(
             extract_simple_fact_correction(
                 "That was a fail. I told you actually it was "
-                "the power board not the can transceiver."
+                "the power board not the USB controller."
             ),
             (
                 "the power board",
-                "the can transceiver",
+                "the USB controller",
             ),
         )
 
@@ -33,12 +33,12 @@ class SimpleMemoryCorrectionTests(unittest.TestCase):
 
         memory_id = store.add_memory(
             "Hey Nancy, I finally finished wiring "
-            "the CAN transceiver tonight."
+            "the USB controller tonight."
         )
 
         corrected_id = store.apply_simple_correction(
             new_value="the power board",
-            old_value="the canned transceiver",
+            old_value="the USB controller",
         )
 
         self.assertEqual(corrected_id, memory_id)
@@ -54,7 +54,7 @@ class SimpleMemoryCorrectionTests(unittest.TestCase):
             hits[0].raw_text.lower(),
         )
         self.assertNotIn(
-            "transceiver",
+            "controller",
             hits[0].raw_text.lower(),
         )
 

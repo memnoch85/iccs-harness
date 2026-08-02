@@ -4,7 +4,6 @@ import ast
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATH = ROOT / "sherpa" / "nancee_chat.py"
 SOURCE = SOURCE_PATH.read_text(encoding="utf-8")
@@ -52,7 +51,7 @@ class IccsWiringContractTests(unittest.TestCase):
         call_source = ast.get_source_segment(SOURCE, gateway_calls[0])
         self.assertIn("require_exact_prefix=require_exact_iccs_prefix", call_source)
         self.assertIn("history=request_history", call_source)
-        self.assertIn("memory_context=""", call_source)
+        self.assertIn('memory_context=""', call_source)
 
     def test_completed_turn_prime_occurs_after_history_update_before_audio_drain(self):
         main = main_function()

@@ -24,7 +24,7 @@ class GreetingBridgeSpeedTests(unittest.TestCase):
             CONFIG_SOURCE,
         )
 
-    def test_default_greeting_speed_is_one(self):
+    def test_default_greeting_speed_is_one_point_one(self):
         config_block = CONFIG_SOURCE.split(
             "TTS_GREETING_BRIDGE_SPEED = float(",
             1,

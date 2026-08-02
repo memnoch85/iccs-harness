@@ -52,15 +52,15 @@ class TestSessionArchive(unittest.TestCase):
         self.assertGreaterEqual(len(hits), 1)
         self.assertEqual(hits[0]["user"], "My name is Anders.")
 
-    def test_recall_retrieves_drive_by_token_overlap(self):
+    def test_recall_retrieves_laptop_by_token_overlap(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn("I drive a black Jeep.")
+        recall.add_turn("I use a black ThinkPad.")
 
-        hits = recall.retrieve("What do I drive?", limit=3)
+        hits = recall.retrieve("What ThinkPad do I use?", limit=3)
 
         self.assertGreaterEqual(len(hits), 1)
-        self.assertEqual(hits[0]["user"], "I drive a black Jeep.")
+        self.assertEqual(hits[0]["user"], "I use a black ThinkPad.")
 
     def test_recall_retrieves_hot_sauce_purchase(self):
         recall = SessionArchive(max_turns=24)
@@ -85,31 +85,31 @@ class TestSessionArchive(unittest.TestCase):
             "I parked on level three near the west elevator.",
         )
 
-    def test_no_semantic_alias_expansion_in_pure_fts5(self):
+    def test_no_device_alias_expansion_in_pure_fts5(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn("I drive a black Jeep.")
+        recall.add_turn("I use a black ThinkPad.")
 
-        hits = recall.retrieve("What vehicle do I have?", limit=3)
+        hits = recall.retrieve("What laptop do I have?", limit=3)
 
         self.assertEqual(hits, [])
 
     def test_newest_tie_breaker_prefers_correction(self):
         recall = SessionArchive(max_turns=24)
 
-        recall.add_turn("I drive a black keeper.")
-        recall.add_turn("I drive a black Jeep.")
+        recall.add_turn("I use a black Think Pad.")
+        recall.add_turn("I use a black ThinkPad.")
 
-        hits = recall.retrieve("What do I drive?", limit=3)
+        hits = recall.retrieve("What ThinkPad do I use?", limit=3)
 
         self.assertGreaterEqual(len(hits), 1)
-        self.assertEqual(hits[0]["user"], "I drive a black Jeep.")
+        self.assertEqual(hits[0]["user"], "I use a black ThinkPad.")
 
     def test_irrelevant_query_returns_no_hits(self):
         recall = SessionArchive(max_turns=24)
 
         recall.add_turn("My name is Anders.")
-        recall.add_turn("I drive a black Jeep.")
+        recall.add_turn("I use a black ThinkPad.")
 
         hits = recall.retrieve("banana moon turtle", limit=3)
 

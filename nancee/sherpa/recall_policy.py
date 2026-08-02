@@ -205,7 +205,7 @@ def repair_recall_perspective(
         flags=re.IGNORECASE,
     )
 
-    # My car -> Your car
+    # My laptop -> Your laptop
     text = re.sub(
         rf"^(\s*{_TEMPORAL_PREFIX})My\b",
         lambda match: (
@@ -230,7 +230,7 @@ def repair_recall_perspective(
     # A model may repair the subject correctly while retaining
     # a first-person possessive:
     #
-    #     You finished wiring my CAN transceiver.
+    #     You finished wiring my USB controller.
     #
     # Rewrite the possessive only when this answer has already been
     # identified as describing the human user. Do not globally rewrite

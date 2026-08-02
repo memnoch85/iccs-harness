@@ -6,24 +6,24 @@ from sherpa.recall_policy import repair_recall_perspective
 class RecallPossessiveRepairTests(unittest.TestCase):
     def test_repairs_subject_and_possessive(self):
         fixed, changed = repair_recall_perspective(
-            "I finished wiring my CAN transceiver."
+            "I finished wiring my USB controller."
         )
 
         self.assertTrue(changed)
         self.assertEqual(
             fixed,
-            "You finished wiring your CAN transceiver.",
+            "You finished wiring your USB controller.",
         )
 
     def test_repairs_possessive_after_model_used_you(self):
         fixed, changed = repair_recall_perspective(
-            "You finished wiring my CAN transceiver."
+            "You finished wiring my USB controller."
         )
 
         self.assertTrue(changed)
         self.assertEqual(
             fixed,
-            "You finished wiring your CAN transceiver.",
+            "You finished wiring your USB controller.",
         )
 
     def test_repairs_possessive_after_me_who_conversion(self):
