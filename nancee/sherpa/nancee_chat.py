@@ -64,7 +64,7 @@ from latency_bridge import (
 )
 from memory_policy import memory_storage_skip_reason
 from ollama_runtime import (
-    create_ollama_tpc,
+    create_ollama_iccs,
     ensure_ollama_model_loaded,
 )
 from profile_fact_index import ProfileFactIndex
@@ -1185,14 +1185,14 @@ def main():
         flush=True,
     )
 
-    tpc = create_ollama_tpc()
+    iccs = create_ollama_iccs()
 
     try:
         ensure_ollama_model_loaded(
             LLM_MODEL,
         )
 
-        tpc.prime_now(
+        iccs.prime_startup(
             history=[],
             memory_context=speaker_state.prompt_context(),
             reason="startup",
@@ -1204,7 +1204,7 @@ def main():
             flush=True,
         )
 
-        tpc.shutdown()
+        iccs.close()
         stop_event.set()
         worker.join(timeout=2.0)
 
@@ -1578,7 +1578,7 @@ def main():
                         request_history = recent_prompt_memory.get_messages()
 
                     live_history = recent_prompt_memory.get_messages()
-                    require_exact_tpc_prefix = (
+                    require_exact_iccs_prefix = (
                         request_history == live_history
                         and not effective_profile_context.strip()
                         and not speaker_context_changed_for_request
@@ -1626,11 +1626,11 @@ def main():
                         )
 
                     else:
-                        response = tpc.stream_response(
+                        response = iccs.respond(
                             user_text=user_text,
                             history=request_history,
                             memory_context=request_memory_context,
-                            require_exact_prefix=require_exact_tpc_prefix,
+                            require_exact_prefix=require_exact_iccs_prefix,
                             retrieved_context=retrieved_context,
                             response_instruction=response_policy.instruction,
                             temperature=response_policy.temperature,
@@ -1816,7 +1816,7 @@ def main():
                         flush=True,
                     )
 
-                    tpc.prime_async(
+                    iccs.prime_next(
                         history=recent_prompt_memory.get_messages(),
                         memory_context=speaker_state.prompt_context(),
                         reason="request_recovery",
@@ -1836,7 +1836,7 @@ def main():
                         flush=True,
                     )
 
-                    tpc.prime_async(
+                    iccs.prime_next(
                         history=recent_prompt_memory.get_messages(),
                         memory_context=speaker_state.prompt_context(),
                         reason="empty_response_recovery",
@@ -1912,14 +1912,14 @@ def main():
 
                 text_queue.join()
 
-                # Direct speaker responses bypass tpc.stream_response(), so the
+                # Direct speaker responses bypass iccs.respond(), so the
                 # previous turn's background prime may still be registered even
                 # after its worker has finished. Consume that result before
                 # scheduling the new completed-turn prefix. For ordinary LLM
-                # turns this is a no-op because stream_response() already waited.
-                tpc.wait_until_ready()
+                # turns this is a no-op because respond() already waited.
+                iccs.wait_for_prepared_prefix()
 
-                tpc.prime_async(
+                iccs.prime_next(
                     history=recent_prompt_memory.get_messages(),
                     memory_context=speaker_state.next_prompt_context(),
                     reason="completed_turn",
@@ -1950,10 +1950,10 @@ def main():
 
     finally:
         try:
-            tpc.shutdown()
+            iccs.close()
         except RuntimeError as error:
             print(
-                f"[TPC SHUTDOWN ERROR] {error}",
+                f"[ICCS SHUTDOWN ERROR] {error}",
                 flush=True,
             )
         finally:

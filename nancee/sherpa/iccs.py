@@ -341,11 +341,15 @@ class ICCS:
             self._prepared_snapshot = None
 
         completion_state = request_kwargs.get("completion_state")
+        iccs_metrics = {
+            "iccs_wait_seconds": prime_wait.wait_seconds,
+            "iccs_prefix_match": prefix_match,
+            "iccs_prefix_source": prefix_source,
+            "iccs_prefix_sha256": request_snapshot.sha256,
+        }
+
         if isinstance(completion_state, dict):
-            completion_state["iccs_wait_seconds"] = prime_wait.wait_seconds
-            completion_state["iccs_prefix_match"] = prefix_match
-            completion_state["iccs_prefix_source"] = prefix_source
-            completion_state["iccs_prefix_sha256"] = request_snapshot.sha256
+            completion_state.update(iccs_metrics)
 
         try:
             yield from self._backend.stream(
@@ -356,6 +360,12 @@ class ICCS:
                 **request_kwargs,
             )
         finally:
+            # The concrete request backend may initialize/clear completion_state.
+            # Re-publish ICCS metrics after streaming so downstream timing and
+            # completion guards see both the backend and ICCS measurements.
+            if isinstance(completion_state, dict):
+                completion_state.update(iccs_metrics)
+
             with self._lock:
                 self._request_active = False
 

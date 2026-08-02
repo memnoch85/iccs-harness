@@ -6,8 +6,8 @@ CHAT_SOURCE = (ROOT / "sherpa" / "nancee_chat.py").read_text(encoding="utf-8")
 POLICY_SOURCE = (ROOT / "sherpa" / "response_policy.py").read_text(encoding="utf-8")
 
 
-class SpeakerTpcContractV42Tests(unittest.TestCase):
-    def test_speaker_state_is_stable_tpc_memory_context(self):
+class SpeakerIccsContractTests(unittest.TestCase):
+    def test_speaker_state_is_stable_iccs_memory_context(self):
         self.assertIn(
             "memory_context=speaker_state.prompt_context()",
             CHAT_SOURCE,
@@ -55,12 +55,12 @@ class SpeakerTpcContractV42Tests(unittest.TestCase):
         self.assertIn(
             "text_queue.join()\n\n"
             "                # Direct speaker responses bypass "
-            "tpc.stream_response()",
+            "iccs.respond()",
             CHAT_SOURCE,
         )
         wait_index = CHAT_SOURCE.index(
-            "                tpc.wait_until_ready()\n\n"
-            "                tpc.prime_async("
+            "                iccs.wait_for_prepared_prefix()\n\n"
+            "                iccs.prime_next("
         )
         completed_prime_index = CHAT_SOURCE.index(
             'reason="completed_turn"',
