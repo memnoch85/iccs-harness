@@ -23,14 +23,13 @@ class GreetingLatencyBridgeTests(unittest.TestCase):
             LATENCY_BRIDGE_GREETING_PHRASES,
             (
                 "umm...",
-                "humm...",
-                "So..."
+                "humm..."
             ),
         )
 
     def test_greeting_phrases_are_one_to_four_words(self):
         self.assertEqual(
-            3,
+            2,
             len(LATENCY_BRIDGE_GREETING_PHRASES),
         )
 

@@ -37,23 +37,7 @@ def response_policy_for_route(
 ) -> ResponsePolicy:
     """Map one selected input route to generation settings."""
 
-    # Compatibility fallbacks bandade until real voice recognition replaces
-    # conversational speaker declarations.
-    if route_kind == "speaker_return":
-        return ResponsePolicy(
-            name="speaker_return",
-            temperature=RESPONSE_ACK_TEMPERATURE,
-            num_predict=RESPONSE_ACK_NUM_PREDICT,
-            instruction="Say only: Welcome back.",
-        )
 
-    if route_kind == "speaker":
-        return ResponsePolicy(
-            name="speaker",
-            temperature=RESPONSE_RECALL_TEMPERATURE,
-            num_predict=RESPONSE_RECALL_NUM_PREDICT,
-            instruction="Return only the active speaker's name.",
-        )
 
     # A missing fact cannot follow the same instruction as a found fact.
     if fact_miss:
@@ -77,7 +61,7 @@ def response_policy_for_route(
             name="greeting",
             temperature=RESPONSE_GREETING_TEMPERATURE,
             num_predict=RESPONSE_GREETING_NUM_PREDICT,
-            instruction="Reply warmly in one to four words.",
+            instruction="Reply in one to four words.",
         )
 
     if route_kind == "directive":
@@ -126,8 +110,5 @@ def response_policy_for_route(
         name="normal",
         temperature=RESPONSE_NORMAL_TEMPERATURE,
         num_predict=RESPONSE_NORMAL_NUM_PREDICT,
-        instruction=(
-            "Answer naturally. Use relevant context; otherwise use general "
-            "knowledge. Be brief."
-        ),
+        instruction="",
     )

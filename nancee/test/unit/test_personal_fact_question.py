@@ -12,9 +12,9 @@ class TestPersonalFactQuestion(unittest.TestCase):
     def test_stable_personal_attribute_questions_match(self):
         matching_questions = (
             "What color is my helicopter?",
-            "What colour is my truck?",
+            "What colour is my controller?",
             "What model is my phone?",
-            "What make is our car?",
+            "What make is our laptop?",
             "Which version is my controller?",
             "What's the brand of my laptop?",
             "What is the color of my power board?",
@@ -32,13 +32,13 @@ class TestPersonalFactQuestion(unittest.TestCase):
 
     def test_diagnostic_questions_do_not_match(self):
         nonmatching_questions = (
-            "Why is my engine overheating?",
-            "How do I fix my transmission?",
-            "What temperature is my engine running?",
-            "What voltage is my battery producing?",
-            "Is my battery bad?",
-            "Why is my warning light flashing?",
-            "What color should engine oil be?",
+            "Why is my application crashing?",
+            "How do I fix my printer?",
+            "What temperature is my laptop running?",
+            "What voltage is my power supply producing?",
+            "Is my keyboard broken?",
+            "Why is my status light flashing?",
+            "What color should printer ink be?",
         )
 
         for question in nonmatching_questions:

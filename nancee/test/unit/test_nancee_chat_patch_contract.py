@@ -1,6 +1,5 @@
-from pathlib import Path
 import unittest
-
+from pathlib import Path
 
 SOURCE = (
     Path(__file__).resolve().parents[2]
@@ -42,15 +41,6 @@ class NanceeChatPatchContractTests(unittest.TestCase):
         )
         self.assertIn("request_history = []", SOURCE)
 
-    def test_effective_profile_context_is_used(self):
-        self.assertIn(
-            "effective_profile_context,",
-            SOURCE,
-        )
-        self.assertIn(
-            "memory_context=request_memory_context",
-            SOURCE,
-        )
 
 
 if __name__ == "__main__":

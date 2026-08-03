@@ -1,10 +1,10 @@
 import unittest
 
+from input_router import route_user_input
 from memory_policy import (
     is_complete_memory_statement,
     normalize_memory_candidate,
 )
-from input_router import route_user_input
 from recall_policy import repair_recall_perspective
 from response_policy import response_policy_for_route
 

@@ -3,7 +3,6 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 CHAT_SOURCE = (ROOT / "sherpa" / "nancee_chat.py").read_text(encoding="utf-8")
 ROUTER_SOURCE = (ROOT / "sherpa" / "input_router.py").read_text(encoding="utf-8")
@@ -38,13 +37,13 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
         self.assertIn("and memory_context_found", CHAT_SOURCE)
         self.assertIn("authoritative_response_required", CHAT_SOURCE)
 
-    def test_tpc_gateway_and_reprime_contract_remain_present(self):
-        self.assertIn("tpc.prime_now(", CHAT_SOURCE)
-        self.assertIn("response = tpc.stream_response(", CHAT_SOURCE)
-        self.assertIn("require_exact_prefix=require_exact_tpc_prefix", CHAT_SOURCE)
-        self.assertIn("tpc.prime_async(", CHAT_SOURCE)
+    def test_iccs_gateway_and_reprime_contract_remain_present(self):
+        self.assertIn("iccs.prime_startup(", CHAT_SOURCE)
+        self.assertIn("response = iccs.respond(", CHAT_SOURCE)
+        self.assertIn("require_exact_prefix=require_exact_iccs_prefix", CHAT_SOURCE)
+        self.assertIn("iccs.prime_next(", CHAT_SOURCE)
         self.assertIn('reason="completed_turn"', CHAT_SOURCE)
-        self.assertIn("tpc.shutdown()", CHAT_SOURCE)
+        self.assertIn("iccs.close()", CHAT_SOURCE)
 
     def test_stop_recording_feedback_precedes_blocking_asr_result_wait(self):
         feedback = CHAT_SOURCE.index(
@@ -62,7 +61,7 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
         self.assertLess(feedback, stop_command)
         self.assertLess(stop_command, result_wait)
 
-    def test_tpc_prime_overlaps_only_queued_audio_playback(self):
+    def test_iccs_prime_overlaps_only_queued_audio_playback(self):
         turn_update = CHAT_SOURCE.index(
             "recent_prompt_memory.add_turn("
         )
@@ -86,8 +85,10 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
         sections = (
             "Checking invalid input",
             "Checking exit commands",
+            "Checking unconditional hello/hi prefix",
             "Checking direct memory correction",
             "Checking perspective correction",
+            "Checking explicit memory storage command",
             "Checking explicit recall",
             "Checking greeting or backchannel",
             "Checking detailed request",

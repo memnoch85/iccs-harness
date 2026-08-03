@@ -9,9 +9,7 @@ import urllib.error
 import urllib.request
 
 from config import (
-    LLM_NUM_PREDICT,
     LLM_NUM_THREADS,
-    LLM_TEMPERATURE,
     OLLAMA_WARMUP_TIMEOUT,
     SYSTEM_PROMPT_FILE,
     load_system_prompt,
@@ -21,6 +19,9 @@ from prompt_identity import (
     text_sha256,
 )
 from warmup_contract import (
+    CONTEXT_PRIME_EXPECTED_REPLY,
+    CONTEXT_PRIME_NUM_PREDICT,
+    CONTEXT_PRIME_TEMPERATURE,
     WARMUP_STATE_FILE,
     build_startup_warmup_messages,
     build_warmup_fingerprint,
@@ -135,9 +136,9 @@ def run_warmup_request(
         "keep_alive": parse_keep_alive(),
         "messages": messages,
         "options": {
-            "temperature": LLM_TEMPERATURE,
+            "temperature": CONTEXT_PRIME_TEMPERATURE,
             "num_thread": LLM_NUM_THREADS,
-            "num_predict": LLM_NUM_PREDICT,
+            "num_predict": CONTEXT_PRIME_NUM_PREDICT,
         },
     }
 
@@ -212,6 +213,12 @@ def run_warmup_request(
     if not reply:
         fail(f"{pass_name} returned an empty response")
 
+    if reply != CONTEXT_PRIME_EXPECTED_REPLY:
+        fail(
+            f"{pass_name} returned {reply!r}; "
+            f"expected {CONTEXT_PRIME_EXPECTED_REPLY!r}"
+        )
+
     elapsed = time.monotonic() - started
 
     print(
@@ -273,9 +280,9 @@ def main() -> None:
     )
     print(
         "[STARTING] LLM options: "
-        f"temperature={LLM_TEMPERATURE} "
+        f"temperature={CONTEXT_PRIME_TEMPERATURE} "
         f"threads={LLM_NUM_THREADS} "
-        f"num_predict={LLM_NUM_PREDICT}",
+        f"num_predict={CONTEXT_PRIME_NUM_PREDICT}",
         flush=True,
     )
     print(

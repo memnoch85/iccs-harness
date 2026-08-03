@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 
 # NANCEE runs Whisper from the local Hugging Face cache.
-# Do not contact Hugging Face Hub during normal vehicle startup.
+# Do not contact Hugging Face Hub during normal offline startup.
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
@@ -32,6 +32,7 @@ from sherpa.config import (  # noqa: E402
     ASR_THREADS,
     ASR_VAD_FILTER,
 )
+
 from asr.transcribe import (  # noqa: E402
     DEFAULT_BACKEND,
     DEFAULT_MODEL,

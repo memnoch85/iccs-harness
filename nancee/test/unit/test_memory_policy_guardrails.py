@@ -52,9 +52,9 @@ class MemoryPolicyGuardrailTests(unittest.TestCase):
             )
         )
 
-    def test_hardly_drive_is_rejected(self):
+    def test_barely_works_is_rejected(self):
         self.assertFalse(
-            is_complete_memory_statement("Hardly drive.")
+            is_complete_memory_statement("Barely works.")
         )
 
     def test_incomplete_possessive_fragment_is_rejected(self):
@@ -73,7 +73,7 @@ class MemoryPolicyGuardrailTests(unittest.TestCase):
         )
         self.assertFalse(
             is_complete_memory_statement(
-                "Explain how a turbo works."
+                "Explain how a database index works."
             )
         )
 

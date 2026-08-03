@@ -11,10 +11,6 @@ from memory_policy import (
     looks_like_personal_fact_question,
 )
 from recall_policy import looks_like_perspective_correction
-from speaker_state import (
-    looks_like_current_speaker_query,
-    looks_like_primary_return,
-)
 
 
 @dataclass(frozen=True)
@@ -64,15 +60,6 @@ _RECALL_QUERY_PATTERNS = (
     r"\bwhere do i\b",
     r"\bwhere am i\b",
     r"\bwhat do i\b",
-    r"\bwhat i\s+(?:drive|own|have)\b",
-    r"\bwhat am i driving\b",
-    r"\bwhat car\s+(?:am i driving|do i drive|do i have)\b",
-    r"\bwhat vehicle\s+(?:am i driving|do i drive|do i have)\b",
-    r"\bwhat kind of\s+(?:car|vehicle)\s+do i\s+(?:drive|own|have)\b",
-    r"\bwhat type of\s+(?:car|vehicle)\s+do i\s+(?:drive|own|have)\b",
-    r"\bcan you tell me what i\s+(?:drive|own|have)\b",
-    r"\bcan you tell me what car\s+(?:i drive|i have|i am driving)\b",
-    r"\bcan you tell me what vehicle\s+(?:i drive|i have|i am driving)\b",
     r"\bwhat is my\b",
     r"\bwhat's my\b",
     r"\bwho is my\b",
@@ -88,6 +75,11 @@ _RECALL_QUERY_PATTERNS = (
     r"\bwhat .* did i mention\b",
     r"\bwhat .* did i tell you\b",
     r"\bi told you .* earlier\b",
+)
+
+_HARD_GREETING_PREFIX_PATTERN = re.compile(
+    r"^(?:hello|hi)\b",
+    flags=re.IGNORECASE,
 )
 
 _LEADING_GREETING_TOKEN = re.compile(
@@ -317,6 +309,9 @@ def route_user_input(
     contextual_memory = _resolve_contextual_memory(raw_text, previous_turn)
     question_like = "?" in lowered or lowered.startswith(_QUESTION_PREFIXES)
     explicit_memory_store = _extract_explicit_memory_store(raw_text)
+    hard_greeting_prefix = bool(
+        _HARD_GREETING_PREFIX_PATTERN.match(raw_text)
+    )
 
     greeting_substantive, had_greeting_preface = (
         _strip_leading_greeting_preface(raw_text)
@@ -391,8 +386,6 @@ def route_user_input(
         )
     )
 
-    primary_speaker_return = looks_like_primary_return(raw_text)
-    current_speaker_query = looks_like_current_speaker_query(raw_text)
 
     match True:
         # Begin:: Checking invalid input
@@ -410,6 +403,15 @@ def route_user_input(
         case _ if lowered in {"q", "quit", "exit"}:
             return InputRoute("exit", lowered, reason="exit_command")
         # End:: Checking exit commands
+
+        # Begin:: Checking unconditional hello/hi prefix
+        case _ if hard_greeting_prefix:
+            return InputRoute(
+                "greeting",
+                lowered,
+                reason="leading_hello_or_hi",
+            )
+        # End:: Checking unconditional hello/hi prefix
 
         # Begin:: Checking direct memory correction
         case _ if correction is not None:
@@ -448,24 +450,6 @@ def route_user_input(
                 recall_storage_text=explicit_memory_store,
             )
         # End:: Checking explicit memory storage command
-
-        # Begin:: Checking primary speaker return
-        case _ if primary_speaker_return:
-            return InputRoute(
-                "speaker_return",
-                lowered,
-                reason="primary_speaker_return",
-            )
-        # End:: Checking primary speaker return
-
-        # Begin:: Checking current speaker identity
-        case _ if current_speaker_query:
-            return InputRoute(
-                "speaker",
-                lowered,
-                reason="current_speaker_query",
-            )
-        # End:: Checking current speaker identity
 
         # Begin:: Checking explicit recall
         case _ if explicit_recall_match:

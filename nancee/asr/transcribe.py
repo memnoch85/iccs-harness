@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import argparse
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import sounddevice as sd
@@ -192,8 +191,8 @@ class WhisperTranscriber:
             raise RuntimeError(
                 "Faster-Whisper is selected but is not installed in the "
                 "production ASR virtual environment. Install it with:\n"
-                '  "$HOME/Nancee/nancee/asr/venv/bin/python" -m pip '
-                "install faster-whisper==1.2.1 ctranslate2==4.8.1"
+                f'  "{sys.executable}" -m pip install '
+                "faster-whisper==1.2.1 ctranslate2==4.8.1"
             ) from exc
 
         self.whisper_model = WhisperModel(

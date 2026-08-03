@@ -18,7 +18,7 @@ class ResponsePolicyFinishTests(unittest.TestCase):
 
     def test_asr_explaining_exact_sentences_routes_detailed(self):
         self.assert_policy(
-            "Explaining exactly two complete sentences, how turbochargers work.",
+            "Explaining exactly two complete sentences, how database indexes work.",
             "detailed",
         )
 
@@ -34,9 +34,9 @@ class ResponsePolicyFinishTests(unittest.TestCase):
             "directive",
         )
 
-    def test_hardly_drive_still_routes_clarify(self):
+    def test_barely_works_still_routes_clarify(self):
         self.assert_policy(
-            "Hardly drive.",
+            "Barely works.",
             "clarify",
         )
 

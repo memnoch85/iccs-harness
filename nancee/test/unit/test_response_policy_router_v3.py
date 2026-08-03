@@ -28,15 +28,9 @@ class ResponsePolicyRouterV3Tests(unittest.TestCase):
         policy = response_policy_for_route("normal", fact_miss=True)
         self.assertEqual("recall", policy.name)
 
-    def test_normal_policy_does_not_turn_missing_memory_into_failure(self):
+    def test_normal_policy_adds_no_dynamic_instruction(self):
         policy = response_policy_for_route("normal")
-        self.assertIn("general knowledge", policy.instruction)
-        self.assertNotIn("do not remember", policy.instruction.lower())
+        self.assertEqual("", policy.instruction)
 
-    def test_speaker_return_route_selects_speaker_return_policy(self):
-        policy = response_policy_for_route("speaker_return")
-        self.assertEqual("speaker_return", policy.name)
-        self.assertFalse(policy.drop_history)
-        self.assertTrue(policy.instruction.strip())
 if __name__ == "__main__":
     unittest.main()

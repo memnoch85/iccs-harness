@@ -6,7 +6,7 @@ from unittest.mock import patch
 import ollama_runtime
 
 
-class TpcRouteInstructionContractTests(unittest.TestCase):
+class IccsRouteInstructionContractTests(unittest.TestCase):
     def test_route_instruction_is_dynamic_after_stable_prefix(self):
         with patch.object(
             ollama_runtime,

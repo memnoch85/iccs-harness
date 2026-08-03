@@ -120,40 +120,13 @@ _TRAILING_CONVERSATIONAL_CHECKIN = re.compile(
     flags=re.IGNORECASE,
 )
 
-_SELF_INTRODUCTION_STATEMENT = re.compile(
-    r"^(?:this is|my name is)\s+[A-Za-z][A-Za-z'\-]{1,39}[.!]?$",
-    flags=re.IGNORECASE,
-)
-
-_THIRD_PERSON_FACT_STATEMENTS = (
-    re.compile(
-        r"^(?:he|she|they)(?:'s|'re|'ll|\s+(?:is|are|was|were|has|have|will|can))"
-        r"\s+.+[.!]?$",
-        flags=re.IGNORECASE,
-    ),
-    re.compile(
-        r"^(?:his|her|their)\s+.+\s+(?:is|are|was|were|has|have)"
-        r"\s+.+[.!]?$",
-        flags=re.IGNORECASE,
-    ),
-    re.compile(
-        r"^[A-Z][A-Za-z'\-]{1,39}\s+"
-        r"(?:is|was|has|will|can|likes?|lives?|works?|drives?|owns?|prefers?|uses?|talks?)"
-        r"\s+.+[.!]?$",
-    ),
-)
-
-
 def extract_storable_memory_text(text: str) -> str | None:
     """
     Extract declarative memory clauses from a mixed multi-sentence turn.
 
-    This lets a turn such as:
-
-        His name is Daniel. He's going to talk to you, okay?
-
-    preserve the useful facts without storing the trailing check-in as a
-    memory question. The function does not perform route selection.
+    This lets a mixed turn preserve complete personal facts without
+    storing trailing questions or conversational check-ins. The function
+    does not perform route selection.
     """
     raw_text = re.sub(r"\s+", " ", str(text).strip())
 
@@ -188,15 +161,6 @@ def extract_storable_memory_text(text: str) -> str | None:
             accepted.append(clause)
             continue
 
-        if _SELF_INTRODUCTION_STATEMENT.fullmatch(clause):
-            accepted.append(clause)
-            continue
-
-        if any(
-            pattern.fullmatch(clause)
-            for pattern in _THIRD_PERSON_FACT_STATEMENTS
-        ):
-            accepted.append(clause)
 
     if not accepted:
         return None
@@ -210,7 +174,7 @@ def extract_simple_fact_correction(
     """
     Return (new_value, old_value) for a narrow correction shape:
 
-        Actually, it was the power board, not the CAN transceiver.
+        Actually, it was the power board, not the USB controller.
 
     This intentionally does not attempt broad language understanding.
     """
@@ -289,7 +253,7 @@ def looks_like_personal_fact_question(
     Examples:
         What color is my helicopter?
         What model is my phone?
-        What is the make of my car?
+        What is the brand of my laptop?
 
     Diagnostic questions intentionally remain outside this policy.
     """

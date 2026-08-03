@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import re
 
-
 _ASK_ME_CLAUSE_PATTERN = re.compile(
     r"\bask\s+me"
     r"(?:\s+(?P<timing>today|tomorrow|tonight|later|"
@@ -62,11 +61,6 @@ def _extract_ask_me_parts(
     )
 
     return timing, clause
-
-
-def _extract_ask_me_clause(user_text: str) -> str:
-    _, clause = _extract_ask_me_parts(user_text)
-    return clause
 
 
 def _is_single_question(text: str) -> bool:

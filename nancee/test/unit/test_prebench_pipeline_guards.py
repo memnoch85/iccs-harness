@@ -36,7 +36,7 @@ class PromptRoleLeakGuardTests(unittest.TestCase):
 class ClarificationGuardTests(unittest.TestCase):
     def test_length_cutoff_keeps_only_complete_first_sentence(self):
         answer, action = prepare_clarification_response(
-            'Could you repeat that? I thought you said "drive',
+            'Could you repeat that? I thought you said "compile',
             {"done_reason": "length"},
         )
 
@@ -97,7 +97,7 @@ class ClarificationGuardTests(unittest.TestCase):
 
     def test_length_cutoff_without_sentence_uses_fallback(self):
         answer, action = prepare_clarification_response(
-            'Did you mean "Drive',
+            'Did you mean "Compile',
             {"done_reason": "length"},
         )
 
@@ -127,8 +127,8 @@ class MemoryRelevanceGuardTests(unittest.TestCase):
 
         filtered = filter_memory_hits_by_overlap(
             (
-                "Explain in detail how a four stroke engine completes "
-                "the intake compression power and exhaust cycle."
+                "Explain in detail how a compiler completes lexical analysis "
+                "parsing optimization and code generation."
             ),
             hits,
             minimum_overlap=2,

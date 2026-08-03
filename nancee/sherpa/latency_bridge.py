@@ -39,7 +39,7 @@ def calculate_remaining_bridge_delay(
 
 
 class LatencyBridge:
-    """Fire one callback unless the first-token event resolves in time."""
+    """Fire one callback unless first audio resolves in time."""
 
     def __init__(
         self,

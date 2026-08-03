@@ -22,13 +22,16 @@ from config import (
     SHERPA_DIRECTORY,
     load_system_prompt,
 )
+from iccs import ICCS
 from prompt_contract import (
     build_prompt_messages_from_prefix,
     build_prompt_prefix,
 )
 from prompt_identity import json_sha256, log_prompt_identity
-from tenacious_prefix_cache import TenaciousPrefixCache
 from warmup_contract import (
+    CONTEXT_PRIME_EXPECTED_REPLY,
+    CONTEXT_PRIME_NUM_PREDICT,
+    CONTEXT_PRIME_TEMPERATURE,
     CONTEXT_PRIME_USER_TEXT,
     WARMUP_STATE_FILE,
     build_warmup_fingerprint,
@@ -377,9 +380,9 @@ def prime_ollama_context(
         "keep_alive": -1,
         "messages": messages,
         "options": {
-            "temperature": 0.0,
+            "temperature": CONTEXT_PRIME_TEMPERATURE,
             "num_thread": LLM_NUM_THREADS,
-            "num_predict": 1,
+            "num_predict": CONTEXT_PRIME_NUM_PREDICT,
         },
     }
 
@@ -415,6 +418,17 @@ def prime_ollama_context(
     if data.get("error"):
         raise RuntimeError(f"Ollama context prime returned an error: {data['error']}")
 
+    prime_reply = str(
+        data.get("message", {}).get("content", "")
+    ).strip()
+
+    if prime_reply != CONTEXT_PRIME_EXPECTED_REPLY:
+        raise RuntimeError(
+            "Ollama context prime returned the wrong disposable token: "
+            f"expected={CONTEXT_PRIME_EXPECTED_REPLY!r} "
+            f"actual={prime_reply!r}"
+        )
+
     elapsed = time.perf_counter() - started
 
     result = {
@@ -439,6 +453,7 @@ def prime_ollama_context(
             "eval_count",
             0,
         ),
+        "prime_reply": prime_reply,
         **identity,
     }
 
@@ -450,6 +465,7 @@ def prime_ollama_context(
         f"generation={result['generation_seconds']:.3f}s "
         f"prompt_tokens={result['prompt_tokens']} "
         f"response_tokens={result['response_tokens']} "
+        f"prime_reply={result['prime_reply']} "
         f"system_sha256={identity['system_sha256']} "
         f"prefix_sha256={identity['prefix_sha256']}",
         flush=True,
@@ -719,10 +735,42 @@ def stream_ollama_response(
             f"Ollama request failed: {error}"
         ) from error
 
-def create_ollama_tpc():
-    return TenaciousPrefixCache(
-        prime_function=prime_ollama_context,
-        request_function=stream_ollama_response,
-        prefix_builder_function=build_ollama_prefix_messages,
-        prefix_fingerprint_function=json_sha256,
-    )
+
+class OllamaIccsBackend:
+    """Bind the reusable ICCS lifecycle to NANCEE's proven Ollama path."""
+
+    def build_prefix(self, *, history, memory_context):
+        return build_ollama_prefix_messages(
+            history=history,
+            memory_context=memory_context,
+        )
+
+    def fingerprint(self, prefix_messages):
+        return json_sha256(prefix_messages)
+
+    def prime(self, *, prefix_messages):
+        return prime_ollama_context(
+            prefix_messages=prefix_messages,
+        )
+
+    def stream(
+        self,
+        *,
+        prefix_messages,
+        prefix_source,
+        history,
+        memory_context,
+        **request_kwargs,
+    ):
+        yield from stream_ollama_response(
+            prefix_messages=prefix_messages,
+            prefix_source=prefix_source,
+            history=history,
+            memory_context=memory_context,
+            **request_kwargs,
+        )
+
+
+def create_ollama_iccs():
+    """Create ICCS with NANCEE's unchanged prompt and Ollama functions."""
+    return ICCS(backend=OllamaIccsBackend())

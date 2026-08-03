@@ -5,7 +5,6 @@ import argparse
 import contextlib
 import csv
 import json
-import os
 import statistics
 import sys
 import time
@@ -13,18 +12,24 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+DEFAULT_NANCEE_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_OUTPUT_DIR = DEFAULT_NANCEE_ROOT.parent / "benchmark-results"
+
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
-            "Benchmark NANCEE's prepared-prefix TPC path against an exact "
+            "Benchmark NANCEE's prepared-prefix ICCS path against an exact "
             "prefix rebuild and a deliberately changed-prefix control."
         )
     )
     parser.add_argument(
         "--root",
-        default=str(Path.home() / "Nancee" / "nancee"),
-        help="NANCEE application root containing sherpa/ (default: ~/Nancee/nancee)",
+        default=str(DEFAULT_NANCEE_ROOT),
+        help=(
+            "NANCEE application root containing sherpa/ "
+            f"(default: {DEFAULT_NANCEE_ROOT})"
+        ),
     )
     parser.add_argument(
         "--runs",
@@ -41,7 +46,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         default="",
-        help="Directory for CSV/JSON/raw logs (default: ~/Nancee-benchmarks)",
+        help=(
+            "Directory for CSV/JSON/raw logs "
+            f"(default: {DEFAULT_OUTPUT_DIR})"
+        ),
     )
     parser.add_argument(
         "--micro-iterations",
@@ -103,14 +111,14 @@ def main() -> int:
     output_dir = (
         Path(args.output_dir).expanduser()
         if args.output_dir
-        else Path.home() / "Nancee-benchmarks"
+        else DEFAULT_OUTPUT_DIR
     )
     output_dir.mkdir(parents=True, exist_ok=True)
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    raw_log_path = output_dir / f"tpc-benchmark-{stamp}.log"
-    csv_path = output_dir / f"tpc-benchmark-{stamp}.csv"
-    json_path = output_dir / f"tpc-benchmark-{stamp}.json"
+    raw_log_path = output_dir / f"iccs-prefix-benchmark-{stamp}.log"
+    csv_path = output_dir / f"iccs-prefix-benchmark-{stamp}.csv"
+    json_path = output_dir / f"iccs-prefix-benchmark-{stamp}.json"
 
     history = [
         {
@@ -193,7 +201,7 @@ def main() -> int:
 
     with raw_log_path.open("w", encoding="utf-8") as raw_log:
         print(
-            f"NANCEE TPC benchmark started {time.strftime('%Y-%m-%d %H:%M:%S')}",
+            f"ICCS prefix benchmark started {time.strftime('%Y-%m-%d %H:%M:%S')}",
             file=raw_log,
         )
         print(f"model={LLM_MODEL}", file=raw_log)
@@ -231,7 +239,7 @@ def main() -> int:
 
                 unique_suffix = uuid.uuid4().hex[:12]
                 user_text = (
-                    "Reply with READY only. "
+                    "Reply with lowercase k only. "
                     f"Benchmark sample {round_index + 1}-{unique_suffix}."
                 )
                 completion_state: dict[str, Any] = {}
@@ -240,7 +248,7 @@ def main() -> int:
                     "user_text": user_text,
                     "history": history,
                     "retrieved_context": "",
-                    "response_instruction": "Reply with READY only.",
+                    "response_instruction": "Reply with lowercase k only.",
                     "temperature": 0.0,
                     "num_predict": 1,
                     "completion_state": completion_state,
