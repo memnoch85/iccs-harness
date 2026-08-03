@@ -1,8 +1,0 @@
-target-version = "py313"
-
-extend-exclude = [
-    "nancee/**/venv",
-    "nancee/**/*.pre-*",
-    "nancee/**/*.orig",
-    "nancee/**/__pycache__",
-]
