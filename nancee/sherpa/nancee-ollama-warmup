@@ -221,6 +221,11 @@ def run_warmup_request(
 
     elapsed = time.monotonic() - started
 
+    if not isinstance(final_data, dict):
+        raise RuntimeError(
+            f"{pass_name} ended without a final Ollama response."
+        )
+
     print(
         f"[{pass_name}] Response: {reply}",
         flush=True,

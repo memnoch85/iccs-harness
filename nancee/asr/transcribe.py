@@ -36,7 +36,9 @@ DEFAULT_SAMPLE_RATE = ASR_SAMPLE_RATE
 def configure_backend_logging():
     """Silence noncritical backend logging without importing both backends."""
     if DEFAULT_BACKEND == "hf_direct":
-        from transformers.utils import logging as transformers_logging
+        from transformers.utils import (  # pyright: ignore[reportMissingImports]
+            logging as transformers_logging,
+        )
 
         transformers_logging.set_verbosity_error()
 
@@ -203,8 +205,10 @@ class WhisperTranscriber:
         )
 
     def _load_hf_direct(self):
-        from transformers import pipeline
-        from transformers.utils import logging as transformers_logging
+        from transformers import pipeline  # pyright: ignore[reportMissingImports]
+        from transformers.utils import (  # pyright: ignore[reportMissingImports]
+            logging as transformers_logging,
+        )
 
         transformers_logging.set_verbosity_error()
 

@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
 VENV="$ROOT/nancee/sherpa/venv"
 ASR_VENV="$ROOT/nancee/asr/venv"
 PYTHON="$VENV/bin/python"
@@ -12,20 +13,41 @@ KOKORO_URL="https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/k
 WARMUP_PROGRAM="$ROOT/nancee/sherpa/nancee-ollama-warmup"
 WARMUP_SERVICE="$ROOT/nancee/sherpa/nancee-llm-warmup@.service"
 
-LLM_MODEL="${LLM_MODEL:-llama3.2:3b}"
+LLM_MODEL="llama3.2:3b"
+WARMUP_UNIT="nancee-llm-warmup@${LLM_MODEL}.service"
+
+INSTALL_USER="$(id -un)"
+INSTALL_GROUP="$(id -gn)"
+INSTALL_HOME="$HOME"
+
+TEMPORARY_DIRECTORY=""
 
 log() {
     printf '\n==> %s\n' "$*"
 }
 
 die() {
-    printf 'ERROR: %s\n' "$*" >&2
+    printf '\nERROR: %s\n' "$*" >&2
     exit 1
 }
+
+cleanup() {
+    if [[ -n "$TEMPORARY_DIRECTORY" ]]; then
+        rm -rf "$TEMPORARY_DIRECTORY"
+    fi
+}
+
+trap cleanup EXIT
 
 if [[ "$EUID" -eq 0 ]]; then
     die "Run setup.sh as your normal user, not with sudo."
 fi
+
+command -v sudo >/dev/null 2>&1 \
+    || die "sudo is required."
+
+command -v apt-get >/dev/null 2>&1 \
+    || die "This installer requires Raspberry Pi OS or Debian with apt."
 
 [[ -f "$ROOT/nancee/sherpa/nancee_chat.py" ]] \
     || die "setup.sh must be inside the iccs-harness repository root."
@@ -34,10 +56,11 @@ fi
     || die "Missing nancee/asr/asr_worker.py."
 
 [[ -f "$WARMUP_PROGRAM" ]] \
-    || die "Missing the repository warmup program: $WARMUP_PROGRAM"
+    || die "Missing warmup program: $WARMUP_PROGRAM"
 
-command -v apt-get >/dev/null 2>&1 \
-    || die "This installer requires Raspberry Pi OS or Debian with apt."
+[[ -f "$WARMUP_SERVICE" ]] \
+    || die "Missing warmup service: $WARMUP_SERVICE"
+
 
 log "Installing system packages"
 
@@ -48,7 +71,6 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential \
     ca-certificates \
     curl \
-    git \
     libgomp1 \
     libopenblas0-pthread \
     libportaudio2 \
@@ -56,32 +78,28 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libspa-0.2-bluetooth \
     pipewire \
     pipewire-alsa \
-    pipewire-audio \
     pipewire-pulse \
     portaudio19-dev \
-    pulseaudio-utils \
     python3 \
     python3-dev \
     python3-pip \
     python3-venv \
     sqlite3 \
-    wget \
     wireplumber
 
-if command -v pactl >/dev/null 2>&1; then
-    server_name="$(
-        pactl info 2>/dev/null \
-            | awk -F': ' '/^Server Name:/ {print $2}' \
-            || true
-    )"
 
-    if [[ "$server_name" == *PipeWire* ]]; then
-        printf 'Audio server: %s\n' "$server_name"
-    else
-        printf 'WARNING: PipeWire is installed, but the active server is not reporting PipeWire.\n' >&2
-        printf 'PulseAudio is not guaranteed to work with this harness. Reboot before running NANCEE.\n' >&2
-    fi
+log "Checking PipeWire services"
+
+if systemctl --user is-active --quiet pipewire.service 2>/dev/null \
+    && systemctl --user is-active --quiet pipewire-pulse.service 2>/dev/null \
+    && systemctl --user is-active --quiet wireplumber.service 2>/dev/null
+then
+    printf 'PipeWire audio services: active\n'
+else
+    printf 'WARNING: PipeWire was installed, but its user services are not all active.\n' >&2
+    printf 'Reboot before running the ICCS Voice Harness.\n' >&2
 fi
+
 
 log "Installing Ollama"
 
@@ -89,27 +107,38 @@ if ! command -v ollama >/dev/null 2>&1; then
     curl -fsSL https://ollama.com/install.sh | sh
 fi
 
-sudo systemctl enable --now ollama
+sudo systemctl enable --now ollama.service
 
-for _ in $(seq 1 60); do
-    if curl -fsS http://127.0.0.1:11434/api/version >/dev/null 2>&1; then
+for _ in {1..60}; do
+    if curl \
+        -fsS \
+        http://127.0.0.1:11434/api/version \
+        >/dev/null 2>&1
+    then
         break
     fi
 
     sleep 1
 done
 
-curl -fsS http://127.0.0.1:11434/api/version >/dev/null \
+curl \
+    -fsS \
+    http://127.0.0.1:11434/api/version \
+    >/dev/null \
     || die "Ollama did not start."
+
 
 log "Downloading $LLM_MODEL"
 
 ollama pull "$LLM_MODEL"
 
-log "Creating one shared Python virtual environment"
 
-if [[ -e "$VENV" && ! -x "$PYTHON" ]]; then
-    rm -rf "$VENV"
+log "Creating the shared Python virtual environment"
+
+if [[ -e "$VENV" || -L "$VENV" ]]; then
+    if [[ ! -x "$PYTHON" ]]; then
+        rm -rf "$VENV"
+    fi
 fi
 
 if [[ ! -x "$PYTHON" ]]; then
@@ -130,94 +159,82 @@ fi
     faster-whisper==1.2.1 \
     ctranslate2==4.8.1
 
-# nancee_chat.py expects nancee/asr/venv/bin/python.
-# Point that existing path at the same shared environment.
-if [[ -e "$ASR_VENV" && ! -L "$ASR_VENV" ]]; then
+
+log "Linking the ASR environment to the shared environment"
+
+if [[ -e "$ASR_VENV" || -L "$ASR_VENV" ]]; then
     rm -rf "$ASR_VENV"
 fi
 
-ln -sfn ../sherpa/venv "$ASR_VENV"
+ln -s ../sherpa/venv "$ASR_VENV"
+
 
 log "Downloading Faster-Whisper base.en"
 
 HF_HUB_OFFLINE=0 \
 TRANSFORMERS_OFFLINE=0 \
+HF_HUB_DISABLE_TELEMETRY=1 \
 "$PYTHON" - <<'PY'
 from faster_whisper.utils import download_model
 
-path = download_model("base.en")
-print(f"Faster-Whisper model: {path}")
+model_path = download_model("base.en")
+print(f"Faster-Whisper model: {model_path}")
 PY
 
-log "Downloading the Kokoro ONNX model"
 
-if [[ ! -s "$KOKORO_DIR/model.onnx" || ! -s "$KOKORO_DIR/voices.bin" ]]; then
-    temporary_directory="$(mktemp -d)"
-    archive="$temporary_directory/kokoro-multi-lang-v1_0.tar.bz2"
+kokoro_is_complete() {
+    local required_file
 
-    trap 'rm -rf "$temporary_directory"' EXIT
+    for required_file in \
+        model.onnx \
+        voices.bin \
+        tokens.txt \
+        lexicon-us-en.txt \
+        lexicon-zh.txt
+    do
+        [[ -s "$KOKORO_DIR/$required_file" ]] || return 1
+    done
+
+    [[ -d "$KOKORO_DIR/espeak-ng-data" ]]
+}
+
+
+log "Checking the Kokoro ONNX model"
+
+if ! kokoro_is_complete; then
+    log "Downloading the Kokoro ONNX model"
+
+    TEMPORARY_DIRECTORY="$(mktemp -d)"
+    ARCHIVE="$TEMPORARY_DIRECTORY/kokoro-multi-lang-v1_0.tar.bz2"
 
     curl \
         --fail \
         --location \
         --retry 3 \
-        --output "$archive" \
+        --output "$ARCHIVE" \
         "$KOKORO_URL"
 
-    tar -xjf "$archive" -C "$ROOT/nancee/sherpa"
+    rm -rf "$KOKORO_DIR"
 
-    rm -rf "$temporary_directory"
-    trap - EXIT
-fi
+    tar \
+        -xjf "$ARCHIVE" \
+        -C "$ROOT/nancee/sherpa"
 
-for required_file in \
-    model.onnx \
-    voices.bin \
-    tokens.txt \
-    lexicon-us-en.txt \
-    lexicon-zh.txt
-do
-    [[ -s "$KOKORO_DIR/$required_file" ]] \
-        || die "Kokoro installation is missing $required_file."
-done
+    kokoro_is_complete \
+        || die "The Kokoro model archive did not contain all required files."
 
-[[ -d "$KOKORO_DIR/espeak-ng-data" ]] \
-    || die "Kokoro installation is missing espeak-ng-data."
-
-log "Installing the existing Ollama warmup command"
-
-chmod +x "$WARMUP_PROGRAM"
-
-sudo tee /usr/local/bin/nancee-ollama-warmup >/dev/null <<EOF
-#!/usr/bin/env bash
-set -e
-export PATH="$VENV/bin:\$PATH"
-exec "$WARMUP_PROGRAM" "\$@"
-EOF
-
-sudo chmod 0755 /usr/local/bin/nancee-ollama-warmup
-
-if [[ -f "$WARMUP_SERVICE" ]]; then
-    log "Installing and enabling the existing warmup service"
-
-    sudo install \
-        -m 0644 \
-        "$WARMUP_SERVICE" \
-        /etc/systemd/system/nancee-llm-warmup@.service
-
-    sudo systemctl daemon-reload
-
-    sudo systemctl enable \
-        "nancee-llm-warmup@${LLM_MODEL}.service"
+    rm -rf "$TEMPORARY_DIRECTORY"
+    TEMPORARY_DIRECTORY=""
 else
-    printf 'WARNING: %s was not found; the warmup command was installed, but no boot service was enabled.\n' \
-        "$WARMUP_SERVICE" >&2
+    printf 'Kokoro model: already installed\n'
 fi
+
 
 log "Checking the Python runtime"
 
 "$PYTHON" - <<'PY'
 import sqlite3
+from importlib.metadata import version
 
 import ctranslate2
 import faster_whisper
@@ -226,24 +243,88 @@ import sherpa_onnx
 import sounddevice
 
 connection = sqlite3.connect(":memory:")
-connection.execute("CREATE VIRTUAL TABLE test_fts USING fts5(text)")
+connection.execute(
+    "CREATE VIRTUAL TABLE test_fts USING fts5(text)"
+)
 connection.close()
 
-print("Python imports: OK")
+print(f"Python imports: OK")
+print(f"NumPy: {version('numpy')}")
+print(f"sounddevice: {version('sounddevice')}")
+print(f"Sherpa ONNX: {version('sherpa-onnx')}")
+print(f"Faster-Whisper: {version('faster-whisper')}")
+print(f"CTranslate2: {version('ctranslate2')}")
+print(f"SQLite: {sqlite3.sqlite_version}")
 print("SQLite FTS5: OK")
 PY
 
+
 log "Running unit tests"
 
-chmod +x "$ROOT/nancee/test/run_unit_tests.sh"
-bash "$ROOT/nancee/test/run_unit_tests.sh"
+PATH="$VENV/bin:$PATH" \
+    bash "$ROOT/nancee/test/run_unit_tests.sh"
 
-log "Running the existing Ollama warmup"
 
-/usr/local/bin/nancee-ollama-warmup "$LLM_MODEL"
+log "Installing the existing Ollama warmup command"
+
+chmod +x "$WARMUP_PROGRAM"
+
+sudo tee /usr/local/bin/nancee-ollama-warmup >/dev/null <<EOF
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+export PATH="$VENV/bin:\$PATH"
+
+cd "$ROOT/nancee/sherpa"
+
+exec "$WARMUP_PROGRAM" "\$@"
+EOF
+
+sudo chmod 0755 /usr/local/bin/nancee-ollama-warmup
+
+
+log "Installing the existing warmup service"
+
+sudo install \
+    -m 0644 \
+    "$WARMUP_SERVICE" \
+    /etc/systemd/system/nancee-llm-warmup@.service
+
+sudo mkdir -p \
+    /etc/systemd/system/nancee-llm-warmup@.service.d
+
+sudo tee \
+    /etc/systemd/system/nancee-llm-warmup@.service.d/override.conf \
+    >/dev/null <<EOF
+[Service]
+User=$INSTALL_USER
+Group=$INSTALL_GROUP
+WorkingDirectory="$ROOT/nancee/sherpa"
+Environment="HOME=$INSTALL_HOME"
+
+ExecStart=
+ExecStart=/usr/local/bin/nancee-ollama-warmup %i
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable "$WARMUP_UNIT"
+
+
+log "Testing the Ollama warmup service"
+
+if ! sudo systemctl restart "$WARMUP_UNIT"; then
+    sudo systemctl status \
+        "$WARMUP_UNIT" \
+        --no-pager \
+        --lines=30 \
+        || true
+
+    die "The Ollama warmup service failed."
+fi
+
 
 printf '\nInstallation complete.\n'
-printf 'Run NANCEE with:\n\n'
+printf '\nRun the ICCS Voice Harness with:\n\n'
 printf '  cd "%s"\n' "$ROOT"
 printf '  source nancee/sherpa/venv/bin/activate\n'
 printf '  python3 nancee/sherpa/nancee_chat.py\n\n'
