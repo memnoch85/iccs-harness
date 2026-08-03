@@ -2,6 +2,8 @@
 
 A local, CPU-only voice-assistant harness for demonstrating Iterative Cache Control and Shaping (ICCS) on a Raspberry Pi 5. This project demonstrates how ICCS, FTS5 session memory, and response routing can keep latency stable and predictable across long-running conversations.
 
+At present the model only evaulates  user supplied input for memory, as I am still deciding on the best routing approach
+
 ## Tested Hardware / Configuration
 
 - **Computer:** Raspberry Pi 5 Model B Rev 1.1, 8 GB RAM
