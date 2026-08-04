@@ -137,15 +137,31 @@ def meaningful_token_overlap_count(
     return len(query_tokens & memory_tokens)
 
 
+def required_memory_overlap(
+    query_text: str,
+    minimum_overlap: int = 2,
+) -> int:
+    if minimum_overlap <= 0:
+        raise ValueError("minimum_overlap must be positive")
+
+    query_token_count = len(_overlap_tokens(query_text))
+
+    if query_token_count == 0:
+        return minimum_overlap
+
+    return min(minimum_overlap, query_token_count)
+
+
 def filter_memory_hits_by_overlap(
     query_text: str,
     hits,
     minimum_overlap: int = 2,
     allow_weak_match: bool = False,
 ):
-    if minimum_overlap <= 0:
-        raise ValueError("minimum_overlap must be positive")
-
+    required_overlap = required_memory_overlap(
+        query_text,
+        minimum_overlap=minimum_overlap,
+    )
     hit_list = list(hits or [])
 
     if allow_weak_match:
@@ -170,7 +186,7 @@ def filter_memory_hits_by_overlap(
         if meaningful_token_overlap_count(
             query_text,
             memory_text,
-        ) >= minimum_overlap:
+        ) >= required_overlap:
             filtered.append(hit)
 
     return filtered

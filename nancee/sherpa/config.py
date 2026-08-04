@@ -268,7 +268,7 @@ LLM_TEMPERATURE = float(
 LLM_NUM_THREADS = int(
     os.environ.get(
         "NANCEE_LLM_NUM_THREADS",
-        "4",
+        "3",
     )
 )
 LLM_NUM_PREDICT = int(
@@ -317,7 +317,7 @@ LATENCY_BRIDGE_ENABLED = (
 LATENCY_BRIDGE_GREETING_SECONDS = float(
     os.getenv(
         "NANCEE_LATENCY_BRIDGE_GREETING_SECONDS",
-        "7.3",
+        "7.5",
     )
 )
 
@@ -398,7 +398,7 @@ if TTS_GAP_FILLER_MAX_PER_TURN < 0:
 # These are per-request generation limits. The global LLM_NUM_PREDICT
 # remains the fallback for callers that do not select a response policy.
 RESPONSE_GREETING_NUM_PREDICT = int(
-    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "8")
+    os.getenv("NANCEE_RESPONSE_GREETING_NUM_PREDICT", "10")
 )
 RESPONSE_GREETING_TEMPERATURE = float(
     os.getenv("NANCEE_RESPONSE_GREETING_TEMPERATURE", "0.10")
@@ -439,7 +439,7 @@ RESPONSE_DETAILED_TEMPERATURE = float(
     os.getenv("NANCEE_RESPONSE_DETAILED_TEMPERATURE", "0.28")
 )
 
-RESPONSE_RECALL_NUM_PREDICT = int(os.getenv("NANCEE_RESPONSE_RECALL_NUM_PREDICT", "18"))
+RESPONSE_RECALL_NUM_PREDICT = int(os.getenv("NANCEE_RESPONSE_RECALL_NUM_PREDICT", "35"))
 RESPONSE_RECALL_TEMPERATURE = float(
     os.getenv("NANCEE_RESPONSE_RECALL_TEMPERATURE", "0.14")
 )

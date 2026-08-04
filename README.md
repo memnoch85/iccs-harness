@@ -31,6 +31,7 @@ At present the model only evaulates  user supplied input for memory, as I am sti
 | `BLOCKSIZE` | `1024` | Audio frames per output callback |
 | `NANCEE_ASR_THREADS` | `4` | Whisper CPU inference threads |
 | `NANCEE_ASR_SAMPLE_RATE` | `16000` | 16 kHz microphone input |
+| `NANCEE_LLM_NUM_THREADS` | `3` | Ollama LLM CPU inference threads |
 | `SHERPA_THREADS` | `3` | Kokoro CPU inference threads |
 | `TTS_MAX_NUM_SENTENCES` | `1` | One sentence per synthesis batch |
 | `TTS_SILENCE_SCALE` | `0.2` | Reduces generated pause duration |

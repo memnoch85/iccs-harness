@@ -151,6 +151,21 @@ class MemoryRelevanceGuardTests(unittest.TestCase):
         self.assertEqual(filtered, [hit])
 
 
+    def test_single_topic_term_allows_background_enrichment(self):
+        hit = {
+            "id": 5,
+            "search_text": "favorite band finch temecula california",
+        }
+
+        filtered = filter_memory_hits_by_overlap(
+            "Where is Finch from?",
+            [hit],
+            minimum_overlap=2,
+        )
+
+        self.assertEqual(filtered, [hit])
+
+
     def test_explicit_recall_can_keep_a_single_term_hit(self):
         hit = {
             "id": 4,

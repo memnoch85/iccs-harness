@@ -1,6 +1,7 @@
 import unittest
 
 from memory_policy import (
+    extract_storable_memory_text,
     is_complete_memory_statement,
     looks_like_personal_fact_fragment,
     memory_storage_skip_reason,
@@ -50,6 +51,18 @@ class MemoryPolicyGuardrailTests(unittest.TestCase):
             is_complete_memory_statement(
                 "My wife's name is Anna."
             )
+        )
+
+    def test_related_third_person_clauses_are_preserved(self):
+        text = (
+            "My favorite band is Finch. "
+            "They are from Temecula, California. "
+            "They play post-hardcore music."
+        )
+
+        self.assertEqual(
+            text,
+            extract_storable_memory_text(text),
         )
 
     def test_barely_works_is_rejected(self):

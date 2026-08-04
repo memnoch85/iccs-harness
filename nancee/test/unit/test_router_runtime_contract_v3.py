@@ -85,7 +85,7 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
         sections = (
             "Checking invalid input",
             "Checking exit commands",
-            "Checking unconditional hello/hi prefix",
+            "Checking short hello/hi greeting",
             "Checking direct memory correction",
             "Checking perspective correction",
             "Checking explicit memory storage command",

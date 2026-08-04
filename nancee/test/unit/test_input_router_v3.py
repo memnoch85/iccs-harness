@@ -10,9 +10,27 @@ class InputRouterV3Tests(unittest.TestCase):
         route = route_user_input("Hello Nancee, how are you?")
         self.assertEqual("greeting", route.kind)
 
-    def test_detailed_route(self):
-        route = route_user_input("Explain step by step how a database index works.")
+    def test_detailed_route_is_stored(self):
+        text = "Explain step by step how a database index works."
+        route = route_user_input(text)
+
         self.assertEqual("detailed", route.kind)
+        self.assertTrue(route.store_recall)
+        self.assertEqual(text, route.recall_storage_text)
+
+    def test_detailed_personal_overshare_is_stored(self):
+        text = (
+            "A little bit about myself, my favorite band in the whole "
+            "world is Finch. They are from Temecula, California. "
+            "They play post-hardcore screamo emo music."
+        )
+
+        route = route_user_input(text)
+
+        self.assertEqual("detailed", route.kind)
+        self.assertEqual("detailed_request", route.reason)
+        self.assertTrue(route.store_recall)
+        self.assertEqual(text, route.recall_storage_text)
 
     def test_directive_route(self):
         route = route_user_input("Ask me whether I finished wiring the power board.")
@@ -68,19 +86,6 @@ class InputRouterV3Tests(unittest.TestCase):
     def test_unrelated_who_question_remains_normal(self):
         route = route_user_input("Who invented the transistor?")
         self.assertEqual("normal", route.kind)
-
-    def test_leading_hi_overrides_long_update_and_question(self):
-        route = route_user_input(
-            (
-                "Hi, I finished a long project today. "
-                "And I learned several useful things. "
-                "How are you doing today?"
-            )
-        )
-
-        self.assertEqual("greeting", route.kind)
-        self.assertEqual("leading_hello_or_hi", route.reason)
-        self.assertFalse(route.store_recall)
 
     def test_contextual_answer_resolves_previous_question_for_storage(self):
         route = route_user_input(
@@ -142,11 +147,13 @@ class InputRouterV3Tests(unittest.TestCase):
         self.assertFalse(route.explicit_recall)
 
 
-    def test_leading_hello_is_always_greeting(self):
+    def test_short_hello_or_hi_is_a_hard_greeting(self):
         samples = (
+            "Hi",
+            "Hello",
+            "Hi Nancy",
+            "Hello Maki Man",
             "Hello fuck face.",
-            "Hello, Auntie, how are you?",
-            "Hello, explain step by step how a database index works.",
         )
 
         for text in samples:
@@ -155,17 +162,21 @@ class InputRouterV3Tests(unittest.TestCase):
                 self.assertEqual("greeting", route.kind)
                 self.assertEqual("leading_hello_or_hi", route.reason)
 
-    def test_leading_hi_is_always_greeting(self):
-        samples = (
-            "Hi whatever your name is.",
-            "Hi, tell me a joke.",
+    def test_long_hello_or_hi_request_continues_routing(self):
+        detailed = route_user_input(
+            "Hello, explain step by step how a database index works."
         )
+        directive = route_user_input("Hi, tell me a joke.")
 
-        for text in samples:
-            with self.subTest(text=text):
-                route = route_user_input(text)
-                self.assertEqual("greeting", route.kind)
-                self.assertEqual("leading_hello_or_hi", route.reason)
+        self.assertEqual("detailed", detailed.kind)
+        self.assertEqual("directive", directive.kind)
+
+    def test_split_name_asr_prefix_is_removed_for_retrieval(self):
+        route = route_user_input("And see where is Finch from?")
+
+        self.assertEqual("normal", route.kind)
+        self.assertTrue(route.retrieve_recall)
+        self.assertEqual("where is finch from?", route.normalized_text)
 
     def test_existing_soft_greeting_prefaces_keep_existing_routing(self):
         route = route_user_input(

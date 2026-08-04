@@ -77,14 +77,18 @@ _RECALL_QUERY_PATTERNS = (
     r"\bi told you .* earlier\b",
 )
 
-_HARD_GREETING_PREFIX_PATTERN = re.compile(
-    r"^(?:hello|hi)\b",
+
+#pattern to match greetings Hi, hello  + up to 2 words, incase whisper botches the name.
+_HARD_GREETING_PATTERN = re.compile(
+    r"^\s*(?:hello|hi)\b"
+    r"(?:\s*,?\s*[^\W_]+(?:['-][^\W_]+)*){0,2}"
+    r"\s*[,.!?]*\s*\Z",
     flags=re.IGNORECASE,
 )
 
 _LEADING_GREETING_TOKEN = re.compile(
     r"^(?:good morning|good afternoon|good evening|"
-    r"hello|hi|hey|nancy|nancee|"
+    r"hello|hi|hey|nancee|nancy|nance|"
     r"so|well|okay|ok|and|yeah|yep|yup|uh|um|hmm|"
     r"man|dude|bruh)\b[\s,!.:;\-]*",
     flags=re.IGNORECASE,
@@ -93,10 +97,13 @@ _LEADING_GREETING_TOKEN = re.compile(
 _GREETING_CHECKIN_PATTERN = re.compile(
     r"^(?:"
     r"how are you(?: doing)?(?: today)?|"
-    r"how(?:'s| is) it going(?: today)?|"
-    r"what(?:'s| is) up|"
+    r"how(?:['’]?s| is) it going(?: today)?|"
+    r"how(?:['’]?s| is) your "
+    r"(?:day|evening|eveing|night|morning)(?: going)?|"
+    r"how was your (?:day|evening|eveing|night|morning)|"
+    r"what(?:['’]?s| is) up|"
     r"you there"
-    r")\??[.! ]*$",
+    r")[?!. ]*$",
     flags=re.IGNORECASE,
 )
 
@@ -190,7 +197,7 @@ _PREVIOUS_QUESTION_PATTERNS = (
 
 def normalize_user_text(user_text: str) -> str:
     lowered = re.sub(r"\s+", " ", str(user_text).strip().lower())
-    return re.sub(r"^(nancy|nancee)[,\s]+", "", lowered)
+    return re.sub(r"^(?:nancy|nancee|and\s+see)[,\s]+", "", lowered)
 
 
 def _word_count(text: str) -> int:
@@ -300,7 +307,7 @@ def route_user_input(
 ) -> InputRoute:
     raw_text = str(user_text).strip()
     lowered = normalize_user_text(raw_text)
-    classification_text = _classification_text(raw_text)
+    classification_text = _classification_text(lowered)
     word_total = _word_count(classification_text)
     correction = extract_simple_fact_correction(raw_text)
     complete_statement = is_complete_memory_statement(raw_text)
@@ -309,8 +316,8 @@ def route_user_input(
     contextual_memory = _resolve_contextual_memory(raw_text, previous_turn)
     question_like = "?" in lowered or lowered.startswith(_QUESTION_PREFIXES)
     explicit_memory_store = _extract_explicit_memory_store(raw_text)
-    hard_greeting_prefix = bool(
-        _HARD_GREETING_PREFIX_PATTERN.match(raw_text)
+    hard_greeting = bool(
+        _HARD_GREETING_PATTERN.match(raw_text)
     )
 
     greeting_substantive, had_greeting_preface = (
@@ -404,14 +411,14 @@ def route_user_input(
             return InputRoute("exit", lowered, reason="exit_command")
         # End:: Checking exit commands
 
-        # Begin:: Checking unconditional hello/hi prefix
-        case _ if hard_greeting_prefix:
+        # Begin:: Checking short hello/hi greeting
+        case _ if hard_greeting:
             return InputRoute(
                 "greeting",
                 lowered,
                 reason="leading_hello_or_hi",
             )
-        # End:: Checking unconditional hello/hi prefix
+        # End:: Checking short hello/hi greeting
 
         # Begin:: Checking direct memory correction
         case _ if correction is not None:
@@ -487,8 +494,8 @@ def route_user_input(
                 lowered,
                 reason="detailed_request",
                 retrieve_recall=question_like,
-                store_recall=storable_memory_text is not None,
-                recall_storage_text=storable_memory_text,
+                store_recall=True,
+                recall_storage_text=raw_text,
             )
         # End:: Checking detailed request
 

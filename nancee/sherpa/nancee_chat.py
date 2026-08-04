@@ -67,7 +67,10 @@ from ollama_runtime import (
 from recall_policy import repair_recall_perspective
 from response_policy import response_policy_for_route
 from session_archive import SessionArchive
-from session_memory_store import filter_memory_hits_by_overlap
+from session_memory_store import (
+    filter_memory_hits_by_overlap,
+    required_memory_overlap,
+)
 from short_term_memory import ShortTermMemory
 from tts_chunking import (
     extract_tts_chunk,
@@ -116,16 +119,22 @@ def retrieve_session_context(recall_memory, user_text, allow_weak_match=False):
         return ""
 
     # Retrieve and filter memory
+    minimum_overlap = required_memory_overlap(user_text, minimum_overlap=2)
     retrieved_turns = recall_memory.retrieve(user_text, limit=MEMORY_RECALL_LIMIT)
     unfiltered_count = len(retrieved_turns)
-    retrieved_turns = filter_memory_hits_by_overlap(user_text, retrieved_turns, minimum_overlap=2, allow_weak_match=allow_weak_match)
+    retrieved_turns = filter_memory_hits_by_overlap(
+        user_text,
+        retrieved_turns,
+        minimum_overlap=2,
+        allow_weak_match=allow_weak_match,
+    )
 
     # Report filtered memory
     if MEMORY_DEBUG_ENABLED and len(retrieved_turns) != unfiltered_count:
         print(
             "[MEMORY RECALL FILTER] "
             f"removed={unfiltered_count - len(retrieved_turns)} "
-            "reason=weak_overlap minimum=2",
+            f"reason=weak_overlap minimum={minimum_overlap}",
             flush=True,
         )
 
@@ -1282,7 +1291,7 @@ def main():
                 if recall_requested:
                     retrieved_context = retrieve_session_context(
                         recall_memory,
-                        user_text,
+                        input_route.normalized_text,
                         allow_weak_match=input_route.allow_weak_match,
                     )
                     memory_context_found = bool(

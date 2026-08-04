@@ -120,6 +120,24 @@ _TRAILING_CONVERSATIONAL_CHECKIN = re.compile(
     flags=re.IGNORECASE,
 )
 
+_THIRD_PERSON_FACT_STATEMENTS = (
+    re.compile(
+        r"^(?:he|she|they)(?:'s|'re|'ll|\s+[A-Za-z][A-Za-z'\-]*)"
+        r"\s+.+[.!]?$",
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:his|her|their)\s+.+\s+(?:is|are|was|were|has|have)"
+        r"\s+.+[.!]?$",
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        r"^[A-Z][A-Za-z'\-]{1,39}\s+"
+        r"(?:is|was|has|will|can|likes?|lives?|works?|owns?|prefers?|uses?|talks?)"
+        r"\s+.+[.!]?$",
+    ),
+)
+
 def extract_storable_memory_text(text: str) -> str | None:
     """
     Extract declarative memory clauses from a mixed multi-sentence turn.
@@ -161,6 +179,11 @@ def extract_storable_memory_text(text: str) -> str | None:
             accepted.append(clause)
             continue
 
+        if any(
+            pattern.fullmatch(clause)
+            for pattern in _THIRD_PERSON_FACT_STATEMENTS
+        ):
+            accepted.append(clause)
 
     if not accepted:
         return None

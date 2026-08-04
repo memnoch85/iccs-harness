@@ -53,7 +53,7 @@ def response_policy_for_route(
             name="recall",
             temperature=RESPONSE_RECALL_TEMPERATURE,
             num_predict=RESPONSE_RECALL_NUM_PREDICT,
-            instruction="Return only the supplied fact. Keep it brief.",
+            instruction="Answer in one brief, complete sentence using only the supplied memory.",
         )
 
     if route_kind == "greeting":
