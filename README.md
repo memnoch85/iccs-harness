@@ -4,6 +4,35 @@ A local, CPU-only voice-assistant harness for demonstrating Iterative Cache Cont
 
 At present the model only evaulates  user supplied input for memory, as I am still deciding on the best routing approach
 
+New here? Start with [What is ICCS?](https://github.com/memnoch85/iccs).
+
+If you want to install it and run it start below. 
+
+
+## Why ICCS?
+*Give a small model less to process—and more of the right context.*
+
+1. **Small models need focused instructions.**  
+   Models that fit comfortably on a Raspberry Pi 5 can handle immediate tasks well, but they are less reliable when asked to interpret long prompts, follow many conditional rules, and determine their own routing. ICCS helps turn each request into a smaller, clearer problem.
+
+2. **Targeted retrieval beats prompt stuffing.**  
+   SQLite FTS5 can retrieve a few relevant memories instead of making the model reread an entire conversation. This reduces prompt processing work and can make factual recall more reliable.
+
+3. **Because I don't want to buy any more damn hardware.**  
+   Accelerators can help especially with prompt processing but they also add cost, power use, heat, and platform constraints.
+
+4. **Local should actually mean local.**  
+   I do not want the final product to feel like an API client for another computer or company.
+
+5. **Because I can.**  
+   ICCS is also an experiment: how far can conventional software techniques push a small local model before the answer becomes “buy more hardware” or “use someone else’s API”?
+
+ICCS does not make a small model smarter. It reduces repeated prompt work, supplies more relevant context, and gives the model a better chance to use the intelligence it already has.
+
+> **Note:** This harness is an early proof of concept; its design may change as the solution matures, and older model-turn recall is not yet indexed in FTS5.
+
+
+
 ## Tested Hardware / Configuration
 
 - **Computer:** Raspberry Pi 5 Model B Rev 1.1, 8 GB RAM
