@@ -8,14 +8,6 @@ New here? Start with [What is ICCS?](https://github.com/memnoch85/iccs).
 
 If you want to install it and run it start below. 
 
-## ICCS Voice Harness Demo
-
-[![Watch the ICCS Voice Harness demo](https://img.youtube.com/vi/9CTAGkp46Pk/hqdefault.jpg)](https://youtu.be/9CTAGkp46Pk)
-
-**[Watch the 9-minute proof-of-concept demo on YouTube](https://youtu.be/9CTAGkp46Pk).**
-I was a bit nervous, so I left out some key features, step 5 below is biggest selling point imho.
-
-
 ## Why ICCS?
 *Give a small model less to process—and more of the right context.*
 
