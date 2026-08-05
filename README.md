@@ -13,6 +13,7 @@ If you want to install it and run it start below.
 [![Watch the ICCS Voice Harness demo](https://img.youtube.com/vi/9CTAGkp46Pk/hqdefault.jpg)](https://youtu.be/9CTAGkp46Pk)
 
 **[Watch the 9-minute proof-of-concept demo on YouTube](https://youtu.be/9CTAGkp46Pk).**
+I was a bit nervous, so I left out some key features, step 5 below is biggest selling point imho.
 
 
 ## Why ICCS?
@@ -30,7 +31,7 @@ If you want to install it and run it start below.
 4. **Local should actually mean local.**  
    I do not want the final product to feel like an API client for another computer or company.
 
-5. **Predictable performance matters.**  
+5. **Predictable performance matters most.**  
    ICCS aims to make small-model behavior and latency more reproducible by controlling prompt shape, routing, and retrieved context instead of relying on a large, variable context window.
 
 ICCS does not make a small model smarter. It reduces repeated prompt work, supplies more relevant context, and gives the model a better chance to use the intelligence it already has.
