@@ -1,50 +1,33 @@
 import unittest
 
-from input_router import route_user_input
 from response_policy import response_policy_for_route
 
 
 class ResponsePolicyFinishTests(unittest.TestCase):
-    def assert_policy(self, text, expected):
-        route = route_user_input(text)
-        policy = response_policy_for_route(route.kind)
-        self.assertEqual(policy.name, expected)
-
-    def test_sauron_relationship_routes_detailed(self):
-        self.assert_policy(
-            "Who was Sauron, and what was his relationship to Morgoth?",
+    def test_detailed_route_keeps_detailed_policy(self):
+        self.assertEqual(
             "detailed",
+            response_policy_for_route("detailed").name,
         )
 
-    def test_asr_explaining_exact_sentences_routes_detailed(self):
-        self.assert_policy(
-            "Explaining exactly two complete sentences, how database indexes work.",
-            "detailed",
-        )
-
-    def test_short_explain_is_not_misclassified_as_fragment(self):
-        self.assert_policy(
-            "Explain quantum entanglement.",
-            "detailed",
-        )
-
-    def test_name_command_routes_directive(self):
-        self.assert_policy(
-            "Name France's capital.",
+    def test_directive_route_keeps_directive_policy(self):
+        self.assertEqual(
             "directive",
+            response_policy_for_route("directive").name,
         )
 
-    def test_barely_works_still_routes_clarify(self):
-        self.assert_policy(
-            "Barely works.",
-            "clarify",
-        )
+    def test_question_route_uses_normal_generation_policy(self):
+        policy = response_policy_for_route("question")
+        self.assertEqual("normal", policy.name)
+        self.assertEqual("", policy.instruction)
 
-    def test_simple_fact_stays_normal(self):
-        self.assert_policy(
-            "What is the capital of France?",
-            "normal",
-        )
+    def test_affirmative_and_negative_use_acknowledge_policy(self):
+        for route in ("affirmative", "negative"):
+            with self.subTest(route=route):
+                self.assertEqual(
+                    "acknowledge",
+                    response_policy_for_route(route).name,
+                )
 
 
 if __name__ == "__main__":

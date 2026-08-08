@@ -13,29 +13,95 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
         self.assertEqual(1, CHAT_SOURCE.count("route_user_input("))
         self.assertIn("[INPUT ROUTE]", CHAT_SOURCE)
 
-    def test_old_top_level_classifiers_are_removed_from_chat(self):
+    def test_routermon_replaces_broad_semantic_regex_router(self):
+        self.assertIn("classify_router_mon(", ROUTER_SOURCE)
+
         forbidden = (
-            "def looks_like_recall_request",
-            "def should_retrieve_recall",
-            "def should_store_recall_turn",
-            "select_response_policy(",
+            "_RECALL_QUERY_PATTERNS",
+            "_DETAILED_PATTERN",
+            "_COMMAND_PATTERN",
+            "_DIRECTED_REQUEST_PATTERN",
+            "_PERSONAL_UPDATE_START_PATTERN",
+            "_DECLARATIVE_VERB_PATTERN",
         )
 
-        for text in forbidden:
-            with self.subTest(text=text):
-                self.assertNotIn(text, CHAT_SOURCE)
+        for token in forbidden:
+            with self.subTest(token=token):
+                self.assertNotIn(token, ROUTER_SOURCE)
 
-    def test_router_controls_retrieval_storage_and_history(self):
-        self.assertIn("recall_requested = input_route.retrieve_recall", CHAT_SOURCE)
-        self.assertIn("allow_weak_match=input_route.allow_weak_match", CHAT_SOURCE)
-        self.assertIn("elif input_route.store_recall:", CHAT_SOURCE)
-        self.assertIn("correction = input_route.correction", CHAT_SOURCE)
-        self.assertIn("if input_route.force_keep_history:", CHAT_SOURCE)
+    def test_narrow_fast_paths_remain(self):
+        for token in (
+            "_HARD_GREETING_PATTERN",
+            "_FAST_AFFIRMATIVE",
+            "_FAST_NEGATIVE",
+            "_FAST_FAREWELL",
+            "_EXPLICIT_MEMORY_STORE_PATTERN",
+            "_resolve_contextual_memory",
+            "extract_simple_fact_correction",
+            "looks_like_perspective_correction",
+        ):
+            with self.subTest(token=token):
+                self.assertIn(token, ROUTER_SOURCE)
 
-    def test_background_enrichment_is_not_automatically_authoritative(self):
-        self.assertIn("input_route.explicit_recall", CHAT_SOURCE)
-        self.assertIn("and memory_context_found", CHAT_SOURCE)
-        self.assertIn("authoritative_response_required", CHAT_SOURCE)
+    def test_short_greeting_can_disable_latency_bridge(self):
+        self.assertIn("skip_latency_bridge: bool = False", ROUTER_SOURCE)
+        self.assertIn("skip_latency_bridge=True", ROUTER_SOURCE)
+        self.assertIn("and not input_route.skip_latency_bridge", CHAT_SOURCE)
+
+    def test_model_recall_does_not_enter_llm_prompt(self):
+        self.assertIn('input_route.kind == "model_recall"', CHAT_SOURCE)
+        self.assertIn("assistant_recall_memory.retrieve_response(", CHAT_SOURCE)
+        self.assertIn("[MODEL MEMORY DIRECT]", CHAT_SOURCE)
+        self.assertIn("prompt_injection=false", CHAT_SOURCE)
+
+        # The only Ollama gateway remains the existing ICCS respond call.
+        self.assertEqual(1, CHAT_SOURCE.count("response = iccs.respond("))
+        self.assertIn("if model_recall_requested:", CHAT_SOURCE)
+        self.assertIn("else:\n                        response = iccs.respond(", CHAT_SOURCE)
+
+    def test_model_recall_settles_pending_iccs_prime_before_direct_replay(self):
+        direct_branch = CHAT_SOURCE.index(
+            "# A normal turn consumes/clears the previous completed-turn"
+        )
+        settle = CHAT_SOURCE.index(
+            "iccs.wait_for_prepared_prefix()",
+            direct_branch,
+        )
+        replay = CHAT_SOURCE.index(
+            "[MODEL MEMORY DIRECT]",
+            settle,
+        )
+        completed_turn_prime = CHAT_SOURCE.index(
+            'reason="completed_turn"',
+            replay,
+        )
+
+        self.assertLess(settle, replay)
+        self.assertLess(replay, completed_turn_prime)
+
+    def test_ask_me_pending_answer_uses_existing_user_memory_only(self):
+        self.assertIn("pending_memory_topic: str | None = None", ROUTER_SOURCE)
+        self.assertIn("pending_memory_topic=_extract_ask_me_topic(raw_text)", ROUTER_SOURCE)
+        self.assertIn("pending_user_memory_topic = None", CHAT_SOURCE)
+        self.assertIn("pending_answer_memory = build_pending_answer_memory(", CHAT_SOURCE)
+        self.assertIn("elif pending_answer_memory:", CHAT_SOURCE)
+
+        # The pending state is memory bookkeeping, not a new LLM prompt field.
+        prompt_call = CHAT_SOURCE.split("response = iccs.respond(", 1)[1].split(")", 1)[0]
+        self.assertNotIn("pending_", prompt_call)
+
+    def test_assistant_memory_only_stores_question_and_detailed(self):
+        self.assertIn(
+            'if input_route.kind in {"question", "detailed"}:',
+            CHAT_SOURCE,
+        )
+        self.assertIn("assistant_recall_memory.add_response(", CHAT_SOURCE)
+
+    def test_existing_prompt_arguments_are_unchanged(self):
+        self.assertIn("memory_context=\"\"", CHAT_SOURCE)
+        self.assertIn("retrieved_context=retrieved_context", CHAT_SOURCE)
+        self.assertIn("response_instruction=response_policy.instruction", CHAT_SOURCE)
+        self.assertNotIn("routerMon", CHAT_SOURCE.split("response = iccs.respond(", 1)[1].split(")", 1)[0])
 
     def test_iccs_gateway_and_reprime_contract_remain_present(self):
         self.assertIn("iccs.prime_startup(", CHAT_SOURCE)
@@ -44,6 +110,11 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
         self.assertIn("iccs.prime_next(", CHAT_SOURCE)
         self.assertIn('reason="completed_turn"', CHAT_SOURCE)
         self.assertIn("iccs.close()", CHAT_SOURCE)
+
+    def test_router_model_load_is_after_startup_prime(self):
+        prime = CHAT_SOURCE.index("iccs.prime_startup(")
+        load = CHAT_SOURCE.index("load_router_mon()", prime)
+        self.assertLess(prime, load)
 
     def test_stop_recording_feedback_precedes_blocking_asr_result_wait(self):
         feedback = CHAT_SOURCE.index(
@@ -80,30 +151,6 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
 
         self.assertLess(synthesis_done, prime)
         self.assertLess(prime, playback_drain)
-
-    def test_router_sections_have_explicit_begin_and_end_markers(self):
-        sections = (
-            "Checking invalid input",
-            "Checking exit commands",
-            "Checking short hello/hi greeting",
-            "Checking direct memory correction",
-            "Checking perspective correction",
-            "Checking explicit memory storage command",
-            "Checking explicit recall",
-            "Checking greeting or backchannel",
-            "Checking detailed request",
-            "Checking directive",
-            "Checking answer to Nancee's previous question",
-            "Checking complete personal update",
-            "Checking incomplete personal fact or ambiguous fragment",
-            "Checking ordinary question",
-            "Default model route",
-        )
-
-        for section in sections:
-            with self.subTest(section=section):
-                self.assertIn(f"# Begin:: {section}", ROUTER_SOURCE)
-                self.assertIn(f"# End:: {section}", ROUTER_SOURCE)
 
 
 if __name__ == "__main__":

@@ -56,7 +56,7 @@ def response_policy_for_route(
             instruction="Answer in one brief, complete sentence using only the supplied memory.",
         )
 
-    if route_kind == "greeting":
+    if route_kind in {"greeting", "farewell"}:
         return ResponsePolicy(
             name="greeting",
             temperature=RESPONSE_GREETING_TEMPERATURE,
@@ -75,7 +75,7 @@ def response_policy_for_route(
             ),
         )
 
-    if route_kind == "acknowledge":
+    if route_kind in {"acknowledge", "affirmative", "negative", "memory_store"}:
         return ResponsePolicy(
             name="acknowledge",
             temperature=RESPONSE_ACK_TEMPERATURE,
