@@ -1,148 +1,125 @@
-# routerMon training
+# routerMon Training
 
-`routerMon` is the voice harness's small local intent classifier. It does not generate text and it does not call Ollama. The runtime keeps a few deterministic fast paths where an exact rule is cheaper and more certain, then sends the remaining utterances to this classifier.
+If routerMon sends a phrase to the wrong route, add training examples, retrain the model, and test it again.
 
-The checked-in `training_data.csv` is the directly editable training source. It currently contains 1,308 examples across the 12 intent labels used by the runtime:
+## 1. Add Training Examples
 
-- `affirmative`
-- `clarify`
-- `detailed`
-- `directive`
-- `farewell`
-- `greeting`
-- `memory_store`
-- `model_recall`
-- `negative`
-- `normal`
-- `question`
-- `recall`
+Open:
 
-Assistant names are intentionally not part of the training contract. A user may name the assistant whatever they want; intent should come from the request, not from one hard-coded wake/name token.
+```text
+nancee/router_training/training_data.csv
+```
 
-## Model shape
+Each row contains:
 
-`train_router_mon.py` builds one scikit-learn `Pipeline` containing:
+```text
+text,intent
+```
 
-1. a `FeatureUnion` of word TF-IDF features (1-2 word n-grams) and `char_wb` TF-IDF features (3-5 character n-grams), and
-2. `LogisticRegression` over the resulting sparse feature matrix.
+For example:
 
-The character features help with speech-recognition/spelling variation. The word features carry phrase meaning such as `what did I say` versus `what did you say`.
+```csv
+the service restarted fine,normal
+the service restarted successfully,normal
+restart the service,directive
+restart the service again,directive
+```
 
-The trained artifact is a small dictionary containing metadata plus the fitted pipeline. Runtime inference calls `predict_proba()` once and uses the highest-probability class.
+Valid intents are:
 
-## Retrain
+```text
+affirmative
+clarify
+detailed
+directive
+farewell
+greeting
+memory_store
+model_recall
+negative
+normal
+question
+recall
+```
 
-Use a desktop or other development machine:
+Add the phrase that routed incorrectly and a few similar examples.
+
+When useful, also add examples showing the opposite route:
+
+```csv
+not this time,negative
+not right now,negative
+not Tuesday Wednesday,memory_store
+not the USB controller the power board,memory_store
+```
+
+Do not add the exact same `text,intent` pair twice. The trainer will stop if duplicate examples are found.
+
+## 2. Retrain
+
+From the repository root:
 
 ```bash
-cd nancee/router_training
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "scikit-learn==1.9.0" joblib
-python train_router_mon.py
+source nancee/sherpa/venv/bin/activate
+python3 nancee/router_training/train_router_mon.py
 ```
 
-The script runs 5-fold stratified cross-validation, writes `routerMon_confusion_matrix.csv`, then trains on the complete dataset and writes `routerMon.joblib`.
-
-Do not optimize only for the cross-validation percentage. Keep a separate set of real Whisper transcripts that never appears in `training_data.csv`. Misrouted real speech is the most valuable new training data.
-
-## Deploy to the Pi
-
-The runtime deliberately does not train. Copy only a tested `routerMon.joblib` into:
+The trainer runs cross-validation and creates:
 
 ```text
-nancee/sherpa/routerMon.joblib
+nancee/router_training/routerMon.joblib
 ```
 
-The runtime loader checks the scikit-learn version recorded in the artifact and refuses a different runtime version. This is intentional: scikit-learn documents pickle/joblib-style persisted estimators as version-sensitive and warns against loading untrusted artifacts.
+If training reports an error, fix it before continuing.
 
-Only load a `joblib` artifact you trust.
+## 3. Copy the New Model Into the Runtime
 
-## Runtime routing boundary
+```bash
+cp nancee/router_training/routerMon.joblib \
+   nancee/sherpa/routerMon.joblib
+```
 
-Deterministic code remains responsible for things that are cheaper or require state/payload extraction:
+## 4. Run the Tests
 
-- invalid input and exact exit commands
-- `hello`/`hi` with zero to two following words
-- obvious exact affirmative/negative/farewell phrases
-- explicit `remember/save/store...` commands so the memory payload can be extracted
-- direct memory correction and perspective correction
-- yes/no answers to the assistant's immediately previous question
-- the structural overshare rule for `detailed`
+```bash
+bash nancee/test/run_unit_tests.sh
+```
 
-Everything else is classified by `routerMon`.
-
-The short `hello`/`hi` fast route deliberately disables the latency bridge and lets the normal greeting response arrive by itself.
-
-The router never adds its intent, confidence, reasoning, or classifier metadata to the LLM prompt.
-
-## User recall versus model recall
-
-The two memory directions are intentionally separate:
+The test run should finish with:
 
 ```text
-What did I say about X?
-    -> recall
-    -> user-memory FTS5
+OK
 ```
 
-```text
-What did you say about X?
-    -> model_recall
-    -> assistant-memory FTS5
+## 5. Test the Routing Again
+
+Run the voice harness:
+
+```bash
+source nancee/sherpa/venv/bin/activate
+python3 nancee/sherpa/nancee_chat.py
 ```
 
-Assistant memory stores responses only when the selected route is `question` or `detailed`. Its search index contains both the original user request and the generated assistant answer, but only the original assistant answer is replayed.
+Repeat the phrase that routed incorrectly.
 
-`model_recall` does not inject assistant memory into the prompt and does not call Ollama. It retrieves the already-generated answer from the separate FTS5 archive and speaks it directly. The completed user/assistant pair is then handled by the existing rolling-history and ICCS completed-turn prime just like any other completed turn.
-
-## ICCS boundary
-
-Do not train or load routerMon inside ICCS. The live application calls `load_router_mon()` only after the exact ICCS startup prime has completed.
-
-This routing patch does not change:
-
-- the system prompt
-- the ICCS warmup messages
-- `memory_context`
-- the stable prefix contract
-- prefix identity/fingerprinting
-- startup prime behavior
-- completed-turn `prime_next()` behavior
-
-Existing user-memory enrichment still uses the existing `retrieved_context` path. No classifier output or model-memory overlay is added to it.
-
-## Official scikit-learn references
-
-- Text classification using TF-IDF/sparse features: https://scikit-learn.org/stable/auto_examples/text/plot_document_classification_20newsgroups.html
-- Text feature extraction pipeline example: https://scikit-learn.org/stable/auto_examples/model_selection/plot_grid_search_text_feature_extraction.html
-- `TfidfVectorizer`: https://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfVectorizer.html
-- `LogisticRegression`: https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html
-- Model persistence / joblib cautions: https://scikit-learn.org/stable/model_persistence.html
-
-## `ask me ...` follow-up memory
-
-An `ask me ...` request is still classified as `directive`; it is not a new intent.
-The router extracts the topic only after routerMon has selected `directive` and
-keeps it as one-turn runtime state. If the next user turn is a short `normal`
-answer that would otherwise be too small to store by itself, the harness stores
-a self-contained user-memory sentence using the existing FTS5 archive.
+Also test a nearby phrase that should use a different route.
 
 Example:
 
 ```text
-User:      Ask me what I bought at the store yesterday.
-Assistant: What did you buy at the store yesterday?
-User:      A watch.
+The service restarted fine.
+-> normal
+
+Restart the service.
+-> directive
 ```
 
-The short answer remains `normal`, but the existing user-memory store receives a
-self-contained fact similar to:
+If routing is still wrong, add better examples to `training_data.csv` and repeat the process.
 
-```text
-When asked what I bought at the store yesterday, I answered: A watch.
-```
+## scikit-learn References
 
-This state is bookkeeping only. It is not a new prompt field, does not enter the
-stable ICCS prefix, and does not change warmup.
+- Text classification using TF-IDF/sparse features: [https://scikit-learn.org/stable/auto_examples/text/plot_document_classification_20newsgroups.html](https://scikit-learn.org/stable/auto_examples/text/plot_document_classification_20newsgroups.html)
+- Text feature extraction pipeline example: [https://scikit-learn.org/stable/auto_examples/model_selection/plot_grid_search_text_feature_extraction.html](https://scikit-learn.org/stable/auto_examples/model_selection/plot_grid_search_text_feature_extraction.html)
+- `TfidfVectorizer`: [https://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfVectorizer.html](https://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.TfidfVectorizer.html)
+- `LogisticRegression`: [https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html](https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html)
+- Model persistence: [https://scikit-learn.org/stable/model_persistence.html](https://scikit-learn.org/stable/model_persistence.html)

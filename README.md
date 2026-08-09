@@ -2,13 +2,14 @@
 
 A local, CPU-only voice-assistant harness for demonstrating Iterative Cache Control and Shaping (ICCS) on a Raspberry Pi 5. This project demonstrates how ICCS, FTS5 session memory, and response routing can keep latency stable and predictable across long-running conversations.
 
-At present the model only evaulates  user supplied input for memory, as I am still deciding on the best routing approach
+Input routing is handled locally by `routerMon`. If a phrase routes incorrectly, see [routerMon training](nancee/router_training/README.md).
 
 New here? Start with [What is ICCS?](https://github.com/memnoch85/iccs).
 
-If you want to install it and run it start below. 
+If you want to install it and run it start below.
 
 ## Why ICCS?
+
 *Give a small model less to process—and more of the right context.*
 
 1. **Small models need focused instructions.**  
@@ -28,9 +29,7 @@ If you want to install it and run it start below.
 
 ICCS does not make a small model smarter. It reduces repeated prompt work, supplies more relevant context, and gives the model a better chance to use the intelligence it already has.
 
-> **Note:** This harness is an early proof of concept; its design may change as the solution matures, and older model-turn recall is not yet indexed in FTS5.
-
-
+> **Note:** This harness is an early proof of concept; its design may change as the solution matures.
 
 ## Tested Hardware / Configuration
 
@@ -41,21 +40,18 @@ ICCS does not make a small model smarter. It reduces repeated prompt work, suppl
 - **CPU:** `performance` governor, 2.4 GHz maximum frequency
 - **OS:** Debian 13.5 (`trixie`), 64-bit ARM
 - **Kernel:** Linux `6.18.29+rpt-rpi-2712`, `aarch64`
-- **Audio:** PipeWire 1.4.2, `pipewire-pulse` 1.4.2,
-  `pipewire-alsa` 1.4.2, and WirePlumber 0.5.8
+- **Audio:** PipeWire 1.4.2, `pipewire-pulse` 1.4.2, `pipewire-alsa` 1.4.2, and WirePlumber 0.5.8
 - **Python:** 3.13.5
 - **LLM:** Ollama 0.31.1 with `llama3.2:3b`
-- **ASR:** Faster-Whisper 1.2.1 with CTranslate2 4.8.1,
-  `base.en`, CPU INT8, four threads, beam size 1, 16 kHz input
-- **TTS:** Kokoro multi-language v1.0 through Sherpa ONNX 1.13.4,
-  voice ID 3, 24 kHz output, three CPU threads
+- **ASR:** Faster-Whisper 1.2.1 with CTranslate2 4.8.1, `base.en`, CPU INT8, four threads, beam size 1, 16 kHz input
+- **TTS:** Kokoro multi-language v1.0 through Sherpa ONNX 1.13.4, voice ID 3, 24 kHz output, three CPU threads
 - **Runtime libraries:** NumPy 2.2.6 and sounddevice 0.5.5
 - **Recall:** In-memory SQLite 3.46.1 with FTS5 enabled
 
 ### Key Runtime Settings
 
 | Setting | Value | Meaning |
-|---|---:|---|
+| --- | ---: | --- |
 | `BLOCKSIZE` | `1024` | Audio frames per output callback |
 | `NANCEE_ASR_THREADS` | `4` | Whisper CPU inference threads |
 | `NANCEE_ASR_SAMPLE_RATE` | `16000` | 16 kHz microphone input |
@@ -79,8 +75,10 @@ sudo apt install -y \
     libspa-0.2-bluetooth
 ```
 
-Confirm that the required PipeWire services are active:
-Note: if you have remnants of pulse audio drivers it will likely cause issues.
+Confirm that the required PipeWire services are active.
+
+Note: if you have remnants of PulseAudio drivers, they will likely cause issues.
+
 ```bash
 systemctl --user is-active \
     pipewire \
@@ -177,12 +175,9 @@ The first installation may download several gigabytes and can take a while.
 bash nancee/test/run_unit_tests.sh
 ```
 
-A successful run ends with output similar to:
+A successful run ends with:
 
 ```text
-----------------------------------------------------------------------
-Ran 252 tests in 0.310s
-
 OK
 ```
 
