@@ -9,10 +9,15 @@ class ResponsePolicyRouterV3Tests(unittest.TestCase):
     def test_route_names_map_without_reclassifying_text(self):
         expected = {
             "greeting": "greeting",
+            "farewell": "greeting",
             "acknowledge": "acknowledge",
+            "affirmative": "acknowledge",
+            "negative": "acknowledge",
+            "memory_store": "acknowledge",
             "directive": "directive",
             "clarify": "clarify",
             "detailed": "detailed",
+            "question": "normal",
             "normal": "normal",
             "recall": "recall",
         }
@@ -28,9 +33,15 @@ class ResponsePolicyRouterV3Tests(unittest.TestCase):
         policy = response_policy_for_route("normal", fact_miss=True)
         self.assertEqual("recall", policy.name)
 
+    def test_question_policy_adds_no_dynamic_instruction(self):
+        policy = response_policy_for_route("question")
+        self.assertEqual("normal", policy.name)
+        self.assertEqual("", policy.instruction)
+
     def test_normal_policy_adds_no_dynamic_instruction(self):
         policy = response_policy_for_route("normal")
         self.assertEqual("", policy.instruction)
+
 
 if __name__ == "__main__":
     unittest.main()

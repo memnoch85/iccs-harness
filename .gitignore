@@ -1,0 +1,5 @@
+# routerMon generated artifacts
+nancee/router_training/routerMon.joblib
+nancee/router_training/routerMon_confusion_matrix.csv
+nancee/router_training/training_data.csv.before_*
+nancee/sherpa/routerMon.joblib

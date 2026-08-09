@@ -1,0 +1,1626 @@
+text,intent
+hello,greeting
+hi,greeting
+hey,greeting
+hello there,greeting
+hi there,greeting
+hey there,greeting
+good morning,greeting
+good afternoon,greeting
+good evening,greeting
+morning,greeting
+evening,greeting
+howdy,greeting
+hiya,greeting
+greetings,greeting
+how are you,greeting
+how are you doing,greeting
+how's it going,greeting
+what's up,greeting
+what's happening,greeting
+how are things,greeting
+hey what's going on,greeting
+hello again,greeting
+bye,farewell
+goodbye,farewell
+see you,farewell
+see you later,farewell
+see ya,farewell
+talk to you later,farewell
+catch you later,farewell
+later,farewell
+good night,farewell
+have a good one,farewell
+that's all for now,farewell
+I'm done for now,farewell
+we're done for now,farewell
+okay goodbye,farewell
+thanks bye,farewell
+I'll talk to you later,farewell
+we can stop here,farewell
+that's it for today,farewell
+gotta go,farewell
+yes,affirmative
+yeah,affirmative
+yep,affirmative
+yup,affirmative
+sure,affirmative
+okay,affirmative
+ok,affirmative
+correct,affirmative
+that's right,affirmative
+exactly,affirmative
+absolutely,affirmative
+definitely,affirmative
+go ahead,affirmative
+do it,affirmative
+please do,affirmative
+sounds good,affirmative
+that's fine,affirmative
+okay go ahead,affirmative
+yes please,affirmative
+yeah do that,affirmative
+right exactly,affirmative
+I agree,affirmative
+works for me,affirmative
+that works,affirmative
+perfect,affirmative
+no,negative
+nope,negative
+nah,negative
+no thanks,negative
+don't,negative
+don't do that,negative
+not that,negative
+that's wrong,negative
+cancel that,negative
+never mind,negative
+actually no,negative
+I don't want that,negative
+stop,negative
+don't continue,negative
+forget it,negative
+no that's not right,negative
+not what I meant,negative
+don't bother,negative
+skip it,negative
+I changed my mind,negative
+I don't think so,negative
+not really,negative
+absolutely not,negative
+do you remember what I said,recall
+can you recall my previous message,recall
+what did I tell you earlier,recall
+what did I mention about that,recall
+can you remember,recall
+do you recall,recall
+what was that thing I told you,recall
+tell me what my preference is,recall
+what is my name,recall
+where did I say I live,recall
+what did I say I do for work,recall
+what did we talk about yesterday,recall
+can you remind me what I said,recall
+did I tell you about that,recall
+what did I say last time,recall
+what's in my memory,recall
+show me what you remember,recall
+tell me what you know about me,recall
+what have I told you,recall
+what do you remember,recall
+what did I ask before,recall
+can you recall our last conversation,recall
+what was our last chat about,recall
+what did we discuss,recall
+remind me what we talked about,recall
+what did I say about my backpack,recall
+what did I tell you about my backpack,recall
+what was that thing I mentioned,recall
+what were we talking about before,recall
+where did we leave off,recall
+what was I working on earlier,recall
+what did I say I wanted,recall
+what did I decide earlier,recall
+what was my plan again,recall
+what did I call that,recall
+what was that name again,recall
+which model did I say I was using,recall
+which one did I tell you I preferred,recall
+have I mentioned my car before,recall
+did I ever tell you about my project,recall
+what have I said about my project,recall
+what do you know about my project,recall
+what do you remember about the pi,recall
+what did we decide last time,recall
+what did I tell you last time,recall
+what was I saying yesterday,recall
+what did we leave off on,recall
+what were we working on,recall
+what did I tell you my dog's name was,recall
+what was the name of the dog I mentioned,recall
+remember that I like coffee,memory_store
+don't forget my favorite color is blue,memory_store
+please remember this,memory_store
+I want you to remember this,memory_store
+store this in memory,memory_store
+remember I have a meeting at three,memory_store
+save this for later,memory_store
+keep this in mind,memory_store
+remember this for later,memory_store
+save this in memory,memory_store
+store this for later,memory_store
+make a note of this,memory_store
+make a note that I prefer coffee,memory_store
+keep track of this,memory_store
+keep this in memory,memory_store
+don't forget what I'm about to tell you,memory_store
+I want you to save this,memory_store
+I want you to remember this later,memory_store
+add this to your memory,memory_store
+remember what I'm telling you,memory_store
+save what I just told you,memory_store
+keep that information for later,memory_store
+remember that my dog is named Max,memory_store
+save that my appointment is Friday,memory_store
+don't forget that I changed the tires,memory_store
+store the fact that I use Linux,memory_store
+remember that I chose the second option,memory_store
+save my preference for the dark theme,memory_store
+put this in memory for next time,memory_store
+write this to memory,memory_store
+explain in detail,detailed
+walk me through it step by step,detailed
+please elaborate on that,detailed
+tell me more about that,detailed
+deep dive into that,detailed
+what are all the differences between them,detailed
+how does this work exactly,detailed
+can you break that down completely,detailed
+I need a thorough explanation,detailed
+give me a comprehensive overview,detailed
+explain the process fully,detailed
+what are all the steps involved,detailed
+can you go into more depth,detailed
+I want a detailed response,detailed
+please be very thorough,detailed
+explain everything about it,detailed
+give me all the details,detailed
+tell me the whole story,detailed
+break the whole thing down for me,detailed
+what's the full picture,detailed
+give me the long version,detailed
+explain it from beginning to end,detailed
+don't skip any steps,detailed
+go deep on this,detailed
+I want the technical explanation,detailed
+Finch is from Michigan and plays guitar and mostly listens to metal and recently moved here and is trying to find a new job,detailed
+my car started making a noise yesterday after I changed the oil and it only happens when the engine is warm and I am accelerating uphill but it stops when I let off the gas,detailed
+I rebuilt the service last night and the first request works but the second request gets slower and then the third request returns the right answer with a completely different timing profile,detailed
+I have a raspberry pi running the model locally with speech recognition and text to speech and I am trying to keep the entire conversation fast without buying another accelerator,detailed
+the microphone sounds fine when I record directly but after I route it through the bluetooth device it gets quiet and sometimes the first part of the sentence disappears,detailed
+I changed three settings this morning and the temperature dropped but latency got worse while the audio quality improved so I am not sure which change actually caused the regression,detailed
+the project has a local database a speech model a language model and a speech synthesis model and each part works alone but I am trying to make the whole pipeline feel like one natural conversation,detailed
+I was testing recall with several different questions and the exact phrase works every time but paraphrasing the question causes the memory search to return a different older statement,detailed
+the engine is idling rough only after it warms up and the fuel trims look normal at idle but climb under load and there are no stored codes,detailed
+I installed the package yesterday and it worked after reboot but this morning the service starts before the audio device is ready and then the application never sees the microphone,detailed
+I have two possible designs and the first one is simpler and faster but the second one remembers more information and handles unusual questions better although it uses more memory,detailed
+the first benchmark was fast the second was slower and the third had the best first token time but a worse total response time so the results are not pointing in one obvious direction,detailed
+I spent most of the day debugging this because the unit test passes and the manual test passes but when the service launches at boot the environment variables are different and the model loads with the wrong settings,detailed
+the user might ask about something from ten turns ago or something from yesterday and I want the assistant to find the right memory without carrying the whole conversation in the active context,detailed
+I changed the context size reduced the response length and lowered the temperature and now the first response is faster but the model seems less willing to explain complicated questions,detailed
+the assistant heard my name wrong three times and each transcription was slightly different but the rest of the sentence was accurate and I still want the greeting route to trigger immediately,detailed
+the database contains the original text and a searchable version and when recall runs it scores the matches then restores the complete original statement before building the prompt for the model,detailed
+I recorded the narration in several pieces and most of it sounds good but one section has a breath between sentences and another section has a hard audio cut that sounds like a click,detailed
+I want to keep the public repository simple enough that somebody can install it on a clean pi but I also want the demo to show the more advanced memory and routing behavior without making setup confusing,detailed
+the first route should be nearly instant the recall route can spend a little more time searching and the detailed route can tolerate a longer response but none of them should add another full language model call before generation,detailed
+I tested the same question five times and four runs were consistent but one run was much slower even though the prompt looked identical and the machine was not throttling,detailed
+I have one recent user and model pair in active context while older user statements are stored in sqlite and searched only when the router decides that recall is needed,detailed
+I can accept a little extra latency for a difficult technical question but a hello or goodbye needs to feel immediate because otherwise the assistant feels broken,detailed
+the system has several routes and some are semantic while others are conversational and I need the router to distinguish them without turning the routing layer into another giant language model,detailed
+the user gave me the make model year symptoms and recent repairs all in one sentence and I want the assistant to respond to the amount of information instead of giving a tiny generic answer,detailed
+what do you mean,clarify
+can you clarify,clarify
+I don't understand,clarify
+could you repeat that,clarify
+what was that,clarify
+sorry I didn't catch that,clarify
+can you rephrase that,clarify
+what are you asking me,clarify
+I'm not sure what you mean,clarify
+come again,clarify
+say that again,clarify
+in english please,clarify
+can you say that differently,clarify
+I'm confused,clarify
+that didn't make sense,clarify
+can you simplify that,clarify
+what are you trying to say,clarify
+I don't follow,clarify
+could you explain that again,clarify
+sorry I'm lost,clarify
+huh,clarify
+what does that mean,clarify
+I didn't understand that,clarify
+run that by me again,clarify
+back up a second,clarify
+you lost me,clarify
+which one do you mean,clarify
+what are you referring to,clarify
+can you be more specific,clarify
+can you put that another way,clarify
+set an alarm for eight am,directive
+play some music,directive
+call my mom,directive
+send a message to John,directive
+turn on the lights,directive
+schedule a meeting,directive
+remind me to call later,directive
+check my calendar,directive
+add an event to my schedule,directive
+set a timer for ten minutes,directive
+calculate this for me,directive
+translate this,directive
+set a reminder,directive
+start my workout playlist,directive
+dim the lights,directive
+lock the front door,directive
+take a note,directive
+answer in one sentence,directive
+keep your answer short,directive
+be concise,directive
+give me the short version,directive
+just give me the answer,directive
+don't explain it,directive
+start over,directive
+stop talking,directive
+repeat the answer,directive
+use simpler words,directive
+give me an example,directive
+compare the two,directive
+list the differences,directive
+tell me the next step,directive
+read that back to me,directive
+answer the question directly,directive
+read the codes,directive
+check the coolant temperature,directive
+clear the codes,directive
+pause the music,directive
+skip this song,directive
+turn the volume down,directive
+restart the service,directive
+what is a tensor,question
+why is the sky blue,question
+how does a combustion engine work,question
+what does OBD stand for,question
+how does bluetooth work,question
+what is a neural network,question
+what is the difference between ram and storage,question
+why does a computer need memory,question
+how does linux manage processes,question
+what is prefix caching,question
+what does a transformer model do,question
+how does speech recognition work,question
+what happens when an engine overheats,question
+is python compiled or interpreted,question
+what is the difference between a list and a set,question
+why would I use a dictionary,question
+how does hashing work,question
+what is logistic regression,question
+what is tf idf,question
+what is a raspberry pi,question
+why does context length matter,question
+how does a cache work,question
+what does latency mean,question
+why would a model hallucinate,question
+what is sqlite,question
+what is full text search,question
+what does a cpu thread do,question
+what is the difference between a model and an application,question
+why does quantization make a model smaller,question
+how does text to speech work,question
+what is automatic speech recognition,question
+what is a context window,question
+what is a database index,question
+why does temperature affect model output,question
+what is machine learning,question
+what is a classifier,question
+how does tf idf score words,question
+what does logistic regression predict,question
+why is local inference slower on small hardware,question
+what is rag,question
+I think it will rain today,normal
+the weather is nice,normal
+that's interesting,normal
+I appreciate your help,normal
+thanks for that,normal
+okay I understand,normal
+that makes sense,normal
+good to know,normal
+I see what you mean,normal
+that's helpful,normal
+I'll think about it,normal
+alright then,normal
+fair enough,normal
+I suppose so,normal
+maybe later,normal
+not sure about that,normal
+interesting point,normal
+makes sense to me,normal
+that's true,normal
+you're right,normal
+good point,normal
+I remember now,normal
+I remember how that works,normal
+I like pizza,normal
+my name is John,normal
+I work at a hospital,normal
+I live in New York,normal
+I prefer cold weather,normal
+I just bought a new car,normal
+I'm feeling tired today,normal
+my birthday is in June,normal
+I have a dog named Max,normal
+I'm a vegetarian,normal
+I like hiking,normal
+my favorite movie is Inception,normal
+I play guitar,normal
+I speak Spanish,normal
+I'm studying computer science,normal
+I just finished my project,normal
+I'm planning a trip to Paris,normal
+I'm working on a new app,normal
+the program finally works,normal
+that test passed,normal
+the result looks better now,normal
+I think the second option is better,normal
+do you remember my dog's name,recall
+I remember my dog's name now,normal
+remind me what I said yesterday,recall
+remind me at five o'clock,directive
+explain recursion,question
+explain what you just meant,clarify
+explain recursion in complete detail,detailed
+save this detail for later,memory_store
+what detail did I save earlier,recall
+tell me what a cache is,question
+tell me what I told you about the cache,recall
+give me the answer,directive
+what is the answer,question
+I don't understand caches,normal
+I don't understand what you just said,clarify
+I want to remember this myself,normal
+what did I tell you,recall
+what are you telling me,clarify
+that was a detailed answer,normal
+give me a detailed answer,detailed
+yo what's up,greeting
+yo whats going on,greeting
+hey you,greeting
+hello hello,greeting
+hey how have you been,greeting
+how have you been,greeting
+how's your day going,greeting
+how is your day going,greeting
+what's going on,greeting
+whats going on,greeting
+hey what's happening,greeting
+hello my friend,greeting
+hey friend,greeting
+nice to see you,greeting
+good to talk to you,greeting
+hey there how are you,greeting
+hi how's everything,greeting
+hello hows everything,greeting
+see you tomorrow,farewell
+talk tomorrow,farewell
+talk later,farewell
+catch you tomorrow,farewell
+catch you next time,farewell
+until next time,farewell
+I'm out,farewell
+im out,farewell
+I'm done,farewell
+im done,farewell
+that's enough for now,farewell
+thats enough for now,farewell
+we're good for today,farewell
+were good for today,farewell
+I'm calling it a night,farewell
+im calling it a night,farewell
+I'm going to bed,farewell
+time to go,farewell
+got to run,farewell
+gotta run,farewell
+I'll catch you later,farewell
+ill catch you later,farewell
+I'll see you later,farewell
+we can finish later,farewell
+let's stop here,farewell
+lets stop here,farewell
+that's it,farewell
+thats it goodbye,farewell
+okay I'm done,farewell
+okay im done,farewell
+uh huh,affirmative
+mm hmm,affirmative
+sounds right,affirmative
+that sounds right,affirmative
+that is correct,affirmative
+you are correct,affirmative
+that's exactly it,affirmative
+thats exactly it,affirmative
+that's exactly what I mean,affirmative
+that's what I meant,affirmative
+yes that's it,affirmative
+yeah that's it,affirmative
+yes go on,affirmative
+go for it,affirmative
+proceed,affirmative
+continue,affirmative
+keep going,affirmative
+yes continue,affirmative
+okay continue,affirmative
+do that,affirmative
+yes do that,affirmative
+that's acceptable,affirmative
+fine by me,affirmative
+I'm good with that,affirmative
+im good with that,affirmative
+I like that,affirmative
+I want that,affirmative
+that's the one,affirmative
+yep perfect,affirmative
+okay perfect,affirmative
+uh uh,negative
+not quite,negative
+that's not right,negative
+that isn't right,negative
+wrong,negative
+that's incorrect,negative
+you misunderstood me,negative
+that's not it,negative
+not what I wanted,negative
+I don't want to do that,negative
+don't do it,negative
+do not do that,negative
+no cancel it,negative
+cancel that request,negative
+forget that,negative
+scratch that,negative
+ignore that,negative
+skip that,negative
+leave that,negative
+stop there,negative
+that's enough,negative
+don't keep going,negative
+no stop,negative
+no that's wrong,negative
+no I meant something else,negative
+I meant the other one,negative
+not the first one,negative
+I disagree,negative
+I don't agree,negative
+absolutely no,negative
+what did I tell you about Finch,recall
+what did I say about Finch,recall
+what do you remember about Finch,recall
+did I mention Finch before,recall
+what did I tell you about my dog,recall
+what was my dog's name again,recall
+what was the name I gave you,recall
+what name did I tell you,recall
+what did I say my name was,recall
+what did I say my favorite color was,recall
+which color did I say I liked,recall
+what did I say I liked to eat,recall
+what food did I say I liked,recall
+where did I tell you I was from,recall
+where did I say I worked,recall
+what job did I tell you I had,recall
+which computer did I say I use,recall
+which pi did I say I have,recall
+which model are we running again,recall
+what model did I say we were running,recall
+what thread count did I tell you worked best,recall
+what setting did I say worked best,recall
+what value did we settle on,recall
+which option did we settle on,recall
+what did we choose earlier,recall
+what did we decide about that,recall
+what conclusion did we reach,recall
+what was the decision we made,recall
+what did I say I was going to do next,recall
+what was my next step,recall
+what did I say I needed to do,recall
+what did I tell you I was building,recall
+what was the project I mentioned,recall
+what was that program I was working on,recall
+what did I call my router model,recall
+what name did I give the classifier,recall
+what was the term I used earlier,recall
+what acronym did we use,recall
+what was that acronym again,recall
+what did I say about the cache,recall
+what did I say about memory,recall
+what was our conversation about memory,recall
+what did we say about retrieval,recall
+what did I say happened in the benchmark,recall
+what was the result I gave you,recall
+what numbers did I tell you earlier,recall
+what time did I say it took,recall
+what latency did I report,recall
+what did I say Whisper heard,recall
+how did Whisper spell the name before,recall
+what audio problem did I mention,recall
+what issue did I say I fixed,recall
+what was broken before,recall
+what command did I use earlier,recall
+what path did I give you,recall
+what directory was I working in,recall
+what file did I say we changed,recall
+what did I say I wanted to avoid,recall
+what did I tell you not to change,recall
+do you remember what we agreed on,recall
+do you remember the last setting we used,recall
+do you remember why we changed that,recall
+can you pull up what I said about that,recall
+can you pull up my earlier comment,recall
+bring back what I said about the pi,recall
+find what I said about the backpack,recall
+find my earlier comment about Finch,recall
+look up what I said before,recall
+look up my previous statement,recall
+what was I talking about a minute ago,recall
+what was I talking about earlier today,recall
+what did I mention a few turns ago,recall
+what did I tell you a while back,recall
+what have we already established,recall
+what did we already figure out,recall
+what was the thing we already tested,recall
+what did I already tell you,recall
+didn't I tell you about that already,recall
+didnt I mention that before,recall
+you know the thing I told you about earlier,recall
+remember that my favorite food is pizza,memory_store
+remember that I prefer Linux,memory_store
+remember that I use a Raspberry Pi,memory_store
+remember that I want the fast route first,memory_store
+remember that detailed has two triggers,memory_store
+remember that I do not want another model call,memory_store
+remember that greetings need to be fast,memory_store
+remember that I prefer the second option,memory_store
+remember that the dog is named Finch,memory_store
+remember that Finch is from Michigan,memory_store
+remember that I use three threads,memory_store
+remember that this setting worked,memory_store
+please save my preference for short greetings,memory_store
+please save that I use Linux,memory_store
+please save that my dog's name is Finch,memory_store
+save the fact that I use a pi five,memory_store
+save the fact that I prefer local inference,memory_store
+save this setting for next time,memory_store
+save this result for later,memory_store
+store my preference for concise answers,memory_store
+store that Finch likes metal,memory_store
+store that my project uses sqlite,memory_store
+put this fact in memory,memory_store
+put this preference in memory,memory_store
+put the next sentence in memory,memory_store
+keep a record of this,memory_store
+keep this fact around,memory_store
+keep this preference for later,memory_store
+make sure you remember this,memory_store
+make sure you save that,memory_store
+don't lose this information,memory_store
+don't forget that I said this,memory_store
+do not forget my preference,memory_store
+hold onto this for later,memory_store
+hold on to this detail,memory_store
+remember this next time we talk,memory_store
+save this for the next conversation,memory_store
+keep this between conversations,memory_store
+add that to what you remember,memory_store
+add this fact to memory,memory_store
+record this in memory,memory_store
+record that I chose this option,memory_store
+note that I prefer the first one,memory_store
+note this for later,memory_store
+memorize this fact,memory_store
+I need you to remember this,memory_store
+I need you to save this,memory_store
+I want this remembered,memory_store
+I want this saved for later,memory_store
+keep what I just said,memory_store
+give me a deeper explanation,detailed
+go into detail,detailed
+go into more detail,detailed
+go into a lot more detail,detailed
+expand on that,detailed
+expand on your answer,detailed
+give me more information,detailed
+give me much more information,detailed
+explain the reasoning behind it,detailed
+explain why that happens in detail,detailed
+walk through the entire thing,detailed
+walk me through the whole process,detailed
+take me through it from start to finish,detailed
+show me every step,detailed
+don't leave anything out,detailed
+cover everything important,detailed
+give me the full breakdown,detailed
+give me a full breakdown,detailed
+I want the full explanation,detailed
+I want the long answer,detailed
+I want the complete answer,detailed
+give me the technical details,detailed
+explain the technical side,detailed
+explain what's happening under the hood,detailed
+tell me exactly how it works,detailed
+tell me exactly why,detailed
+explain each part,detailed
+break down each part,detailed
+break that into steps,detailed
+give me all the important details,detailed
+don't dumb it down,detailed
+give me the advanced explanation,detailed
+explain it at a deeper level,detailed
+can you be more thorough,detailed
+can you expand on that a lot,detailed
+I need more context,detailed
+give me enough detail to understand the whole thing,detailed
+take your time and explain it,detailed
+I want to understand how all the pieces fit together,detailed
+explain the whole architecture,detailed
+I changed the model threads from four to three and the first token got faster but the total response time only improved sometimes and I also changed the audio buffer so I am not sure which variable mattered,detailed
+the car only shakes at idle after it has warmed up and the rpm is steady but the vibration gets worse with the air conditioning on and there are no warning lights or stored trouble codes,detailed
+I have the speech recognition model running on one thread pool the language model on another and text to speech on a third and individually they are fast enough but together the turn still feels a little slow,detailed
+I tried the same recall request three different ways and the first wording finds the correct memory the second finds an older memory and the third does not trigger recall at all even though they mean almost the same thing,detailed
+the machine boots the service loads successfully and the model is warm but the first spoken query still takes longer than later queries while direct text requests do not show the same delay,detailed
+the user can say hello followed by an entire technical question and I still want that turn treated as a greeting because the greeting rule is intentionally absolute even though that means we throw away the rest of the request,detailed
+the memory database stores the original statement and searchable text and I want recall to retrieve the highest scoring result while preferring the newest result when two memories have the same score,detailed
+I want greetings affirmations and goodbyes to return almost instantly while recall questions can spend a little time searching and detailed questions can generate longer answers without slowing every simple conversation turn,detailed
+the microphone sounds clear the transcription is mostly correct and the language model response is good but occasionally the text to speech begins late and the pause makes the entire assistant feel slower than the measured model latency,detailed
+I tested the installation on a clean system and the setup completed correctly but the audio device names were different and one service started before the bluetooth connection was ready so the first run failed,detailed
+I am trying to classify normal questions recall requests explicit commands clarifications and detailed overshare while also keeping simple conversational things like yes no hello and goodbye on the fastest possible path,detailed
+the first design used regex for almost everything and it worked on the phrases I expected but every new way of saying the same intent required another rule and eventually the router became difficult to reason about,detailed
+the benchmark says the prepared prompt and rebuilt prompt are almost identical in latency while a changed prefix is much slower and I am trying to explain what that suggests without claiming more than the benchmark proves,detailed
+I recorded the video one paragraph at a time and the visuals look good but the audio levels vary slightly between clips and a couple transitions have breaths or clicks that make the edit sound less polished,detailed
+I want the public version to demonstrate the core cache shaping idea but I do not want to include every private memory trick routing rule and tuning decision because the reference implementation should stay understandable,detailed
+I am using word features character features and logistic regression because the classifier needs to tolerate transcription mistakes while still running far faster than an additional language model request,detailed
+I can accept that the classifier will occasionally be uncertain but when its top two scores are close I want a safe fallback instead of confidently sending the user down the wrong specialized route,detailed
+the system needs to remember enough to answer old questions but if I inject different retrieved text into every prompt I lose some prefix cache reuse so memory quality and prompt stability are pulling in opposite directions,detailed
+I have a fast path a statistical router a recall database and a language model and I want each part to have one clear job so I can benchmark failures without guessing which layer caused the problem,detailed
+the user told me several details about where their friend is from what music they like what they do for work and why they moved and I want the assistant to respond with comparable depth instead of a two sentence generic answer,detailed
+I didn't get that,clarify
+I did not get that,clarify
+I don't get it,clarify
+I do not get it,clarify
+I'm not getting it,clarify
+that went over my head,clarify
+you need to explain that again,clarify
+try explaining that again,clarify
+try saying that another way,clarify
+say it another way,clarify
+word that differently,clarify
+reword that,clarify
+rephrase your answer,clarify
+can you restate that,clarify
+can you restate your answer,clarify
+what exactly do you mean,clarify
+what are you getting at,clarify
+what does that sentence mean,clarify
+what does that word mean in your answer,clarify
+which part are you talking about,clarify
+which thing do you mean,clarify
+what thing are you referring to,clarify
+I'm lost on that part,clarify
+you lost me at the last part,clarify
+I lost you there,clarify
+I didn't follow the last sentence,clarify
+can you slow that explanation down,clarify
+can you make that easier to understand,clarify
+simplify what you just said,clarify
+explain your last answer more simply,clarify
+what was the last thing you said,clarify
+repeat the last part,clarify
+repeat that last sentence,clarify
+I couldn't hear that,clarify
+I couldnt hear the answer,clarify
+I missed what you said,clarify
+what did you just say,model_recall
+can you repeat your response,clarify
+say your response again,clarify
+I'm confused by your answer,clarify
+make the answer shorter,directive
+make that shorter,directive
+shorten the response,directive
+keep it brief,directive
+use fewer words,directive
+only give me the important part,directive
+don't give me a long answer,directive
+give me three examples,directive
+give me five examples,directive
+list the steps,directive
+put that in a list,directive
+make a checklist,directive
+summarize that,directive
+summarize it in one paragraph,directive
+rewrite that,directive
+rewrite it more clearly,directive
+change the wording,directive
+use a different example,directive
+show me another way,directive
+show me the code,directive
+write the code for that,directive
+run that calculation,directive
+check the math,directive
+look that up,directive
+search for that,directive
+find the answer,directive
+open the file,directive
+read the file,directive
+save the changes,directive
+delete that,directive
+remove that line,directive
+add that line,directive
+change that value,directive
+set it to three,directive
+turn that off,directive
+turn that on,directive
+enable that setting,directive
+disable that setting,directive
+run the benchmark,directive
+run the tests,directive
+check the logs,directive
+show the logs,directive
+restart it,directive
+stop the service,directive
+start the service,directive
+reboot the pi,directive
+play the next song,directive
+pause playback,directive
+resume the music,directive
+lower the volume,directive
+raise the volume,directive
+read the engine codes,directive
+check the rpm,directive
+check the fuel trims,directive
+check the vehicle speed,directive
+clear the trouble codes,directive
+tell me only the result,directive
+answer without explaining,directive
+use plain english,directive
+don't use technical terms,directive
+what does cpu stand for,question
+what does gpu stand for,question
+what is ram used for,question
+what is swap memory,question
+what is virtual memory,question
+what is a cache hit,question
+what is a cache miss,question
+why does caching improve speed,question
+how does prefix caching work,question
+what is an llm harness,question
+what does a harness do,question
+what is a system prompt,question
+what is a token,question
+how are tokens created,question
+what is inference,question
+what is model inference,question
+what is quantization,question
+what does q4 mean,question
+what is an embedding,question
+how do embeddings work,question
+what is cosine similarity,question
+what is bm25,question
+how does full text search rank results,question
+what is sqlite fts5,question
+why use sqlite,question
+what is a relational database,question
+what is an index in a database,question
+what is rag used for,question
+what is retrieval augmented generation,question
+what is context enrichment,question
+why can retrieval be wrong,question
+what is automatic prefix caching,question
+what is a prompt prefix,question
+why does changing the prompt hurt caching,question
+what is an intent classifier,question
+how does logistic regression classify text,question
+why use tf idf,question
+what is a character n gram,question
+what is a word n gram,question
+what does confidence mean in a classifier,question
+what is cross validation,question
+what is a confusion matrix,question
+what does precision mean in machine learning,question
+what does recall mean in machine learning,question
+what does f1 score mean,question
+what is overfitting,question
+what is underfitting,question
+why do models need training data,question
+how much training data do I need,question
+what is a sparse matrix,question
+what does joblib do,question
+what does pandas do,question
+what does numpy do,question
+what does scikit learn do,question
+what is faster whisper,question
+what does whisper do,question
+what does kokoro do,question
+what is speech to text,question
+what is text to speech,question
+what is a transformer,question
+what is attention in a transformer,question
+why is an llm slow on a raspberry pi,question
+what does model temperature do,question
+what does context length do,question
+why does a longer prompt take more work,question
+how does a raspberry pi differ from a desktop,question
+what is an npu,question
+what is an ai accelerator,question
+what is a neural processing unit,question
+how does bluetooth audio work,question
+I like that explanation,normal
+that explanation was useful,normal
+that was pretty clear,normal
+I think I understand now,normal
+I need to think about that,normal
+I'm still thinking about it,normal
+that seems reasonable,normal
+that seems possible,normal
+that could work,normal
+I might try that,normal
+I probably won't do that,normal
+I haven't decided yet,normal
+I'm leaning toward the first option,normal
+I'm leaning toward the second option,normal
+I like the simpler approach,normal
+I prefer the faster approach,normal
+I care more about latency,normal
+I care more about accuracy,normal
+I don't mind waiting a little longer,normal
+I want to keep this simple,normal
+I think we're close,normal
+I think this is working,normal
+this seems better,normal
+this seems worse,normal
+the new version feels faster,normal
+the old version sounded better,normal
+the model answered correctly,normal
+the transcription looks correct,normal
+the audio sounds good now,normal
+the test passed,normal
+the test failed,normal
+the service is running,normal
+the service stopped,normal
+the pi is getting warm,normal
+the cpu usage is high,normal
+the memory usage looks fine,normal
+I use Linux on my desktop,normal
+I have a Raspberry Pi five,normal
+I use a bluetooth headset,normal
+I have a dog named Finch,normal
+Finch likes metal,normal
+Finch is from Michigan,normal
+my favorite color is blue,normal
+my favorite food is pizza,normal
+I work from home,normal
+I am learning Python,normal
+I have been studying machine learning,normal
+I built this project myself,normal
+I changed the code yesterday,normal
+I ran the benchmark this morning,normal
+I was testing recall earlier,normal
+I remember what we decided,normal
+I remember that setting now,normal
+I forgot what I was going to say,normal
+I was talking about the cache,normal
+I mentioned the backpack earlier,normal
+I already fixed that problem,normal
+I haven't fixed that problem yet,normal
+I think the bug is in the router,normal
+I think the database is fine,normal
+I think Whisper made the mistake,normal
+I think the model is doing what we asked,normal
+this is just a test sentence,normal
+I'm testing the classifier,normal
+routerMon is a funny name,normal
+the classifier is tiny,normal
+the training went quickly,normal
+the output file is small,normal
+I can work with that,normal
+we'll see how it performs,normal
+remember that the model uses three threads,memory_store
+do you remember how many threads the model uses,recall
+I remember that the model uses three threads,normal
+remember that Finch likes metal,memory_store
+what music did I say Finch likes,recall
+save that I use Linux,memory_store
+what operating system did I say I use,recall
+I use Linux,normal
+tell me what I said about TF IDF,recall
+tell me what TF IDF is,question
+what did you mean by cache reuse,clarify
+what is cache reuse,question
+explain your last answer,clarify
+explain logistic regression,question
+explain logistic regression in detail,detailed
+repeat what you just said,clarify
+repeat the benchmark,directive
+remember this answer,memory_store
+remember the answer I gave you earlier,recall
+I don't remember what I said,normal
+what did I say,recall
+I want you to remember the next sentence,memory_store
+I want to remember the next sentence myself,normal
+what is my dog's name,recall
+what is a dog's normal temperature,question
+what was my last question,recall
+what is the last question in the test,question
+give me more detail,detailed
+give me more examples,directive
+can you make your last answer clearer,clarify
+make the output file smaller,directive
+yes that's correct,affirmative
+is that correct,question
+why is that wrong,question
+why is the night sky dark,question
+what did you say about prefix caching,model_recall
+what did you say about the cache,model_recall
+what did you say about tf idf,model_recall
+what did you say about logistic regression,model_recall
+what did you say about the router,model_recall
+what did you say about memory,model_recall
+what did you say about recall,model_recall
+what did you say about the pi,model_recall
+what did you say about the model,model_recall
+what did you say about whisper,model_recall
+what did you say about kokoro,model_recall
+what did you say about that earlier,model_recall
+what did you say earlier about that,model_recall
+what did you say last time about that,model_recall
+what did you say before about that,model_recall
+what did you tell me about prefix caching,model_recall
+what did you tell me about the model,model_recall
+what did you tell me about memory,model_recall
+what did you tell me about the pi,model_recall
+what did you tell me earlier,model_recall
+what did you tell me before,model_recall
+what did you tell me last time,model_recall
+remind me what you said about the cache,model_recall
+remind me what you said about tf idf,model_recall
+remind me what you said earlier,model_recall
+remind me what you told me about that,model_recall
+repeat what you said about prefix caching,model_recall
+repeat what you told me about the router,model_recall
+repeat your explanation about tf idf,model_recall
+what was your explanation of prefix caching,model_recall
+what was your explanation of tf idf,model_recall
+what was your explanation about memory,model_recall
+what was your answer about the pi,model_recall
+what was your answer to my question about caching,model_recall
+what answer did you give me about that,model_recall
+what did your answer say about that,model_recall
+what was the thing you told me,model_recall
+what was that thing you said,model_recall
+what were you saying about the model,model_recall
+what were you saying about caching,model_recall
+what were you telling me about the router,model_recall
+what were you explaining about tf idf,model_recall
+what did you explain about logistic regression,model_recall
+what did you explain earlier,model_recall
+what did you explain to me about the cache,model_recall
+what was your point about context,model_recall
+what point did you make about context,model_recall
+what did you mention about context,model_recall
+what did you mention about latency,model_recall
+what did you mention earlier about recall,model_recall
+what did you recommend about the router,model_recall
+what did you recommend earlier,model_recall
+what was your recommendation about that,model_recall
+what was the recommendation you gave me,model_recall
+what did you suggest about memory,model_recall
+what did you suggest I do,model_recall
+what was your suggestion about the classifier,model_recall
+what did you call that technique,model_recall
+what term did you use for that,model_recall
+what name did you give that idea,model_recall
+what definition did you give me,model_recall
+how did you define tf idf,model_recall
+how did you explain rag,model_recall
+how did you explain context,model_recall
+what example did you give me,model_recall
+what example did you use for recall,model_recall
+which example did you give earlier,model_recall
+what numbers did you tell me,model_recall
+what latency number did you give me,model_recall
+what percentage did you say,model_recall
+what did you say the acronym stood for,model_recall
+what did you say tf idf stands for,model_recall
+what did you say rag stands for,model_recall
+what did you say whisper does,model_recall
+what did you say kokoro does,model_recall
+what did you say the harness does,model_recall
+what did you say context was,model_recall
+okay but what did you say again about caching,model_recall
+okay what did you say again about that,model_recall
+wait what did you say about the router again,model_recall
+hang on what did you tell me about that,model_recall
+I forgot what you said about the cache,model_recall
+I forgot your explanation of tf idf,model_recall
+I forgot what you told me about memory,model_recall
+can you pull up what you said about the pi,model_recall
+can you find your earlier answer about caching,model_recall
+look up what you told me about the router,model_recall
+bring back your answer about that,model_recall
+bring back what you said earlier,model_recall
+what was your previous response about this,model_recall
+what did your previous response say,model_recall
+what was your last answer about memory,model_recall
+what did you answer when I asked about tf idf,model_recall
+what did you tell me when I asked about the cache,model_recall
+what did you say when I asked why it was slow,model_recall
+what did you say when we talked about rag,model_recall
+what explanation did you give when I asked that,model_recall
+what did I say about prefix caching,recall
+what did I tell you about the router,recall
+what did you tell me about the router,model_recall
+what did I say the acronym meant,recall
+what did you say the acronym meant,model_recall
+what was my explanation of the problem,recall
+what was your explanation of the problem,model_recall
+what did I mention about latency,recall
+what did I recommend,recall
+what did you recommend,model_recall
+what did I suggest earlier,recall
+what did you suggest earlier,model_recall
+what example did I give you,recall
+what numbers did I give you,recall
+what numbers did you give me,model_recall
+what did I tell you whisper does,recall
+what did you tell me whisper does,model_recall
+what did I say context was,recall
+remind me what I said about memory,recall
+remind me what you said about memory,model_recall
+find what I told you about the pi,recall
+find what you told me about the pi,model_recall
+bring back what I said about caching,recall
+bring back what you said about caching,model_recall
+I forgot what I said about the router,recall
+I forgot what you said about the router,model_recall
+what was the thing I told you,recall
+what did I call the classifier,recall
+what did you call the classifier,model_recall
+what was my point about rag,recall
+what was your point about rag,model_recall
+ask me what I bought at the store yesterday,directive
+ask me what I bought yesterday,directive
+ask me what I bought at the store,directive
+ask me what I got at the store,directive
+ask me what I picked up yesterday,directive
+ask me what I ate for lunch,directive
+ask me what I had for dinner,directive
+ask me what my favorite food is,directive
+ask me what my favorite color is,directive
+ask me what my dog's name is,directive
+ask me where I grew up,directive
+ask me where I work,directive
+ask me what I do for work,directive
+ask me what computer I use,directive
+ask me what operating system I use,directive
+ask me which model I prefer,directive
+ask me which option I chose,directive
+ask me what setting worked best,directive
+ask me what I did yesterday,directive
+ask me what happened earlier,directive
+ask me what I'm working on,directive
+ask me what project I'm building,directive
+ask me why I changed it,directive
+ask me why I picked that option,directive
+ask me when I bought it,directive
+ask me where I bought it,directive
+ask me how much it cost,directive
+ask me who I talked to,directive
+ask me which one I want,directive
+ask me which one I liked better,directive
+ask me a question about my project,directive
+ask me a question about the pi,directive
+ask me something about myself,directive
+ask me something I can answer,directive
+quiz me on what we just covered,directive
+quiz me about tf idf,directive
+quiz me on logistic regression,directive
+give me a question about caching,directive
+give me a question to answer,directive
+prompt me to tell you what I bought,directive
+have me tell you what I bought yesterday,directive
+have me explain what happened,directive
+have me answer a question about the project,directive
+hey ask me what I bought yesterday,directive
+hey ask me about the store,directive
+hey ask me a question,directive
+hey ask me what model I'm using,directive
+hey can you ask me what I bought,directive
+can you ask me what I bought yesterday,directive
+can you ask me what I did today,directive
+can you ask me about my project,directive
+could you ask me what happened,directive
+would you ask me what I bought,directive
+I want you to ask me what I bought yesterday,directive
+I want you to ask me a question,directive
+ask me again what I bought,directive
+ask me again about my project,directive
+ask me that question again,directive
+a watch,normal
+I bought a watch,normal
+a new watch,normal
+some groceries,normal
+milk and bread,normal
+a pair of shoes,normal
+three shirts,normal
+a raspberry pi,normal
+a new keyboard,normal
+a microphone,normal
+a usb adapter,normal
+a book,normal
+two books,normal
+pizza,normal
+tacos,normal
+coffee,normal
+blue,normal
+green,normal
+Finch,normal
+Max,normal
+Michigan,normal
+Utah,normal
+at the mall,normal
+at walmart,normal
+online,normal
+yesterday,normal
+last week,normal
+this morning,normal
+around three,normal
+about fifty dollars,normal
+one hundred bucks,normal
+the second one,normal
+the first option,normal
+three threads,normal
+because it was faster,normal
+because it was cheaper,normal
+because I liked it better,normal
+because the old one broke,normal
+I got it yesterday,normal
+I bought it online,normal
+I picked the second one,normal
+I chose the faster option,normal
+I use Nobara,normal
+I'm using a raspberry pi five,normal
+the llama model,normal
+llama three point two,normal
+I changed it this morning,normal
+it started yesterday,normal
+nothing else,normal
+that's all I bought,normal
+just a watch,normal
+only some groceries,normal
+probably the second one,normal
+I don't remember,normal
+I'm not sure,normal
+I think it was Friday,normal
+maybe forty dollars,normal
+tell me about prefix caching,question
+tell me what prefix caching is,question
+tell me what you know about prefix caching,question
+what do you know about prefix caching,question
+what can you tell me about prefix caching,question
+tell me about logistic regression,question
+tell me what you know about logistic regression,question
+what do you know about tf idf,question
+what can you tell me about tf idf,question
+tell me about raspberry pi,question
+what do you know about raspberry pi,question
+tell me about transformers,question
+what do you know about transformers,question
+tell me about sqlite,question
+tell me about fts5,question
+what do you know about rag,question
+tell me about speech recognition,question
+tell me about text to speech,question
+what do you know about machine learning,question
+tell me about intent classification,question
+what did you say about prefix caching earlier,model_recall
+what did I say about prefix caching earlier,recall
+tell me what you previously said about prefix caching,model_recall
+tell me what I previously said about prefix caching,recall
+tell me everything you know about prefix caching,detailed
+tell me everything you know about tf idf,detailed
+tell me everything you know about logistic regression,detailed
+tell me everything you know about transformers,detailed
+tell me everything you know about rag,detailed
+tell me everything you know about sqlite fts5,detailed
+tell me everything you know about speech recognition,detailed
+tell me everything you know about text to speech,detailed
+tell me everything you know about raspberry pi,detailed
+tell me everything you know about model caching,detailed
+give me everything you know about prefix caching,detailed
+give me everything you know about tf idf,detailed
+give me the complete picture on logistic regression,detailed
+give me the full story on prefix caching,detailed
+I want everything you know about transformers,detailed
+I want the full explanation of rag,detailed
+I want all the information you have about tf idf,detailed
+cover everything about prefix caching,detailed
+cover the entire topic of logistic regression,detailed
+teach me everything about intent classification,detailed
+run the benchmark again and only show me the final numbers,directive
+run the benchmark and only give me the numbers,directive
+run it again and just show the result,directive
+run the test again and only show the result,directive
+repeat the benchmark and keep the output short,directive
+run the benchmark but do not explain it,directive
+execute the benchmark and return only the medians,directive
+run the tests and only tell me which ones failed,directive
+check the logs and only show the errors,directive
+look it up and give me only the answer,directive
+hey run the benchmark,directive
+hey check the memory,directive
+hey tell me what a tensor is,directive
+hey explain tf idf,directive
+hey play some music,directive
+hey stop the music,directive
+hey read the codes,directive
+hey remember this for later,memory_store
+hey what did I tell you earlier,recall
+hey what did you say earlier,model_recall
+hey how are you,greeting
+hey what's up,greeting
+hey good morning,greeting
+can you explain tf idf,question
+can you tell me about caching,question
+do you know what tf idf is,question
+what do you think about this approach,question
+would you use logistic regression here,question
+can you compare these approaches,directive
+I agree with you,affirmative
+I don't agree with you,negative
+you are right,affirmative
+you are wrong,negative
+you explained that clearly,normal
+you gave me a good example,normal
+you mentioned caching just now,normal
+you told me something interesting,normal
+what did you say agian about caching,model_recall
+what did you say agen about the model,model_recall
+what did you sy about tf idf,model_recall
+what did you tell me abot the router,model_recall
+what were you saying abut memory,model_recall
+remind me what you siad about caching,model_recall
+what was youre explanation of tf idf,model_recall
+what did you recomend earlier,model_recall
+what did you explane about the cache,model_recall
+bring back what you sed earlier,model_recall
+what did I say agian about caching,recall
+what did I tell you abot the router,recall
+what was I saying abut memory,recall
+remind me what I siad about caching,recall
+what was my explanation of tf idf,recall
+what did I recomend earlier,recall
+bring back what I sed earlier,recall
+hey what is up,greeting
+hello friend,greeting
+nice to hear you,greeting
+good to see you,greeting
+hey hey,greeting
+yo there,greeting
+hi again,greeting
+morning there,greeting
+evening there,greeting
+ttyl,farewell
+ttyl!,farewell
+later man,farewell
+bye for now,farewell
+have a good night,farewell
+have a good day,farewell
+I am done for now,farewell
+I gotta go,farewell
+I am heading out,farewell
+I will talk to you later,farewell
+we can pick this up later,farewell
+let's pick this up tomorrow,farewell
+that is all for now,farewell
+I am signing off,farewell
+sure thing,affirmative
+for sure,affirmative
+that works for me,affirmative
+that is right,affirmative
+exactly right,affirmative
+you got it,affirmative
+I am good with that,affirmative
+keep it that way,affirmative
+use that one,affirmative
+yes that is what I meant,affirmative
+yeah that is exactly what I meant,affirmative
+not yet,negative
+nevermind,negative
+I do not think so,negative
+definitely not,negative
+leave it alone,negative
+not that one,negative
+that is not right,negative
+I would rather not,negative
+I'd rather not,negative
+no I do not want that,negative
+no I don't want that,negative
+not now,negative
+hold off on that,negative
+do not continue,negative
+no leave it as is,negative
+remember that I use Linux on my desktop,memory_store
+do not forget that I keep the spare fuse in the glove box,memory_store
+save this in memory: I parked on level four,memory_store
+save that I changed the connector yesterday,memory_store
+store this for later: I use PipeWire on the Pi,memory_store
+store that my benchmark uses three threads,memory_store
+make a note that I bought a blue backpack,memory_store
+keep this in memory: my preferred editor is vim,memory_store
+for the record I drive a Jeep Patriot,memory_store
+just so you know my headset is the WT5,memory_store
+actually it was Tuesday not Monday,memory_store
+actually it was the power board not the USB controller,memory_store
+actually I bought the blue backpack not the black one,memory_store
+actually the problem was PipeWire not PulseAudio,memory_store
+actually I used three threads not four,memory_store
+actually the CPU was at 2.4 GHz not 2.6 GHz,memory_store
+no it was Tuesday not Monday,memory_store
+no it was the blue backpack not the black backpack,memory_store
+no I bought the jeans yesterday not today,memory_store
+no the spare key is in the desk not the drawer,memory_store
+no my GPU is the RX 6600 not the RTX 3060,memory_store
+wait it was the front sensor not the rear sensor,memory_store
+wait I parked by the west elevator not the east one,memory_store
+correction I use Kokoro not Piper,memory_store
+correction the service runs on the Pi not the desktop,memory_store
+I need to correct that: the meeting is Friday not Thursday,memory_store
+I said that wrong: I bought it at Ocean Market not Walmart,memory_store
+update that memory: my max clock is 2.4 GHz,memory_store
+change what you remember: the cable is in the glove box,memory_store
+remember this correction: I use Debian on the Pi,memory_store
+please remember that the microphone is USB not Bluetooth,memory_store
+please save that my current model is llama3.2:3b,memory_store
+note for later: the warmup service starts before the demo,memory_store
+remember that the line out volume was set to ninety five percent,memory_store
+store this: the install worked on Debian 13.5,memory_store
+save this: the NVMe drive is the boot drive,memory_store
+do not forget that I reverted the overclock,memory_store
+remember that I want routerMon to own routing,memory_store
+what is my favorite band,recall
+what vehicle do I have,recall
+what do you know about me,recall
+tell me what I told you about the Pi,recall
+show me what you remember about the backpack,recall
+show me what you remember about me,recall
+can you remember what I said about the fuse,recall
+what did I tell you about the microphone,recall
+where did I say I parked,recall
+what did I buy yesterday,recall
+was it me or you who bought the backpack,recall
+was it you or me who bought the backpack,recall
+did I buy the backpack or did you,recall
+did you buy the backpack or did I,recall
+was it me or you who changed the fuse,recall
+did I change the fuse or did you,recall
+was it you or me who ran the benchmark,recall
+did you run the benchmark or did I,recall
+hey what did I tell you about the router,recall
+hello what do you remember about my GPU,recall
+good morning what did I say about the overclock,recall
+what did you say earlier about the benchmark,model_recall
+what was your last answer,model_recall
+remind me what you said about the memory problem,model_recall
+what did you recommend about the thread count,model_recall
+what explanation did you give me about TF IDF,model_recall
+what did you tell me to change in the config,model_recall
+what were you saying about logistic regression,model_recall
+hey what did you say earlier about the cache,model_recall
+hello what did you tell me about the router,model_recall
+good morning what was your explanation of FTS5,model_recall
+can you repeat what you said about the service,model_recall
+what was that answer you gave me,model_recall
+how does FTS5 work,question
+why does prompt length affect latency,question
+how many bytes are in a kilobyte,question
+what does a tensor mean,question
+what is the difference between a list and a tuple,question
+why does Python use None instead of null,question
+how does set union work,question
+hello what is TF IDF,question
+hi what is logistic regression,question
+hey how does FTS5 rank results,question
+good morning what is prefix caching,question
+hello why does the model need a context window,question
+hi what is the difference between recall and model recall,question
+hey what does this error code mean,question
+what happens when a hash table has a collision,question
+run the benchmark again,directive
+show me the failed tests,directive
+open the log file,directive
+check the current configuration,directive
+compare these two runs,directive
+ask me about the backpack,directive
+only give me the final numbers,directive
+rerun the tests and list the failures,directive
+hello restart the service,directive
+hi run the benchmark again,directive
+hey check the logs and summarize the failures,directive
+good morning run the unit tests,directive
+never mind the old result rerun the benchmark,directive
+okay run it again with three threads,directive
+sure go ahead and restart the service,directive
+please compare the two output files,directive
+tell me the three biggest differences,directive
+read the last ten lines of the log,directive
+what do you mean by that,clarify
+what did you mean by that,clarify
+I do not understand what you mean,clarify
+I don't understand what you mean,clarify
+I do not understand that last explanation,clarify
+I don't understand that last explanation,clarify
+which file are you talking about,clarify
+what does that part mean,clarify
+can you clarify that,clarify
+clarify what you just said,clarify
+say that another way,clarify
+I am confused by that,clarify
+I'm confused by that,clarify
+when you said cache what exactly did you mean,clarify
+when you said reset were you talking about the model or the session,clarify
+hello I do not understand that last explanation,clarify
+hey can you clarify what you meant by prepared prefix,clarify
+explain exactly how TF IDF and logistic regression work together from beginning to end,detailed
+give me the complete explanation of how routerMon classifies a sentence,detailed
+walk me through the whole routing pipeline step by step,detailed
+go deep on why word and character ngrams help this classifier,detailed
+compare regex routing and TF IDF routing in detail and include the tradeoffs,detailed
+hello explain exactly how the context cache works from beginning to end,detailed
+hi give me a thorough explanation of the memory pipeline,detailed
+hey walk me through every step from ASR to the LLM to TTS,detailed
+"I changed the thread count, reverted the CPU clock, moved the audio buffer, reran the benchmark twice, and now first token time is better but total time is worse, so I want you to reason through the whole situation and tell me what each measurement suggests.",detailed
+"The first run was fast, the second run had a slower prompt evaluation, the third run generated faster, and none of them throttled, but I also changed the context shape between runs and I am trying to understand which variable actually mattered.",detailed
+"I have three different symptoms at once: recall is finding the right memory, the model answer is still slightly wrong, and the TTS starts later than before, so consider all three parts together instead of treating this as one isolated bug.",detailed
+"I spent a while testing this because the service starts correctly, the model is warm, the prefix hash matches, and the router only takes about a millisecond, yet one path is still much slower, and I want an explanation that accounts for all of those facts.",detailed
+"Here is the whole situation: the Pi is headless, PipeWire is working, the USB audio device is selected, the model is already loaded, and the first token still varies by more than a second depending on the prompt shape, so help me reason through the architecture.",detailed
+"I tried the old configuration, then the new configuration, then rolled back only the thread count while leaving the context changes in place, and the result improved only halfway, which makes me think two things are interacting rather than one setting being solely responsible.",detailed
+"The code passes the unit tests, but the live voice test behaves differently because Whisper sometimes changes short words, the router sees raw text now, and memory lookup adds context on some routes, so I want you to analyze how those pieces could combine.",detailed
+"My concern is not just this one misroute. The classifier is fast enough, the regex rules are hard to maintain, the tests started depending on the rules, and every new wording adds another edge case, so explain the architectural implications of removing the regex layer.",detailed
+"There are several observations I want you to keep together: the model file is small, prediction is around one millisecond, word ngrams capture phrases, character ngrams help spelling variation, and logistic regression gives us probabilities, so explain why that stack fits this router.",detailed
+"I want the long version here because I am comparing two designs, one where the harness decides intent with hand written rules and another where a trained classifier decides intent, and I care about latency, maintainability, generalization, and failure modes.",detailed
+"I tested greetings, farewells, memory recall, directives, and detailed prompts, and most of them work, but tiny replies like yup and nope are less reliable while long questions are strong, so explain what that pattern says about the training distribution.",detailed
+"The install worked, audio works, the LLM is warm, and the router is fast, but I still want to understand why the semantic classifier can replace a lot of brittle Python without replacing deterministic memory extraction after the route is chosen.",detailed
+the Pi is running normally today,normal
+the temperature is sixty seven degrees,normal
+I am testing the microphone,normal
+I changed the cable yesterday,normal
+I use Linux every day,normal
+the benchmark finished in two seconds,normal
+the service is already running,normal
+I think the new layout is cleaner,normal
+this version feels faster,normal
+okay the Pi is running at normal temperature,normal
+sure is windy outside today,normal
+yeah the logs are pretty noisy today,normal
+no errors showed up in the last run,normal
+good morning traffic was awful today,normal
+I will work on the training data next,normal
+I am going to rerun it later,normal
+the backpack is sitting by the desk,normal
+the cable is in my bag,normal
+I was reading about logistic regression last night,normal
+I have one more thing to test,normal
+that result is interesting,normal
+the current model is small enough for the Pi,normal
+the audio sounds much better now,normal
+what's the difference between a process and a thread,question
+what is the difference between a process and a thread,question
+what's the difference between RAM and storage,question
+what's the difference between TCP and UDP,question
+what is a hash table,question
+how does a set work,question
+what does amortized mean,question
+how does sorted work in python,question
+what does a mutex do,question
+why would I use a deque,question
+how does TF IDF work,question
+what does prefix caching mean,question
+why did that command fail,question
+how many bytes are in an integer,question
+what is the purpose of virtual memory,question
+what does this error mean,question
+can you explain what a thread is,question
+could you explain what a process is,question
+is a tuple immutable,question
+are sets ordered,question
+does list append create a new list,question
+what happens when python garbage collects an object,question
+how is a dictionary lookup fast,question
+why is binary search logarithmic,question
+what's the difference between stack and heap memory,question
+what's the difference between a class and an object,question
+finally got the audio working and it sounds great,normal
+I finally got the audio working and it sounds great,normal
+the audio is working now,normal
+it sounds great now,normal
+I got it working,normal
+that fixed it,normal
+the tests all passed,normal
+the install worked beautifully,normal
+the Pi is running normally now,normal
+the model loaded fine,normal
+the benchmark finished,normal
+I switched it back to 2.4 GHz,normal
+I changed the cable and it worked,normal
+the headset sounds much better,normal
+the new config feels faster,normal
+I think this version is better,normal
+okay that makes sense,normal
+sure that makes sense,normal
+yeah that makes sense,normal
+uh,normal
+um,normal
+hmm,normal
+uh okay,normal
+um okay,normal
+hmm I see,normal
+well that worked,normal
+okay cool,normal
+nice that worked,normal
+sweet it works,normal
+cool the audio is fixed,normal
+that seems right,normal
+explain in detail how a process differs from a thread,detailed
+give me a detailed explanation of processes and threads,detailed
+walk me through exactly how TF IDF and logistic regression work together,detailed
+explain step by step how a hash table handles collisions,detailed
+give me the full reasoning behind how prefix caching reduces prompt evaluation,detailed
+I want a deep explanation of python garbage collection and reference counting,detailed
+break down every step of how a request moves through ASR routing the LLM and TTS,detailed
+compare processes and threads in detail including memory isolation scheduling and failure behavior,detailed
+explain the differences between TCP and UDP in depth with examples and tradeoffs,detailed
+walk me through the entire lifecycle of a python object from allocation to garbage collection,detailed
+the first run was fast the second run had slower prompt evaluation and the third generated faster but I changed the context shape between runs too so I want to understand which variable actually caused the difference,detailed
+I changed the thread count the prompt shape and the context size between several runs and the timings moved in different directions so help me separate which change likely affected load time prompt evaluation and generation,detailed
+the model is warm the prefix hash matches and first token is still slower on some turns while generation speed stays stable and I want to reason through what parts of the pipeline could explain that,detailed
+I have three possible causes for this bug the audio device changed the pipewire route changed and the service restarted at the same time so walk through how you would isolate which one actually caused the failure,detailed
+the recall result is correct but sometimes the fresh snapshot path is used and sometimes the prepared prefix path is used and I want a detailed explanation of why those shapes differ and what that means for latency,detailed
+explain this thoroughly,detailed
+I want all the details,detailed
+walk through this carefully from beginning to end,detailed
+give me a detailed comparison of lists tuples sets and dictionaries,detailed
+explain in depth why context shape can affect prompt evaluation time,detailed
+walk me through how FTS5 tokenizes ranks and retrieves text,detailed
+give me a thorough explanation of how logistic regression turns TF IDF features into class probabilities,detailed
+explain every major tradeoff between regex routing and a trained text classifier,detailed
+I did not,negative
+I didn't,negative
+I haven't,negative
+I can't,negative
+incorrect,negative
+I did,affirmative
+I have,affirmative
+I can,affirmative
+the service restarted fine,normal
+the service restarted successfully,normal
+the service restarted without errors,normal
+the tests ran successfully,normal
+the benchmark completed normally,normal
+the model loaded correctly,normal
+restart the service again,directive
+rerun the benchmark,directive
+not this time,negative
+not today,negative
+not right now,negative
+not for now,negative
+maybe not,negative
+not Tuesday Wednesday,memory_store
+not the USB controller the power board,memory_store
+actually not 2.6 GHz I switched it to 2.4 GHz,memory_store

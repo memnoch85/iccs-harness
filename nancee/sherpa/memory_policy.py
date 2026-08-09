@@ -120,6 +120,54 @@ _TRAILING_CONVERSATIONAL_CHECKIN = re.compile(
     flags=re.IGNORECASE,
 )
 
+
+_EXPLICIT_MEMORY_STORE_PATTERN = re.compile(
+    r"^(?:(?:hey\s+)?[A-Za-z][A-Za-z'-]{0,39}\s*,\s*)?"
+    r"(?:please\s+)?(?:"
+    r"remember\s+this(?:\s*:)?|"
+    r"remember(?:\s+that)?|"
+    r"save(?:\s+this)?(?:\s+in\s+memory)?(?:\s+that)?|"
+    r"store(?:\s+this)?(?:\s+for\s+later)?(?:\s+that)?|"
+    r"make\s+a\s+note(?:\s+of)?(?:\s+that)?|"
+    r"keep\s+this\s+in\s+memory|"
+    r"don't\s+forget(?:\s+that)?|"
+    r"do\s+not\s+forget(?:\s+that)?"
+    r")\s+(?P<statement>.+?)\s*$",
+    flags=re.IGNORECASE,
+)
+
+_ASK_ME_TOPIC_PATTERN = re.compile(
+    r"^\s*(?:(?:hey|hello|hi)\b[\s,!.:;\-]*)?"
+    r"(?:[A-Za-z][A-Za-z'-]{0,39}\s*,\s*)?"
+    r"(?:"
+    r"i\s+want\s+you\s+to\s+|"
+    r"(?:(?:can|could|would)\s+you\s+)?(?:please\s+)?"
+    r")?"
+    r"ask\s+me\s+(?P<topic>.+?)\s*[.!?]*\s*\Z",
+    flags=re.IGNORECASE,
+)
+
+_AFFIRMATIVE_CONTEXT_ANSWER = re.compile(
+    r"^(?:yes|yeah|yep|yup|sure|sure did|i did|i sure did|absolutely|"
+    r"correct|that's right|that is right|i have|i am|i can)[.! ]*$",
+    flags=re.IGNORECASE,
+)
+
+_NEGATIVE_CONTEXT_ANSWER = re.compile(
+    r"^(?:no|nope|not yet|i did not|i didn't|i have not|i haven't|"
+    r"i am not|i'm not|i cannot|i can't)[.! ]*$",
+    flags=re.IGNORECASE,
+)
+
+_PREVIOUS_QUESTION_PATTERNS = (
+    (re.compile(r"^did\s+you\s+(?P<predicate>.+)\?$", re.IGNORECASE), "I did", "I did not"),
+    (re.compile(r"^have\s+you\s+(?P<predicate>.+)\?$", re.IGNORECASE), "I have", "I have not"),
+    (re.compile(r"^are\s+you\s+(?P<predicate>.+)\?$", re.IGNORECASE), "I am", "I am not"),
+    (re.compile(r"^were\s+you\s+(?P<predicate>.+)\?$", re.IGNORECASE), "I was", "I was not"),
+    (re.compile(r"^do\s+you\s+(?P<predicate>.+)\?$", re.IGNORECASE), "I", "I do not"),
+    (re.compile(r"^can\s+you\s+(?P<predicate>.+)\?$", re.IGNORECASE), "I can", "I cannot"),
+)
+
 _THIRD_PERSON_FACT_STATEMENTS = (
     re.compile(
         r"^(?:he|she|they)(?:'s|'re|'ll|\s+[A-Za-z][A-Za-z'\-]*)"
@@ -422,3 +470,67 @@ def memory_storage_skip_reason(text: str) -> str:
 
     return "incomplete_statement"
 
+def extract_explicit_memory_store_payload(text: str) -> str | None:
+    """Extract the payload only after routerMon selects memory_store."""
+    candidate = " ".join(str(text).strip().split())
+    match = _EXPLICIT_MEMORY_STORE_PATTERN.fullmatch(candidate)
+
+    if match is None:
+        return None
+
+    statement = match.group("statement").strip()
+
+    if not statement or statement.endswith("?") or _word_count(statement) < 3:
+        return None
+
+    return statement
+
+
+def extract_pending_memory_topic(text: str) -> str | None:
+    """Extract ask-me topic metadata only after routerMon selects directive."""
+    candidate = " ".join(str(text).strip().split())
+    match = _ASK_ME_TOPIC_PATTERN.fullmatch(candidate)
+
+    if match is None:
+        return None
+
+    topic = match.group("topic").strip().rstrip(".!?").strip()
+    return topic or None
+
+
+def resolve_contextual_answer_memory(
+    user_text: str,
+    previous_turn: dict[str, str] | None,
+) -> str | None:
+    """Resolve a short yes/no answer into storable text without choosing a route."""
+    if not previous_turn:
+        return None
+
+    answer = " ".join(str(user_text).strip().split())
+    previous_question = " ".join(
+        str(previous_turn.get("assistant", "")).strip().split()
+    )
+
+    if not previous_question.endswith("?"):
+        return None
+
+    if _AFFIRMATIVE_CONTEXT_ANSWER.fullmatch(answer):
+        positive = True
+    elif _NEGATIVE_CONTEXT_ANSWER.fullmatch(answer):
+        positive = False
+    else:
+        return None
+
+    for pattern, positive_prefix, negative_prefix in _PREVIOUS_QUESTION_PATTERNS:
+        match = pattern.fullmatch(previous_question)
+
+        if match is None:
+            continue
+
+        predicate = match.group("predicate").strip().rstrip(".?!")
+        predicate = re.sub(r"\byour\b", "my", predicate, flags=re.IGNORECASE)
+        prefix = positive_prefix if positive else negative_prefix
+        resolved = " ".join(f"{prefix} {predicate}".split())
+        return resolved[0].upper() + resolved[1:] + "."
+
+    return None

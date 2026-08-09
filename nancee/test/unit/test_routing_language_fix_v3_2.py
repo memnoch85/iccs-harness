@@ -1,19 +1,25 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from directive_perspective import repair_directive_perspective
 from input_router import route_user_input
+from router_mon import RouterMonResult
 
 
 class RoutingLanguageFixV32Tests(unittest.TestCase):
     def test_explicit_remember_command_stores_statement(self):
-        route = route_user_input(
-            "Remember that I bought a blue ceramic mug yesterday."
-        )
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("memory_store", 0.9, "routerMon"),
+        ):
+            route = route_user_input(
+                "Remember that I bought a blue ceramic mug yesterday."
+            )
 
-        self.assertEqual("acknowledge", route.kind)
-        self.assertEqual("explicit_memory_store", route.reason)
+        self.assertEqual("memory_store", route.kind)
+        self.assertTrue(route.reason.startswith("routerMon:memory_store:"))
         self.assertTrue(route.store_recall)
         self.assertEqual(
             "I bought a blue ceramic mug yesterday.",
@@ -21,11 +27,15 @@ class RoutingLanguageFixV32Tests(unittest.TestCase):
         )
 
     def test_remember_this_command_strips_command_text(self):
-        route = route_user_input(
-            "Remember this: I keep the spare fuse in the glove box."
-        )
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("memory_store", 0.9, "routerMon"),
+        ):
+            route = route_user_input(
+                "Remember this: I keep the spare fuse in the glove box."
+            )
 
-        self.assertEqual("acknowledge", route.kind)
+        self.assertEqual("memory_store", route.kind)
         self.assertTrue(route.store_recall)
         self.assertEqual(
             "I keep the spare fuse in the glove box.",
@@ -33,11 +43,15 @@ class RoutingLanguageFixV32Tests(unittest.TestCase):
         )
 
     def test_dont_forget_command_stores_statement(self):
-        route = route_user_input(
-            "Don't forget that I parked beside the west elevator."
-        )
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("memory_store", 0.9, "routerMon"),
+        ):
+            route = route_user_input(
+                "Don't forget that I parked beside the west elevator."
+            )
 
-        self.assertEqual("acknowledge", route.kind)
+        self.assertEqual("memory_store", route.kind)
         self.assertTrue(route.store_recall)
         self.assertEqual(
             "I parked beside the west elevator.",
@@ -45,7 +59,7 @@ class RoutingLanguageFixV32Tests(unittest.TestCase):
         )
 
     def test_rich_finch_update_remains_detailed(self):
-        route = route_user_input(
+        text = (
             "My name is Anders and Finch is one of my favorite bands. "
             "They are from Temecula, California. "
             "They are a post-hardcore punk-screamo-emo type of scene. "
@@ -53,8 +67,17 @@ class RoutingLanguageFixV32Tests(unittest.TestCase):
             "but I'm still a big fan."
         )
 
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult(
+                "detailed",
+                0.9,
+                "routerMon",
+            ),
+        ):
+            route = route_user_input(text)
+
         self.assertEqual("detailed", route.kind)
-        self.assertEqual("detailed_request", route.reason)
         self.assertTrue(route.store_recall)
 
     def test_immediate_ask_me_preserves_or(self):

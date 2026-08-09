@@ -262,6 +262,26 @@ PY
 log "Running unit tests"
 
 PATH="$VENV/bin:$PATH" \
+
+# Begin:: Build routerMon from training source
+ROUTERMON_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROUTERMON_PYTHON="$ROUTERMON_ROOT/nancee/sherpa/venv/bin/python"
+
+echo "[SETUP] Installing routerMon training dependencies..."
+"$ROUTERMON_PYTHON" -m pip install "scikit-learn==1.9.0" joblib
+
+echo "[SETUP] Training routerMon..."
+"$ROUTERMON_PYTHON" \
+    "$ROUTERMON_ROOT/nancee/router_training/train_router_mon.py"
+
+echo "[SETUP] Installing routerMon runtime model..."
+cp \
+    "$ROUTERMON_ROOT/nancee/router_training/routerMon.joblib" \
+    "$ROUTERMON_ROOT/nancee/sherpa/routerMon.joblib"
+
+echo "[SETUP] routerMon ready."
+# End:: Build routerMon from training source
+
     bash "$ROOT/nancee/test/run_unit_tests.sh"
 
 

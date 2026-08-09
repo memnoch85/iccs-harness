@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from input_router import route_user_input
 from memory_policy import (
@@ -7,6 +8,7 @@ from memory_policy import (
 )
 from recall_policy import repair_recall_perspective
 from response_policy import response_policy_for_route
+from router_mon import RouterMonResult
 
 
 class PreBenchmarkRecallRegressionTests(
@@ -84,17 +86,21 @@ class PreBenchmarkRecallRegressionTests(
             is_complete_memory_statement(text)
         )
 
-    def test_prefaced_update_uses_acknowledge_mode(self):
-        route = route_user_input(
-            "Yeah, hey man, I finished wiring "
-            "a PCB yesterday."
-        )
+    def test_prefaced_update_uses_routermon_normal_mode(self):
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("normal", 0.8, "routerMon"),
+        ):
+            route = route_user_input(
+                "Yeah, hey man, I finished wiring "
+                "a PCB yesterday."
+            )
+
         policy = response_policy_for_route(route.kind)
 
-        self.assertEqual(
-            "acknowledge",
-            policy.name,
-        )
+        self.assertEqual("normal", route.kind)
+        self.assertEqual("normal", policy.name)
+        self.assertTrue(route.store_recall)
 
 
 if __name__ == "__main__":

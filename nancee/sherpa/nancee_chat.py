@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import sherpa_onnx
 import sounddevice as sd
+from assistant_session_archive import AssistantSessionArchive
 from authoritative_response import prepare_authoritative_response
 from config import (
     BLOCKSIZE,
@@ -65,6 +66,7 @@ from ollama_runtime import (
     ensure_ollama_model_loaded,
 )
 from recall_policy import repair_recall_perspective
+from router_mon import load_router_mon
 from response_policy import response_policy_for_route
 from session_archive import SessionArchive
 from session_memory_store import (
@@ -102,6 +104,33 @@ asr_process = None
 class SpokenUserInput:
     text: str
     stopped_at: float | None
+
+
+_PENDING_ANSWER_SKIP = {
+    "i don't know",
+    "i dont know",
+    "i'm not sure",
+    "im not sure",
+    "not sure",
+    "never mind",
+    "nevermind",
+}
+
+
+def build_pending_answer_memory(topic, user_text):
+    clean_topic = re.sub(r"\s+", " ", str(topic).strip()).rstrip(".!?")
+    clean_answer = re.sub(r"\s+", " ", str(user_text).strip())
+
+    if not clean_topic or not clean_answer:
+        return ""
+
+    if clean_answer.lower().rstrip(".!?") in _PENDING_ANSWER_SKIP:
+        return ""
+
+    return (
+        f"When asked {clean_topic}, I answered: "
+        f"{clean_answer.rstrip('.!?')}."
+    )
 
 
 def retrieve_session_context(recall_memory, user_text, allow_weak_match=False):
@@ -1175,6 +1204,11 @@ def main():
             reason="startup",
         )
 
+        # Keep routerMon completely outside the ICCS startup prime. Loading
+        # the classifier here cannot alter the warmup prompt or prepared
+        # prefix, but it removes first-turn classifier load latency.
+        load_router_mon()
+
     except RuntimeError as error:
         print(
             f"[STARTUP ERROR] {error}",
@@ -1194,6 +1228,15 @@ def main():
     recall_memory = SessionArchive(
         max_turns=MEMORY_RECALL_TURN_LIMIT,
     )
+
+    assistant_recall_memory = AssistantSessionArchive(
+        max_turns=MEMORY_RECALL_TURN_LIMIT,
+    )
+
+    # A directive such as "ask me what I bought" can make the next short
+    # answer meaningful memory even when that answer is only "a watch".
+    # This is runtime state only; it never enters the ICCS prompt by itself.
+    pending_user_memory_topic = None
 
     print(
         "Opening persistent audio stream...",
@@ -1276,6 +1319,9 @@ def main():
                         bridge.resolve()
                     break
 
+                pending_memory_topic_for_turn = pending_user_memory_topic
+                pending_user_memory_topic = None
+
                 global_start = time.time()
 
                 global gap_fillers_used
@@ -1287,8 +1333,31 @@ def main():
 
                 recall_requested = input_route.retrieve_recall
                 explicit_recall_requested = input_route.explicit_recall
+                model_recall_requested = input_route.kind == "model_recall"
+                model_recall_answer = ""
 
-                if recall_requested:
+                if model_recall_requested:
+                    # Assistant memory is intentionally kept out of the LLM
+                    # prompt. FTS5 returns the already-generated response and
+                    # the runtime replays it directly.
+                    model_recall_answer = (
+                        assistant_recall_memory.retrieve_response(
+                            input_route.normalized_text
+                        )
+                    )
+                    retrieved_context = ""
+                    memory_context_found = False
+
+                    if MEMORY_DEBUG_ENABLED:
+                        print(
+                            "[MODEL MEMORY RECALL] "
+                            f"found={bool(model_recall_answer)} "
+                            f"answer_characters={len(model_recall_answer)} "
+                            "prompt_injection=false",
+                            flush=True,
+                        )
+
+                elif recall_requested:
                     retrieved_context = retrieve_session_context(
                         recall_memory,
                         input_route.normalized_text,
@@ -1422,7 +1491,10 @@ def main():
 
                     bridge = LatencyBridge(
                         delay_seconds=bridge_delay_seconds,
-                        enabled=LATENCY_BRIDGE_ENABLED,
+                        enabled=(
+                            LATENCY_BRIDGE_ENABLED
+                            and not input_route.skip_latency_bridge
+                        ),
                         on_fire=route_bridge_callback,
                     )
 
@@ -1461,22 +1533,54 @@ def main():
                     assistant_text = ""
                     response = None
 
-                    response = iccs.respond(
-                        user_text=user_text,
-                        history=request_history,
-                        memory_context="",
-                        require_exact_prefix=require_exact_iccs_prefix,
-                        retrieved_context=retrieved_context,
-                        response_instruction=response_policy.instruction,
-                        temperature=response_policy.temperature,
-                        num_predict=response_policy.num_predict,
-                        completion_state=completion_state,
-                    )
+                    if model_recall_requested:
+                        # A normal turn consumes/clears the previous completed-turn
+                        # background prime inside iccs.respond(). Model recall skips
+                        # Ollama entirely, so settle that pending prime explicitly
+                        # before scheduling the next completed-turn prime. This does
+                        # not change the prompt or ICCS shape; it only completes the
+                        # existing ICCS lifecycle for this no-Ollama route.
+                        iccs.wait_for_prepared_prefix()
 
-                    if response is None:
-                        raise RuntimeError(
-                            "Ollama response stream was not created."
+                        # Direct replay: no Ollama request, no retrieved assistant
+                        # text in the prompt, and no new response instruction.
+                        assistant_text = (
+                            model_recall_answer
+                            or "I don't remember what I said about that yet."
                         )
+
+                        print(
+                            "[MODEL MEMORY DIRECT] "
+                            f"found={bool(model_recall_answer)} "
+                            f"characters={len(assistant_text)}",
+                            flush=True,
+                        )
+
+                        enqueue_complete_response(
+                            assistant_text,
+                            first_audio_callback=bridge.resolve,
+                        )
+
+                    else:
+                        response = iccs.respond(
+                            user_text=user_text,
+                            history=request_history,
+                            memory_context="",
+                            require_exact_prefix=require_exact_iccs_prefix,
+                            retrieved_context=retrieved_context,
+                            response_instruction=response_policy.instruction,
+                            temperature=response_policy.temperature,
+                            num_predict=response_policy.num_predict,
+                            completion_state=completion_state,
+                        )
+
+                        if response is None:
+                            raise RuntimeError(
+                                "Ollama response stream was not created."
+                            )
+
+                    if model_recall_requested:
+                        pass
 
                     elif authoritative_response_required:
                         # Fact-backed answers are collected before speech so a
@@ -1675,8 +1779,42 @@ def main():
                     continue
 
                 # Preserve Nancee's real answer in the one-turn live prompt.
-                # FTS5 still stores only the raw user utterance.
+                # User recall and assistant recall are separate FTS5 archives.
                 memory_assistant_text = assistant_text
+
+                # First model-memory policy: only informative question answers
+                # and detailed responses are retained. This storage happens
+                # after generation and never adds assistant memory to the
+                # current prompt.
+                if input_route.kind in {"question", "detailed"}:
+                    assistant_memory_id = assistant_recall_memory.add_response(
+                        user_text=user_text,
+                        assistant_text=assistant_text,
+                    )
+
+                    if MEMORY_DEBUG_ENABLED:
+                        print(
+                            "[MODEL MEMORY ADD] "
+                            f"id={assistant_memory_id} "
+                            f"route={input_route.kind}",
+                            flush=True,
+                        )
+
+                # If the previous turn was an explicit "ask me ..." directive,
+                # a short normal answer can now be stored with the topic that
+                # made it meaningful. This only feeds the existing user-memory
+                # archive; it adds no new prompt field or ICCS prefix content.
+                pending_answer_memory = ""
+
+                if (
+                    pending_memory_topic_for_turn
+                    and input_route.kind == "normal"
+                    and not input_route.store_recall
+                ):
+                    pending_answer_memory = build_pending_answer_memory(
+                        pending_memory_topic_for_turn,
+                        user_text,
+                    )
 
                 # Apply narrow "it was NEW, not OLD" corrections using the
                 # single router decision. Rewriting the original sentence
@@ -1728,6 +1866,25 @@ def main():
                                 "[MEMORY RAW SKIP] backend_rejected=true",
                                 flush=True,
                             )
+                elif pending_answer_memory:
+                    added_memory_id = recall_memory.add_turn(
+                        user_text=pending_answer_memory,
+                    )
+
+                    if MEMORY_DEBUG_ENABLED:
+                        if added_memory_id is not None:
+                            print(
+                                f"[MEMORY RAW ADD] id={added_memory_id} "
+                                f"stored={pending_answer_memory!r} "
+                                f"source={user_text!r} "
+                                "reason=pending_question_answer",
+                                flush=True,
+                            )
+                        else:
+                            print(
+                                "[MEMORY RAW SKIP] backend_rejected=true",
+                                flush=True,
+                            )
                 elif MEMORY_DEBUG_ENABLED:
                     print(
                         "[MEMORY RAW SKIP] "
@@ -1735,6 +1892,16 @@ def main():
                         f"text={user_text!r}",
                         flush=True,
                     )
+
+                if input_route.pending_memory_topic:
+                    pending_user_memory_topic = input_route.pending_memory_topic
+
+                    if MEMORY_DEBUG_ENABLED:
+                        print(
+                            "[MEMORY PENDING QUESTION] "
+                            f"topic={pending_user_memory_topic!r}",
+                            flush=True,
+                        )
 
                 recent_prompt_memory.add_turn(
                     user_text=user_text,
@@ -1761,7 +1928,8 @@ def main():
                     print(
                         "[MEMORY DEBUG] "
                         f"recent={recent_prompt_memory.get_stats()} "
-                        f"recall={recall_memory.get_stats()}",
+                        f"recall={recall_memory.get_stats()} "
+                        f"model_recall={assistant_recall_memory.get_stats()}",
                         flush=True,
                     )
 
@@ -1781,6 +1949,7 @@ def main():
                 flush=True,
             )
         finally:
+            assistant_recall_memory.close()
             stop_asr_worker()
             stop_event.set()
             worker.join(timeout=2.0)

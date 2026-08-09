@@ -1,15 +1,15 @@
 from __future__ import annotations
 
-import ast
 import unittest
-from pathlib import Path
+from unittest.mock import patch
 
 from input_router import route_user_input
 from memory_policy import looks_like_personal_fact_question
+from router_mon import RouterMonResult
 
 
 class TestPersonalFactQuestion(unittest.TestCase):
-    def test_stable_personal_attribute_questions_match(self):
+    def test_memory_policy_helper_still_identifies_stable_personal_questions(self):
         matching_questions = (
             "What color is my helicopter?",
             "What colour is my controller?",
@@ -25,12 +25,8 @@ class TestPersonalFactQuestion(unittest.TestCase):
                 self.assertTrue(
                     looks_like_personal_fact_question(question)
                 )
-                self.assertEqual(
-                    "recall",
-                    route_user_input(question).kind,
-                )
 
-    def test_diagnostic_questions_do_not_match(self):
+    def test_diagnostic_questions_do_not_match_memory_policy_helper(self):
         nonmatching_questions = (
             "Why is my application crashing?",
             "How do I fix my printer?",
@@ -46,40 +42,17 @@ class TestPersonalFactQuestion(unittest.TestCase):
                 self.assertFalse(
                     looks_like_personal_fact_question(question)
                 )
-                self.assertFalse(
-                    route_user_input(question).explicit_recall
-                )
 
-    def test_router_calls_personal_question_helper(self):
-        root = Path(__file__).resolve().parents[2]
-        source_path = root / "sherpa/input_router.py"
-        tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    def test_routermon_now_owns_semantic_personal_recall_classification(self):
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("recall", 0.9, "routerMon"),
+        ):
+            route = route_user_input("What color is my helicopter?")
 
-        route_function = None
-
-        for node in tree.body:
-            if (
-                isinstance(node, ast.FunctionDef)
-                and node.name == "route_user_input"
-            ):
-                route_function = node
-                break
-
-        self.assertIsNotNone(route_function)
-
-        called_names = {
-            call.func.id
-            for call in ast.walk(route_function)
-            if (
-                isinstance(call, ast.Call)
-                and isinstance(call.func, ast.Name)
-            )
-        }
-
-        self.assertIn(
-            "looks_like_personal_fact_question",
-            called_names,
-        )
+        self.assertEqual("recall", route.kind)
+        self.assertTrue(route.explicit_recall)
+        self.assertTrue(route.retrieve_recall)
 
 
 if __name__ == "__main__":
