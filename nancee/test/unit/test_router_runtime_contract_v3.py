@@ -6,6 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CHAT_SOURCE = (ROOT / "sherpa" / "nancee_chat.py").read_text(encoding="utf-8")
 ROUTER_SOURCE = (ROOT / "sherpa" / "input_router.py").read_text(encoding="utf-8")
+ROUTERMON_SOURCE = (ROOT / "sherpa" / "router_mon.py").read_text(encoding="utf-8")
 
 
 class RouterRuntimeContractV3Tests(unittest.TestCase):
@@ -13,35 +14,37 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
         self.assertEqual(1, CHAT_SOURCE.count("route_user_input("))
         self.assertIn("[INPUT ROUTE]", CHAT_SOURCE)
 
-    def test_routermon_replaces_broad_semantic_regex_router(self):
-        self.assertIn("classify_router_mon(", ROUTER_SOURCE)
+    def test_routermon_owns_conversational_routing(self):
+        self.assertIn("classify_router_mon(raw_text)", ROUTER_SOURCE)
+        self.assertNotIn("import re", ROUTER_SOURCE)
+        self.assertNotIn("re.compile", ROUTER_SOURCE)
+        self.assertNotIn("_HARD_GREETING_PATTERN", ROUTER_SOURCE)
+        self.assertNotIn("looks_like_perspective_correction", ROUTER_SOURCE)
+        self.assertNotIn("_looks_like_overshare", ROUTERMON_SOURCE)
+        self.assertNotIn("overshare_rule", ROUTERMON_SOURCE)
+        self.assertNotIn("import re", ROUTERMON_SOURCE)
 
-        forbidden = (
-            "_RECALL_QUERY_PATTERNS",
-            "_DETAILED_PATTERN",
-            "_COMMAND_PATTERN",
-            "_DIRECTED_REQUEST_PATTERN",
-            "_PERSONAL_UPDATE_START_PATTERN",
-            "_DECLARATIVE_VERB_PATTERN",
-        )
-
-        for token in forbidden:
-            with self.subTest(token=token):
-                self.assertNotIn(token, ROUTER_SOURCE)
-
-    def test_narrow_fast_paths_remain(self):
         for token in (
-            "_HARD_GREETING_PATTERN",
             "_FAST_AFFIRMATIVE",
             "_FAST_NEGATIVE",
             "_FAST_FAREWELL",
-            "_EXPLICIT_MEMORY_STORE_PATTERN",
-            "_resolve_contextual_memory",
-            "extract_simple_fact_correction",
-            "looks_like_perspective_correction",
+            "leading_hello_or_hi",
+            "reason=\"explicit_memory_store\"",
+            "reason=\"contextual_answer\"",
+            "reason=\"simple_fact_correction\"",
+            "reason=\"perspective_correction\"",
         ):
             with self.subTest(token=token):
-                self.assertIn(token, ROUTER_SOURCE)
+                self.assertNotIn(token, ROUTER_SOURCE)
+
+    def test_post_route_parsing_only_attaches_metadata(self):
+        self.assertIn('if intent == "memory_store":', ROUTER_SOURCE)
+        self.assertIn("extract_simple_fact_correction(raw_text)", ROUTER_SOURCE)
+        self.assertIn("extract_explicit_memory_store_payload(raw_text)", ROUTER_SOURCE)
+        self.assertIn("extract_pending_memory_topic(raw_text)", ROUTER_SOURCE)
+        self.assertIn("resolve_contextual_answer_memory(", ROUTER_SOURCE)
+        self.assertIn('if intent == "greeting":', ROUTER_SOURCE)
+        self.assertIn('if intent in {"affirmative", "negative"}:', ROUTER_SOURCE)
 
     def test_short_greeting_can_disable_latency_bridge(self):
         self.assertIn("skip_latency_bridge: bool = False", ROUTER_SOURCE)
@@ -81,7 +84,7 @@ class RouterRuntimeContractV3Tests(unittest.TestCase):
 
     def test_ask_me_pending_answer_uses_existing_user_memory_only(self):
         self.assertIn("pending_memory_topic: str | None = None", ROUTER_SOURCE)
-        self.assertIn("pending_memory_topic=_extract_ask_me_topic(raw_text)", ROUTER_SOURCE)
+        self.assertIn("pending_memory_topic=extract_pending_memory_topic(raw_text)", ROUTER_SOURCE)
         self.assertIn("pending_user_memory_topic = None", CHAT_SOURCE)
         self.assertIn("pending_answer_memory = build_pending_answer_memory(", CHAT_SOURCE)
         self.assertIn("elif pending_answer_memory:", CHAT_SOURCE)

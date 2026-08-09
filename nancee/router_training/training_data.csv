@@ -727,7 +727,7 @@ repeat that last sentence,clarify
 I couldn't hear that,clarify
 I couldnt hear the answer,clarify
 I missed what you said,clarify
-what did you just say,clarify
+what did you just say,model_recall
 can you repeat your response,clarify
 say your response again,clarify
 I'm confused by your answer,clarify
@@ -1307,3 +1307,320 @@ remind me what I siad about caching,recall
 what was my explanation of tf idf,recall
 what did I recomend earlier,recall
 bring back what I sed earlier,recall
+hey what is up,greeting
+hello friend,greeting
+nice to hear you,greeting
+good to see you,greeting
+hey hey,greeting
+yo there,greeting
+hi again,greeting
+morning there,greeting
+evening there,greeting
+ttyl,farewell
+ttyl!,farewell
+later man,farewell
+bye for now,farewell
+have a good night,farewell
+have a good day,farewell
+I am done for now,farewell
+I gotta go,farewell
+I am heading out,farewell
+I will talk to you later,farewell
+we can pick this up later,farewell
+let's pick this up tomorrow,farewell
+that is all for now,farewell
+I am signing off,farewell
+sure thing,affirmative
+for sure,affirmative
+that works for me,affirmative
+that is right,affirmative
+exactly right,affirmative
+you got it,affirmative
+I am good with that,affirmative
+keep it that way,affirmative
+use that one,affirmative
+yes that is what I meant,affirmative
+yeah that is exactly what I meant,affirmative
+not yet,negative
+nevermind,negative
+I do not think so,negative
+definitely not,negative
+leave it alone,negative
+not that one,negative
+that is not right,negative
+I would rather not,negative
+I'd rather not,negative
+no I do not want that,negative
+no I don't want that,negative
+not now,negative
+hold off on that,negative
+do not continue,negative
+no leave it as is,negative
+remember that I use Linux on my desktop,memory_store
+do not forget that I keep the spare fuse in the glove box,memory_store
+save this in memory: I parked on level four,memory_store
+save that I changed the connector yesterday,memory_store
+store this for later: I use PipeWire on the Pi,memory_store
+store that my benchmark uses three threads,memory_store
+make a note that I bought a blue backpack,memory_store
+keep this in memory: my preferred editor is vim,memory_store
+for the record I drive a Jeep Patriot,memory_store
+just so you know my headset is the WT5,memory_store
+actually it was Tuesday not Monday,memory_store
+actually it was the power board not the USB controller,memory_store
+actually I bought the blue backpack not the black one,memory_store
+actually the problem was PipeWire not PulseAudio,memory_store
+actually I used three threads not four,memory_store
+actually the CPU was at 2.4 GHz not 2.6 GHz,memory_store
+no it was Tuesday not Monday,memory_store
+no it was the blue backpack not the black backpack,memory_store
+no I bought the jeans yesterday not today,memory_store
+no the spare key is in the desk not the drawer,memory_store
+no my GPU is the RX 6600 not the RTX 3060,memory_store
+wait it was the front sensor not the rear sensor,memory_store
+wait I parked by the west elevator not the east one,memory_store
+correction I use Kokoro not Piper,memory_store
+correction the service runs on the Pi not the desktop,memory_store
+I need to correct that: the meeting is Friday not Thursday,memory_store
+I said that wrong: I bought it at Ocean Market not Walmart,memory_store
+update that memory: my max clock is 2.4 GHz,memory_store
+change what you remember: the cable is in the glove box,memory_store
+remember this correction: I use Debian on the Pi,memory_store
+please remember that the microphone is USB not Bluetooth,memory_store
+please save that my current model is llama3.2:3b,memory_store
+note for later: the warmup service starts before the demo,memory_store
+remember that the line out volume was set to ninety five percent,memory_store
+store this: the install worked on Debian 13.5,memory_store
+save this: the NVMe drive is the boot drive,memory_store
+do not forget that I reverted the overclock,memory_store
+remember that I want routerMon to own routing,memory_store
+what is my favorite band,recall
+what vehicle do I have,recall
+what do you know about me,recall
+tell me what I told you about the Pi,recall
+show me what you remember about the backpack,recall
+show me what you remember about me,recall
+can you remember what I said about the fuse,recall
+what did I tell you about the microphone,recall
+where did I say I parked,recall
+what did I buy yesterday,recall
+was it me or you who bought the backpack,recall
+was it you or me who bought the backpack,recall
+did I buy the backpack or did you,recall
+did you buy the backpack or did I,recall
+was it me or you who changed the fuse,recall
+did I change the fuse or did you,recall
+was it you or me who ran the benchmark,recall
+did you run the benchmark or did I,recall
+hey what did I tell you about the router,recall
+hello what do you remember about my GPU,recall
+good morning what did I say about the overclock,recall
+what did you say earlier about the benchmark,model_recall
+what was your last answer,model_recall
+remind me what you said about the memory problem,model_recall
+what did you recommend about the thread count,model_recall
+what explanation did you give me about TF IDF,model_recall
+what did you tell me to change in the config,model_recall
+what were you saying about logistic regression,model_recall
+hey what did you say earlier about the cache,model_recall
+hello what did you tell me about the router,model_recall
+good morning what was your explanation of FTS5,model_recall
+can you repeat what you said about the service,model_recall
+what was that answer you gave me,model_recall
+how does FTS5 work,question
+why does prompt length affect latency,question
+how many bytes are in a kilobyte,question
+what does a tensor mean,question
+what is the difference between a list and a tuple,question
+why does Python use None instead of null,question
+how does set union work,question
+hello what is TF IDF,question
+hi what is logistic regression,question
+hey how does FTS5 rank results,question
+good morning what is prefix caching,question
+hello why does the model need a context window,question
+hi what is the difference between recall and model recall,question
+hey what does this error code mean,question
+what happens when a hash table has a collision,question
+run the benchmark again,directive
+show me the failed tests,directive
+open the log file,directive
+check the current configuration,directive
+compare these two runs,directive
+ask me about the backpack,directive
+only give me the final numbers,directive
+rerun the tests and list the failures,directive
+hello restart the service,directive
+hi run the benchmark again,directive
+hey check the logs and summarize the failures,directive
+good morning run the unit tests,directive
+never mind the old result rerun the benchmark,directive
+okay run it again with three threads,directive
+sure go ahead and restart the service,directive
+please compare the two output files,directive
+tell me the three biggest differences,directive
+read the last ten lines of the log,directive
+what do you mean by that,clarify
+what did you mean by that,clarify
+I do not understand what you mean,clarify
+I don't understand what you mean,clarify
+I do not understand that last explanation,clarify
+I don't understand that last explanation,clarify
+which file are you talking about,clarify
+what does that part mean,clarify
+can you clarify that,clarify
+clarify what you just said,clarify
+say that another way,clarify
+I am confused by that,clarify
+I'm confused by that,clarify
+when you said cache what exactly did you mean,clarify
+when you said reset were you talking about the model or the session,clarify
+hello I do not understand that last explanation,clarify
+hey can you clarify what you meant by prepared prefix,clarify
+explain exactly how TF IDF and logistic regression work together from beginning to end,detailed
+give me the complete explanation of how routerMon classifies a sentence,detailed
+walk me through the whole routing pipeline step by step,detailed
+go deep on why word and character ngrams help this classifier,detailed
+compare regex routing and TF IDF routing in detail and include the tradeoffs,detailed
+hello explain exactly how the context cache works from beginning to end,detailed
+hi give me a thorough explanation of the memory pipeline,detailed
+hey walk me through every step from ASR to the LLM to TTS,detailed
+"I changed the thread count, reverted the CPU clock, moved the audio buffer, reran the benchmark twice, and now first token time is better but total time is worse, so I want you to reason through the whole situation and tell me what each measurement suggests.",detailed
+"The first run was fast, the second run had a slower prompt evaluation, the third run generated faster, and none of them throttled, but I also changed the context shape between runs and I am trying to understand which variable actually mattered.",detailed
+"I have three different symptoms at once: recall is finding the right memory, the model answer is still slightly wrong, and the TTS starts later than before, so consider all three parts together instead of treating this as one isolated bug.",detailed
+"I spent a while testing this because the service starts correctly, the model is warm, the prefix hash matches, and the router only takes about a millisecond, yet one path is still much slower, and I want an explanation that accounts for all of those facts.",detailed
+"Here is the whole situation: the Pi is headless, PipeWire is working, the USB audio device is selected, the model is already loaded, and the first token still varies by more than a second depending on the prompt shape, so help me reason through the architecture.",detailed
+"I tried the old configuration, then the new configuration, then rolled back only the thread count while leaving the context changes in place, and the result improved only halfway, which makes me think two things are interacting rather than one setting being solely responsible.",detailed
+"The code passes the unit tests, but the live voice test behaves differently because Whisper sometimes changes short words, the router sees raw text now, and memory lookup adds context on some routes, so I want you to analyze how those pieces could combine.",detailed
+"My concern is not just this one misroute. The classifier is fast enough, the regex rules are hard to maintain, the tests started depending on the rules, and every new wording adds another edge case, so explain the architectural implications of removing the regex layer.",detailed
+"There are several observations I want you to keep together: the model file is small, prediction is around one millisecond, word ngrams capture phrases, character ngrams help spelling variation, and logistic regression gives us probabilities, so explain why that stack fits this router.",detailed
+"I want the long version here because I am comparing two designs, one where the harness decides intent with hand written rules and another where a trained classifier decides intent, and I care about latency, maintainability, generalization, and failure modes.",detailed
+"I tested greetings, farewells, memory recall, directives, and detailed prompts, and most of them work, but tiny replies like yup and nope are less reliable while long questions are strong, so explain what that pattern says about the training distribution.",detailed
+"The install worked, audio works, the LLM is warm, and the router is fast, but I still want to understand why the semantic classifier can replace a lot of brittle Python without replacing deterministic memory extraction after the route is chosen.",detailed
+the Pi is running normally today,normal
+the temperature is sixty seven degrees,normal
+I am testing the microphone,normal
+I changed the cable yesterday,normal
+I use Linux every day,normal
+the benchmark finished in two seconds,normal
+the service is already running,normal
+I think the new layout is cleaner,normal
+this version feels faster,normal
+okay the Pi is running at normal temperature,normal
+sure is windy outside today,normal
+yeah the logs are pretty noisy today,normal
+no errors showed up in the last run,normal
+good morning traffic was awful today,normal
+I will work on the training data next,normal
+I am going to rerun it later,normal
+the backpack is sitting by the desk,normal
+the cable is in my bag,normal
+I was reading about logistic regression last night,normal
+I have one more thing to test,normal
+that result is interesting,normal
+the current model is small enough for the Pi,normal
+the audio sounds much better now,normal
+what's the difference between a process and a thread,question
+what is the difference between a process and a thread,question
+what's the difference between RAM and storage,question
+what's the difference between TCP and UDP,question
+what is a hash table,question
+how does a set work,question
+what does amortized mean,question
+how does sorted work in python,question
+what does a mutex do,question
+why would I use a deque,question
+how does TF IDF work,question
+what does prefix caching mean,question
+why did that command fail,question
+how many bytes are in an integer,question
+what is the purpose of virtual memory,question
+what does this error mean,question
+can you explain what a thread is,question
+could you explain what a process is,question
+is a tuple immutable,question
+are sets ordered,question
+does list append create a new list,question
+what happens when python garbage collects an object,question
+how is a dictionary lookup fast,question
+why is binary search logarithmic,question
+what's the difference between stack and heap memory,question
+what's the difference between a class and an object,question
+finally got the audio working and it sounds great,normal
+I finally got the audio working and it sounds great,normal
+the audio is working now,normal
+it sounds great now,normal
+I got it working,normal
+that fixed it,normal
+the tests all passed,normal
+the install worked beautifully,normal
+the Pi is running normally now,normal
+the model loaded fine,normal
+the benchmark finished,normal
+I switched it back to 2.4 GHz,normal
+I changed the cable and it worked,normal
+the headset sounds much better,normal
+the new config feels faster,normal
+I think this version is better,normal
+okay that makes sense,normal
+sure that makes sense,normal
+yeah that makes sense,normal
+uh,normal
+um,normal
+hmm,normal
+uh okay,normal
+um okay,normal
+hmm I see,normal
+well that worked,normal
+okay cool,normal
+nice that worked,normal
+sweet it works,normal
+cool the audio is fixed,normal
+that seems right,normal
+explain in detail how a process differs from a thread,detailed
+give me a detailed explanation of processes and threads,detailed
+walk me through exactly how TF IDF and logistic regression work together,detailed
+explain step by step how a hash table handles collisions,detailed
+give me the full reasoning behind how prefix caching reduces prompt evaluation,detailed
+I want a deep explanation of python garbage collection and reference counting,detailed
+break down every step of how a request moves through ASR routing the LLM and TTS,detailed
+compare processes and threads in detail including memory isolation scheduling and failure behavior,detailed
+explain the differences between TCP and UDP in depth with examples and tradeoffs,detailed
+walk me through the entire lifecycle of a python object from allocation to garbage collection,detailed
+the first run was fast the second run had slower prompt evaluation and the third generated faster but I changed the context shape between runs too so I want to understand which variable actually caused the difference,detailed
+I changed the thread count the prompt shape and the context size between several runs and the timings moved in different directions so help me separate which change likely affected load time prompt evaluation and generation,detailed
+the model is warm the prefix hash matches and first token is still slower on some turns while generation speed stays stable and I want to reason through what parts of the pipeline could explain that,detailed
+I have three possible causes for this bug the audio device changed the pipewire route changed and the service restarted at the same time so walk through how you would isolate which one actually caused the failure,detailed
+the recall result is correct but sometimes the fresh snapshot path is used and sometimes the prepared prefix path is used and I want a detailed explanation of why those shapes differ and what that means for latency,detailed
+explain this thoroughly,detailed
+I want all the details,detailed
+walk through this carefully from beginning to end,detailed
+give me a detailed comparison of lists tuples sets and dictionaries,detailed
+explain in depth why context shape can affect prompt evaluation time,detailed
+walk me through how FTS5 tokenizes ranks and retrieves text,detailed
+give me a thorough explanation of how logistic regression turns TF IDF features into class probabilities,detailed
+explain every major tradeoff between regex routing and a trained text classifier,detailed
+I did not,negative
+I didn't,negative
+I haven't,negative
+I can't,negative
+incorrect,negative
+I did,affirmative
+I have,affirmative
+I can,affirmative
+the service restarted fine,normal
+the service restarted successfully,normal
+the service restarted without errors,normal
+the tests ran successfully,normal
+the benchmark completed normally,normal
+the model loaded correctly,normal
+restart the service again,directive
+rerun the benchmark,directive
+not this time,negative
+not today,negative
+not right now,negative
+not for now,negative
+maybe not,negative
+not Tuesday Wednesday,memory_store
+not the USB controller the power board,memory_store
+actually not 2.6 GHz I switched it to 2.4 GHz,memory_store

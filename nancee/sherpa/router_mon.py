@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,12 +21,6 @@ REQUIRED_INTENTS = {
     "question",
     "recall",
 }
-DEFAULT_OVERSHARE_RULES = {
-    "min_words": 30,
-    "min_chars": 170,
-    "min_structure_points": 3,
-}
-
 
 @dataclass(frozen=True)
 class RouterMonResult:
@@ -38,7 +31,6 @@ class RouterMonResult:
 
 _artifact: dict[str, Any] | None = None
 _pipeline: Any | None = None
-_overshare_rules = dict(DEFAULT_OVERSHARE_RULES)
 _model_path: Path | None = None
 
 
@@ -73,7 +65,6 @@ def load_router_mon(model_path: str | Path | None = None) -> None:
     """
     global _artifact
     global _pipeline
-    global _overshare_rules
     global _model_path
 
     requested_path = (
@@ -143,18 +134,6 @@ def load_router_mon(model_path: str | Path | None = None) -> None:
             + ", ".join(missing)
         )
 
-    configured_rules = artifact.get("overshare_rules", {})
-
-    if isinstance(configured_rules, dict):
-        _overshare_rules = {
-            **DEFAULT_OVERSHARE_RULES,
-            **{
-                key: int(value)
-                for key, value in configured_rules.items()
-                if key in DEFAULT_OVERSHARE_RULES
-            },
-        }
-
     _artifact = artifact
     _pipeline = pipeline
     _model_path = requested_path
@@ -168,45 +147,8 @@ def load_router_mon(model_path: str | Path | None = None) -> None:
     )
 
 
-def _overshare_metrics(text: str) -> tuple[int, int, int]:
-    normalized = " ".join(str(text).strip().split())
-    words = re.findall(r"\b[\w'-]+\b", normalized)
-    sentence_marks = len(re.findall(r"[.!?]+", normalized))
-    commas = normalized.count(",")
-    conjunctions = len(
-        re.findall(
-            r"\b(?:and|but|because|while|although|though|then|when|after|before|so)\b",
-            normalized,
-            flags=re.IGNORECASE,
-        )
-    )
-
-    return len(words), len(normalized), sentence_marks + commas + conjunctions
-
-
-def _looks_like_overshare(text: str) -> bool:
-    words, characters, structure_points = _overshare_metrics(text)
-
-    enough_size = (
-        words >= _overshare_rules["min_words"]
-        or characters >= _overshare_rules["min_chars"]
-    )
-
-    return (
-        enough_size
-        and structure_points >= _overshare_rules["min_structure_points"]
-    )
-
-
 def classify_router_mon(text: str) -> RouterMonResult:
     """Return one intent from the preloaded local routerMon classifier."""
-    if _looks_like_overshare(text):
-        return RouterMonResult(
-            intent="detailed",
-            confidence=1.0,
-            source="overshare_rule",
-        )
-
     if _pipeline is None:
         load_router_mon()
 

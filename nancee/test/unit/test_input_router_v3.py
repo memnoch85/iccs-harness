@@ -20,7 +20,7 @@ class InputRouterV3Tests(unittest.TestCase):
             source=source,
         )
 
-    def test_short_hello_or_hi_is_hard_greeting_without_bridge(self):
+    def test_greetings_are_selected_by_routermon(self):
         samples = (
             "Hi",
             "Hello",
@@ -31,27 +31,28 @@ class InputRouterV3Tests(unittest.TestCase):
 
         for text in samples:
             with self.subTest(text=text):
-                with patch("input_router.classify_router_mon") as classify:
+                with patch(
+                    "input_router.classify_router_mon",
+                    return_value=self.router_result("greeting"),
+                ) as classify:
                     route = route_user_input(text)
 
-                classify.assert_not_called()
+                classify.assert_called_once_with(text)
                 self.assertEqual("greeting", route.kind)
-                self.assertEqual("leading_hello_or_hi", route.reason)
+                self.assertTrue(route.reason.startswith("routerMon:greeting:"))
                 self.assertTrue(route.skip_latency_bridge)
 
-    def test_long_hello_request_goes_to_routermon(self):
+    def test_long_hello_request_is_not_forced_to_greeting(self):
+        text = "Hello, explain step by step how a database index works."
+
         with patch(
             "input_router.classify_router_mon",
             return_value=self.router_result("detailed"),
         ) as classify:
-            route = route_user_input(
-                "Hello, explain step by step how a database index works."
-            )
+            route = route_user_input(text)
 
+        classify.assert_called_once_with(text)
         self.assertEqual("detailed", route.kind)
-        self.assertFalse(route.skip_latency_bridge)
-        classify.assert_called_once()
-        self.assertNotIn("hello", classify.call_args.args[0].lower())
 
     def test_model_recall_is_distinct_from_user_recall(self):
         with patch(
@@ -88,7 +89,7 @@ class InputRouterV3Tests(unittest.TestCase):
         self.assertFalse(route.explicit_recall)
         self.assertFalse(route.allow_weak_match)
 
-    def test_detailed_overshare_can_store_declarative_user_memory(self):
+    def test_detailed_route_can_store_declarative_user_memory(self):
         text = (
             "Finch is from Michigan and plays guitar. "
             "They mostly listen to metal and recently moved here."
@@ -96,11 +97,7 @@ class InputRouterV3Tests(unittest.TestCase):
 
         with patch(
             "input_router.classify_router_mon",
-            return_value=self.router_result(
-                "detailed",
-                confidence=1.0,
-                source="overshare_rule",
-            ),
+            return_value=self.router_result("detailed"),
         ):
             route = route_user_input(text)
 
@@ -108,13 +105,16 @@ class InputRouterV3Tests(unittest.TestCase):
         self.assertTrue(route.store_recall)
         self.assertIsNotNone(route.recall_storage_text)
 
-    def test_explicit_memory_store_is_fast_and_extracts_payload(self):
-        with patch("input_router.classify_router_mon") as classify:
-            route = route_user_input(
-                "Remember that I want the greeting path to stay fast."
-            )
+    def test_memory_store_route_extracts_command_payload_after_classification(self):
+        text = "Remember that I want the greeting path to stay fast."
 
-        classify.assert_not_called()
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=self.router_result("memory_store"),
+        ) as classify:
+            route = route_user_input(text)
+
+        classify.assert_called_once_with(text)
         self.assertEqual("memory_store", route.kind)
         self.assertTrue(route.store_recall)
         self.assertEqual(
@@ -122,26 +122,44 @@ class InputRouterV3Tests(unittest.TestCase):
             route.recall_storage_text,
         )
 
-    def test_contextual_yes_beats_fast_affirmative(self):
-        with patch("input_router.classify_router_mon") as classify:
+    def test_memory_store_route_can_carry_fact_correction_metadata(self):
+        text = "Actually, it was the power board, not the USB controller."
+
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=self.router_result("memory_store"),
+        ) as classify:
+            route = route_user_input(text)
+
+        classify.assert_called_once_with(text)
+        self.assertEqual("memory_store", route.kind)
+        self.assertEqual(("the power board", "the USB controller"), route.correction)
+        self.assertFalse(route.store_recall)
+
+    def test_contextual_answer_keeps_routermon_route_and_adds_memory_metadata(self):
+        text = "Sure."
+
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=self.router_result("affirmative"),
+        ) as classify:
             route = route_user_input(
-                "Sure.",
+                text,
                 previous_turn={
                     "user": "Ask me whether I finished wiring the power board.",
                     "assistant": "Did you finish wiring the power board?",
                 },
             )
 
-        classify.assert_not_called()
-        self.assertEqual("clarify", route.kind)
-        self.assertEqual("contextual_answer", route.reason)
+        classify.assert_called_once_with(text)
+        self.assertEqual("affirmative", route.kind)
         self.assertTrue(route.store_recall)
         self.assertEqual(
             "I did finish wiring the power board.",
             route.recall_storage_text,
         )
 
-    def test_obvious_fast_affirmative_negative_and_farewell(self):
+    def test_affirmative_negative_and_farewell_are_selected_by_routermon(self):
         samples = {
             "Yeah.": "affirmative",
             "Nope.": "negative",
@@ -150,21 +168,26 @@ class InputRouterV3Tests(unittest.TestCase):
 
         for text, expected in samples.items():
             with self.subTest(text=text):
-                with patch("input_router.classify_router_mon") as classify:
+                with patch(
+                    "input_router.classify_router_mon",
+                    return_value=self.router_result(expected),
+                ) as classify:
                     route = route_user_input(text)
 
-                classify.assert_not_called()
+                classify.assert_called_once_with(text)
                 self.assertEqual(expected, route.kind)
+                self.assertTrue(route.reason.startswith(f"routerMon:{expected}:"))
 
     def test_directive_is_selected_by_routermon(self):
+        text = "Hey Becca, ask me what I bought yesterday."
+
         with patch(
             "input_router.classify_router_mon",
             return_value=self.router_result("directive"),
-        ):
-            route = route_user_input(
-                "Hey Becca, ask me what I bought yesterday."
-            )
+        ) as classify:
+            route = route_user_input(text)
 
+        classify.assert_called_once_with(text)
         self.assertEqual("directive", route.kind)
 
     def test_normal_personal_statement_can_still_store_user_memory(self):

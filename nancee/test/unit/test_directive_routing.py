@@ -74,15 +74,21 @@ class DirectiveRoutingTests(unittest.TestCase):
             with self.subTest(request=request):
                 self.assert_directive(request)
 
-    def test_contextual_answer_is_not_directive(self):
-        route = route_user_input(
-            "I sure did.",
-            previous_turn={
-                "user": "Ask me whether I finished wiring the power board.",
-                "assistant": "Did you finish wiring the power board?",
-            },
-        )
-        self.assertEqual("clarify", route.kind)
+    def test_contextual_answer_keeps_classifier_route(self):
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("affirmative", 0.9, "routerMon"),
+        ):
+            route = route_user_input(
+                "I sure did.",
+                previous_turn={
+                    "user": "Ask me whether I finished wiring the power board.",
+                    "assistant": "Did you finish wiring the power board?",
+                },
+            )
+
+        self.assertEqual("affirmative", route.kind)
+        self.assertTrue(route.store_recall)
 
 
 if __name__ == "__main__":

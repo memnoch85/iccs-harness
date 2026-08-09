@@ -10,12 +10,16 @@ from router_mon import RouterMonResult
 
 class RoutingLanguageFixV32Tests(unittest.TestCase):
     def test_explicit_remember_command_stores_statement(self):
-        route = route_user_input(
-            "Remember that I bought a blue ceramic mug yesterday."
-        )
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("memory_store", 0.9, "routerMon"),
+        ):
+            route = route_user_input(
+                "Remember that I bought a blue ceramic mug yesterday."
+            )
 
         self.assertEqual("memory_store", route.kind)
-        self.assertEqual("explicit_memory_store", route.reason)
+        self.assertTrue(route.reason.startswith("routerMon:memory_store:"))
         self.assertTrue(route.store_recall)
         self.assertEqual(
             "I bought a blue ceramic mug yesterday.",
@@ -23,9 +27,13 @@ class RoutingLanguageFixV32Tests(unittest.TestCase):
         )
 
     def test_remember_this_command_strips_command_text(self):
-        route = route_user_input(
-            "Remember this: I keep the spare fuse in the glove box."
-        )
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("memory_store", 0.9, "routerMon"),
+        ):
+            route = route_user_input(
+                "Remember this: I keep the spare fuse in the glove box."
+            )
 
         self.assertEqual("memory_store", route.kind)
         self.assertTrue(route.store_recall)
@@ -35,9 +43,13 @@ class RoutingLanguageFixV32Tests(unittest.TestCase):
         )
 
     def test_dont_forget_command_stores_statement(self):
-        route = route_user_input(
-            "Don't forget that I parked beside the west elevator."
-        )
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("memory_store", 0.9, "routerMon"),
+        ):
+            route = route_user_input(
+                "Don't forget that I parked beside the west elevator."
+            )
 
         self.assertEqual("memory_store", route.kind)
         self.assertTrue(route.store_recall)
@@ -59,8 +71,8 @@ class RoutingLanguageFixV32Tests(unittest.TestCase):
             "input_router.classify_router_mon",
             return_value=RouterMonResult(
                 "detailed",
-                1.0,
-                "overshare_rule",
+                0.9,
+                "routerMon",
             ),
         ):
             route = route_user_input(text)

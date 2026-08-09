@@ -17,8 +17,13 @@ class ResponsePolicyTests(unittest.TestCase):
 
         return response_policy_for_route(route.kind)
 
-    def test_short_hard_greeting_is_short(self):
-        route = route_user_input("Hello friend")
+    def test_routermon_greeting_is_short(self):
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("greeting", 0.9, "routerMon"),
+        ):
+            route = route_user_input("Hello friend")
+
         policy = response_policy_for_route(route.kind)
         self.assertEqual("greeting", policy.name)
         self.assertTrue(route.skip_latency_bridge)
@@ -38,9 +43,14 @@ class ResponsePolicyTests(unittest.TestCase):
         self.assertEqual("normal", policy.name)
 
     def test_memory_store_uses_acknowledge_policy(self):
-        route = route_user_input(
-            "Remember that I bought a blue backpack at Macy's."
-        )
+        with patch(
+            "input_router.classify_router_mon",
+            return_value=RouterMonResult("memory_store", 0.9, "routerMon"),
+        ):
+            route = route_user_input(
+                "Remember that I bought a blue backpack at Macy's."
+            )
+
         policy = response_policy_for_route(route.kind)
         self.assertEqual("memory_store", route.kind)
         self.assertEqual("acknowledge", policy.name)

@@ -35,8 +35,37 @@ class RouterTrainingContractTests(unittest.TestCase):
         rows = self._rows()
         labels = {row["intent"] for row in rows}
 
-        self.assertEqual(1308, len(rows))
+        self.assertGreaterEqual(len(rows), 1308)
         self.assertEqual(REQUIRED_INTENTS, labels)
+
+
+def test_model_owned_routing_examples_are_merged(self):
+    examples = {
+        (row["text"].strip().lower(), row["intent"].strip())
+        for row in self.rows
+    }
+
+    required = {
+        (
+            "actually it was the power board not the usb controller",
+            "memory_store",
+        ),
+        (
+            "was it you or me who bought the backpack",
+            "recall",
+        ),
+        (
+            "hello explain exactly how the context cache works "
+            "from beginning to end",
+            "detailed",
+        ),
+        (
+            "hello",
+            "greeting",
+        ),
+    }
+
+    self.assertTrue(required.issubset(examples))
 
     def test_training_data_does_not_bake_in_assistant_name(self):
         for row in self._rows():
