@@ -2,6 +2,16 @@
 
 A local, CPU-only voice-assistant harness for demonstrating Iterative Cache Control and Shaping (ICCS) on a Raspberry Pi 5. This project demonstrates how ICCS, FTS5 session memory, and response routing can keep latency stable and predictable across long-running conversations.
 
+## Video Walkthrough and Demo
+
+A full walkthrough of ICCS, the reasoning behind the design, benchmark results, and a live demonstration of the voice harness running locally on a Raspberry Pi 5.
+
+[![Watch the ICCS Voice Harness demo](https://img.youtube.com/vi/XYolq5iPF14/maxresdefault.jpg)](https://www.youtube.com/watch?v=XYolq5iPF14)
+
+**[Watch the ICCS Voice Harness walkthrough and demo on YouTube](https://www.youtube.com/watch?v=XYolq5iPF14)**
+
+
+
 Input routing is handled locally by `routerMon`. If a phrase routes incorrectly, see [routerMon training](nancee/router_training/README.md).
 
 New here? Start with [What is ICCS?](https://github.com/memnoch85/iccs).
