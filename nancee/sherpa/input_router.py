@@ -105,12 +105,22 @@ def _route_from_router_mon(
     if intent == "detailed":
         storable_memory_text = extract_storable_memory_text(raw_text)
 
+        # If a detailed turn contains storable user information,
+        # preserve the complete disclosure instead of dropping
+        # clauses the memory extractor does not recognize.
+        storage_text = (
+            raw_text
+            if storable_memory_text is not None
+            else None
+        )
+
         return InputRoute(
             "detailed",
             lowered,
             reason=reason,
-            store_recall=storable_memory_text is not None,
-            recall_storage_text=storable_memory_text,
+            retrieve_recall=False,
+            store_recall=storage_text is not None,
+            recall_storage_text=storage_text,
         )
 
     if intent == "directive":

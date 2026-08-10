@@ -146,7 +146,6 @@ def load_router_mon(model_path: str | Path | None = None) -> None:
         flush=True,
     )
 
-
 def classify_router_mon(text: str) -> RouterMonResult:
     """Return one intent from the preloaded local routerMon classifier."""
     if _pipeline is None:

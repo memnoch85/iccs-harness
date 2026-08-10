@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,13 +13,22 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import FeatureUnion, Pipeline
+from sklearn.preprocessing import FunctionTransformer
 
 
 ROOT = Path(__file__).resolve().parent
 TRAINING_CSV = ROOT / "training_data.csv"
 MODEL_FILE = ROOT / "routerMon.joblib"
 CONFUSION_FILE = ROOT / "routerMon_confusion_matrix.csv"
+
 RANDOM_STATE = 42
+
+SHERPA_ROOT = ROOT.parent / "sherpa"
+
+if str(SHERPA_ROOT) not in sys.path:
+    sys.path.insert(0, str(SHERPA_ROOT))
+
+from router_features import router_mon_structural_features
 
 OVERSHARE_RULES = {
     "min_words": 30,
@@ -95,6 +105,13 @@ def build_pipeline() -> Pipeline:
                 min_df=1,
                 sublinear_tf=True,
                 max_features=12000,
+            ),
+        ),
+        (
+            "structure",
+            FunctionTransformer(
+                router_mon_structural_features,
+                validate=False,
             ),
         ),
     ])

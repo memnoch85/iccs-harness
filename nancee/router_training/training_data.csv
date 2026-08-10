@@ -1636,3 +1636,33 @@ can you tell me what a turbocharger does?,question
 can you tell me how a supercharger works step by step please?,detailed
 walk me through how a turbocharger works step by step,detailed
 explain in detail how a supercharger works,detailed
+"I've been working on my car all weekend. I replaced the plugs, cleaned the throttle body, checked the fuel pressure, and I'm still getting a rough idle when the engine is warm.",detailed
+"A little about me. I grew up in Utah, I've worked with Linux for years, I mostly enjoy backend engineering, and lately I've been spending most of my free time learning about local AI.",detailed
+"My dog has been acting strange lately. He's eating normally, still wants to play, sleeps through the night, but every afternoon he starts pacing around the kitchen and whining near the door.",detailed
+"I changed several things on the Pi yesterday. I increased the thread count, changed the audio buffer, updated the model settings, and moved some initialization work around, so now I'm trying to figure out what actually caused the slowdown.",detailed
+"I've been getting back into chess lately. I play rapid more seriously than blitz, I spend a lot of time on puzzles, and I usually prefer aggressive positions where I can keep the initiative instead of defending passively.",detailed
+"Work has been strange lately. I finished one large project, started learning a different system, had several meetings about the next release, and now I'm trying to decide which technical area I should spend the most time improving.",detailed
+"I've been rebuilding my home server setup. I moved a few services into containers, changed the storage layout, replaced some old scripts, and added monitoring because I want the whole system to be easier to understand and maintain.",detailed
+"My weekend ended up being packed. I worked on a programming project Saturday morning, fixed a problem with my computer that afternoon, visited family that evening, and spent most of Sunday testing the changes I made.",detailed
+I've used Linux for a long time and I really enjoy understanding how the pieces fit together. I like working from the operating system upward instead of only learning applications because I want to know what the machine is actually doing.,detailed
+"I've been experimenting with local language models on small hardware. I care about response latency, memory use, prompt size, and keeping as much processing on the device as possible instead of depending on a cloud service.",detailed
+"My car has been running pretty well overall. I changed the oil recently, replaced an old belt, checked the brakes, and noticed a small vibration at highway speed that I haven't tracked down yet.",detailed
+"A little about my music taste. I listen to a lot of punk, emo, post-hardcore, and alternative music. I still go back to albums I listened to years ago, but I also like finding newer bands with a similar sound.",detailed
+"I spent most of yesterday troubleshooting an audio problem. The microphone itself sounded fine, Bluetooth was working, and the speakers were working, but the routing between devices kept changing depending on which output was selected.",detailed
+"I've been trying to simplify this project before I show it to people. The core functionality works, the installation process works, and the hardware is stable, so now I'm mostly fixing awkward behavior and removing things that make the demonstration confusing.",detailed
+"My programming style is a little unusual. I like understanding the lower-level pieces first, I often experiment before following the conventional solution, and sometimes that means I spend extra time rediscovering why the standard approach exists.",detailed
+"I've been testing the assistant with normal conversation instead of scripted commands. I talk about music, computers, cars, and random things from my life because I want to see whether the routing still makes sense when somebody speaks naturally.",detailed
+"The computer was behaving differently this morning. Startup was normal, memory usage looked fine, temperatures were good, and nothing was throttling, but the first model response was noticeably slower than it had been the night before.",detailed
+"I've changed my setup quite a bit over the last few months. I replaced some hardware, switched a few software components, simplified the audio stack, and spent a lot of time tuning the model so it feels responsive on limited hardware.",detailed
+"I spent several hours debugging this yesterday. The first fix solved one problem, the second change exposed another one, the unit tests still passed, and eventually I realized the failure was coming from an assumption in a completely different part of the system.",detailed
+"A bit about what I'm trying to build. I want the assistant to feel conversational, remember useful things from earlier turns, respond quickly on small hardware, and avoid depending on a remote service for the basic interaction loop.",detailed
+My favorite band is Thursday and I still listen to them.,normal
+I use Linux on my desktop and Windows at work.,normal
+I replaced my brakes yesterday and the car is running fine.,normal
+I went to the store this morning. I bought coffee.,normal
+Work was quiet today. Nothing unusual happened.,normal
+I played chess for about an hour last night.,normal
+My desktop computer uses an AMD graphics card.,normal
+I listened to some old music while I was working.,normal
+I changed the audio volume and it sounds better now.,normal
+I finished the installation this morning and everything worked.,normal
