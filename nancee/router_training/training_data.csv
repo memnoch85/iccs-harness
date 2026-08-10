@@ -1624,3 +1624,15 @@ maybe not,negative
 not Tuesday Wednesday,memory_store
 not the USB controller the power board,memory_store
 actually not 2.6 GHz I switched it to 2.4 GHz,memory_store
+can you tell me how a supercharger works?,question
+can you tell me how an alternator works?,question
+can you tell me what a turbocharger does?,question
+"hey nancy, can you tell me how a supercharger works?",question
+"hey nancee, can you tell me how an alternator works?",question
+"hey, can you tell me what a fuel injector does?",question
+"hey nancy, how are you?",greeting
+"hey nancee, what's up?",greeting
+"hey, how are things going?",greeting
+can you tell me how a supercharger works step by step please?,detailed
+walk me through how a turbocharger works step by step,detailed
+explain in detail how a supercharger works,detailed
